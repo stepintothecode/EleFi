@@ -1,0 +1,210 @@
+# EleFund — Non-Functional Requirements
+
+Qualities the system must have, independent of any particular feature. Every requirement
+here states a **number or a rule that can be checked**, because an unmeasurable NFR is a
+preference wearing a suit.
+
+---
+
+## NFR-1 · Performance
+
+The governing principle: **capture must feel instantaneous, or the habit dies.** Every
+budget below serves that.
+
+| ID | Requirement | Target | How verified |
+|---|---|---|---|
+| NFR-1.1 | Cold start to interactive | ≤ 2.0 s (mid-range Android, e.g. Snapdragon 6-series) | Startup trace, release build |
+| NFR-1.2 | Warm start to interactive | ≤ 700 ms | Startup trace |
+| NFR-1.3 | Capture form open → keypad focused | ≤ 300 ms | Manual trace + instrumentation |
+| NFR-1.4 | Save transaction → UI confirms | ≤ 100 ms (write is local; optimistic UI) | Instrumentation |
+| NFR-1.5 | Autocomplete suggestions render | ≤ 50 ms per keystroke | Benchmark, 5,000 parties |
+| NFR-1.6 | Dashboard aggregates | ≤ 400 ms at 50,000 transactions | Benchmark with seeded data |
+| NFR-1.7 | Filtered list first page | ≤ 200 ms at 50,000 transactions | Benchmark |
+| NFR-1.8 | List scroll | 60 fps, no dropped frames over 5 s of flinging | Perf monitor on release build |
+| NFR-1.9 | CSV export, 50,000 rows | ≤ 10 s, UI never blocked | Benchmark |
+| NFR-1.10 | Widget/notification capture end-to-end | ≤ 3 s from tap to saved | Manual, stopwatch |
+
+**Seeded performance dataset:** 50,000 transactions, 40 containers, 5,000 parties, 200
+labels, 300 apps, spanning 10 years. Every benchmark runs against it. Chasing performance
+on 200 rows tells you nothing about year eight.
+
+---
+
+## NFR-2 · Animation and interaction quality
+
+The brief asks for Duolingo-grade motion. That is a real engineering constraint, not a
+mood, and it decomposes into rules:
+
+| ID | Requirement |
+|---|---|
+| NFR-2.1 | All animation runs on the UI thread via Reanimated worklets — never through the React render cycle |
+| NFR-2.2 | Animate `transform` and `opacity` only. No animation of layout properties on any hot path |
+| NFR-2.3 | Motion is **spring-based**, not duration-based, for anything the user has directly manipulated |
+| NFR-2.4 | 60 fps sustained on the mid-range reference device; 120 fps where the display allows |
+| NFR-2.5 | Every state change is animated — entry, exit, reorder, value change. Nothing appears or disappears abruptly |
+| NFR-2.6 | Haptic feedback on save, on error, and on threshold crossings |
+| NFR-2.7 | The mascot reacts to events (save, goal reached, streak) but is never on the critical path of an interaction |
+| NFR-2.8 | Full respect for `prefers-reduced-motion` / "Remove animations": transitions become instant, nothing breaks |
+| NFR-2.9 | No animation delays input. A tap during an animation is honoured immediately |
+| NFR-2.10 | Skeleton loaders, never spinners, for anything that can take over 200 ms |
+
+**NFR-2.9 deserves emphasis.** The single most common way "polished" apps become
+irritating is animations that must finish before input is accepted. Motion decorates; it
+never gates.
+
+---
+
+## NFR-3 · Data correctness
+
+The highest-priority category. A money app that is fast, beautiful, and slightly wrong is
+worthless.
+
+| ID | Requirement |
+|---|---|
+| NFR-3.1 | No floating-point number ever holds, transports, or computes money. Integer minor units only |
+| NFR-3.2 | Every balance is derived. No stored balance exists anywhere, at any layer, including caches |
+| NFR-3.3 | Every domain invariant in [domain-model.md](domain-model.md) is enforced by a database constraint **and** covered by a property-based test |
+| NFR-3.4 | Multi-step writes are wrapped in a SQLite transaction. No partial write survives a crash |
+| NFR-3.5 | Deletes are soft. No user-entered data is ever destroyed by normal operation |
+| NFR-3.6 | Self Transfers are excluded from every spend and income aggregate, verified by explicit test |
+| NFR-3.7 | Credit card bill payments leave net worth unchanged, verified by explicit test |
+| NFR-3.8 | Rounding uses banker's rounding, applied once at display, never during accumulation |
+| NFR-3.9 | Sum of per-label spend equals total spend for the same filter, to the paisa, verified by property test |
+| NFR-3.10 | A migration that could lose data is refused; migrations are forward-only and tested against real backups |
+
+---
+
+## NFR-4 · Offline and reliability
+
+| ID | Requirement |
+|---|---|
+| NFR-4.1 | 100% of functionality except Drive backup and FX fetch works with no network, indefinitely |
+| NFR-4.2 | The app never shows a network error during capture, because capture never touches the network |
+| NFR-4.3 | Process death mid-capture loses at most the in-flight form, never committed data |
+| NFR-4.4 | Backup failure is silent-retry, surfaced only after 3 consecutive daily failures |
+| NFR-4.5 | FX rate fetch failure falls back to the last cached rate and is never user-blocking |
+| NFR-4.6 | Corrupt local database is detected on start and offers restore-from-backup rather than crash-looping |
+| NFR-4.7 | Crash-free session rate ≥ 99.5% once public |
+
+---
+
+## NFR-5 · Security and privacy
+
+| ID | Requirement |
+|---|---|
+| NFR-5.1 | User financial data leaves the device **only** as an encrypted backup to the user's own Drive. There is no other egress path |
+| NFR-5.2 | Backups encrypted with AES-256-GCM; key derived by Argon2id from a user passphrase |
+| NFR-5.3 | Encryption keys stored in Android Keystore / iOS Keychain, never in app storage or JS memory beyond use |
+| NFR-5.4 | Only the last 4 digits of an account number are ever stored. No code path accepts a full number |
+| NFR-5.5 | Only the `drive.appdata` OAuth scope is requested. Broader Drive scopes are prohibited |
+| NFR-5.6 | Biometric or device-credential lock, enforced on cold start and on resume after the configured delay |
+| NFR-5.7 | Balances and amounts are hidden from the OS app-switcher preview |
+| NFR-5.8 | No analytics, telemetry, or crash reporting transmits transaction data, amounts, party names, or container names |
+| NFR-5.9 | Logs never contain amounts, party names, container names, or account digits — enforced by a lint rule and a log-scrubbing layer |
+| NFR-5.10 | The local database is encrypted at rest (SQLCipher or platform equivalent) |
+| NFR-5.11 | No third-party SDK with network access is added without an explicit review recorded in an ADR |
+| NFR-5.12 | Dependencies audited on every CI run; no known-critical vulnerabilities in a release build |
+
+**NFR-5.1 is the product's central promise.** Any change that creates a new egress path
+for user data requires an ADR, not a pull request comment.
+
+---
+
+## NFR-6 · Usability and accessibility
+
+| ID | Requirement |
+|---|---|
+| NFR-6.1 | Every interactive target ≥ 44×44 dp |
+| NFR-6.2 | Text contrast meets WCAG 2.2 AA (4.5:1 body, 3:1 large) in both themes |
+| NFR-6.3 | Colour is never the sole carrier of meaning — credit/debit, on-track/behind also differ by icon or label |
+| NFR-6.4 | Full screen-reader support (TalkBack/VoiceOver): every control labelled, amounts read as money not digit strings |
+| NFR-6.5 | Layout survives system font scaling to 200% without clipping or overlap |
+| NFR-6.6 | Primary capture actions reachable one-handed in the lower half of the screen |
+| NFR-6.7 | Destructive actions confirm or offer undo; deletes always offer undo |
+| NFR-6.8 | Error messages state what happened and what to do — never a code, never "something went wrong" |
+| NFR-6.9 | Empty states explain the feature and offer the first action |
+| NFR-6.10 | Numbers formatted per locale, with Indian lakh/crore grouping under `en-IN` |
+
+---
+
+## NFR-7 · Portability and data ownership
+
+| ID | Requirement |
+|---|---|
+| NFR-7.1 | Full JSON export of every entity is always available and always free |
+| NFR-7.2 | The export format is documented well enough for a third party to write an importer |
+| NFR-7.3 | The local database is a standard SQLite file; nothing proprietary blocks a technical user reading their own data |
+| NFR-7.4 | Uninstalling removes local data; the Drive backup remains until the user deletes it or revokes access |
+| NFR-7.5 | No feature is gated behind a network service that could disappear |
+
+---
+
+## NFR-8 · Maintainability
+
+| ID | Requirement |
+|---|---|
+| NFR-8.1 | Domain logic is pure TypeScript with no React, no SQLite, and no platform imports — testable without a device |
+| NFR-8.2 | The database is reachable only through the repository layer. No component or hook issues SQL |
+| NFR-8.3 | `user_id` scoping and `deleted_at IS NULL` are applied in exactly one place, not per query |
+| NFR-8.4 | All money formatting and parsing lives in one module |
+| NFR-8.5 | TypeScript `strict` with `noUncheckedIndexedAccess`; no `any` in domain or data code |
+| NFR-8.6 | Every table's schema is defined once, in Drizzle, and is the source of truth for types |
+| NFR-8.7 | Domain-logic test coverage ≥ 90%; overall ≥ 70% |
+| NFR-8.8 | Public modules carry a doc comment stating purpose and invariants |
+| NFR-8.9 | New vocabulary is added to [CONTEXT.md](../CONTEXT.md) in the same change that introduces it |
+
+---
+
+## NFR-9 · Storage and growth
+
+| ID | Requirement |
+|---|---|
+| NFR-9.1 | 10 years of heavy use (~40,000 transactions) stays under 100 MB including audit events |
+| NFR-9.2 | An encrypted backup of that dataset stays under 20 MB (Drive's free app-data quota is not a constraint at this size) |
+| NFR-9.3 | Audit events are compactable after 24 months without losing create/delete records |
+| NFR-9.4 | The app degrades gracefully at 10× the design dataset — slower, never broken |
+
+---
+
+## NFR-10 · Compatibility
+
+| ID | Requirement |
+|---|---|
+| NFR-10.1 | Android 9 (API 28) minimum; target the current API level Play requires |
+| NFR-10.2 | Reference device for all performance targets is mid-range, not flagship |
+| NFR-10.3 | Correct behaviour on OEM Android skins (Xiaomi MIUI/HyperOS, Oppo ColorOS, Vivo Funtouch, Samsung One UI) — specifically their aggressive background-process management |
+| NFR-10.4 | iOS 16+ when the iOS target arrives |
+| NFR-10.5 | Web: last two versions of Chrome, Edge, Firefox, and Safari when the web target arrives |
+| NFR-10.6 | Handles device timezone changes and travel across timezones without shifting `occurred_on` dates |
+
+**NFR-10.3 is not boilerplate.** Those skins dominate the Indian market and they kill
+background services aggressively. Any feature relying on a persistent service — the
+floating bubble above all — must be tested on them specifically, and must fail visibly
+rather than silently.
+
+---
+
+## NFR-11 · Legal and compliance *(applies from public release)*
+
+| ID | Requirement |
+|---|---|
+| NFR-11.1 | Privacy policy at a public URL, accurately describing local-first storage and Drive backup |
+| NFR-11.2 | Google Play Data Safety declaration matching actual behaviour |
+| NFR-11.3 | Compliance with Google API Services User Data Policy for `drive.appdata` |
+| NFR-11.4 | India DPDP Act 2023 obligations reviewed before public launch |
+| NFR-11.5 | Free full data export satisfies portability expectations, including GDPR Art. 20 if EU users are served |
+| NFR-11.6 | GST registration and invoicing for digital sales in India, before charging |
+| NFR-11.7 | No financial advice is given anywhere in the product. EleFund records and reports; it never recommends |
+
+---
+
+## Explicitly not required
+
+Stated so their absence is a decision on record:
+
+- **High availability / uptime** — there is no server to be up.
+- **Horizontal scalability** — one user, one device.
+- **Real-time collaboration** — single-user by design (Q1).
+- **Sub-second sync latency** — v1 backs up daily; it does not sync.
+- **Regulatory financial certification** — EleFund is a personal record-keeping tool, not
+  a regulated financial service, and must never present itself as one.
