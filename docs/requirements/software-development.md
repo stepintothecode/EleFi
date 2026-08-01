@@ -40,10 +40,14 @@ which is the load-bearing decision of the whole project.
 
 ```
 elefund/
-├── CONTEXT.md                      domain glossary — read first
+├── .claude/
+│   ├── CLAUDE.md                   project instructions
+│   └── skills/decision-log/        session decision-log skill
 ├── docs/
+│   ├── CONTEXT.md                  domain glossary — read first
 │   ├── requirements/
 │   ├── adr/
+│   ├── prompts/                    decision logs, YYYY-MM-DD-<topic>.md
 │   └── roadmap.md
 ├── app/                            Expo Router routes — thin, UI only
 │   ├── (tabs)/
