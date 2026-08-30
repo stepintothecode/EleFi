@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(EleFiTargetFramework)</TargetFramework>
+    <RootNamespace>EleFi.Application</RootNamespace>
+    <AssemblyName>EleFi.Application</AssemblyName>
+    <Description>Use cases and the abstractions that infrastructure implements. References EleFi.Domain only.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../EleFi.Domain/EleFi.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>$(EleFiTargetFramework)</TargetFramework>
+    <RootNamespace>EleFi.Ui.Tests</RootNamespace>
+    <AssemblyName>EleFi.Ui.Tests</AssemblyName>
+    <Description>bUnit tests for components with real logic: filter bar, amount field, export count.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/EleFi.Ui/EleFi.Ui.csproj" />
+    <ProjectReference Include="../../src/EleFi.Application/EleFi.Application.csproj" />
+    <ProjectReference Include="../../src/EleFi.Domain/EleFi.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="bunit" />
+    <PackageReference Include="NSubstitute" />
+  </ItemGroup>
+
+</Project>

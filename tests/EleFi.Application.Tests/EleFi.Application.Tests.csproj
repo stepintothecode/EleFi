@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(EleFiTargetFramework)</TargetFramework>
+    <RootNamespace>EleFi.Application.Tests</RootNamespace>
+    <AssemblyName>EleFi.Application.Tests</AssemblyName>
+    <Description>Use-case tests against fakes.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/EleFi.Application/EleFi.Application.csproj" />
+    <ProjectReference Include="../../src/EleFi.Domain/EleFi.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NSubstitute" />
+  </ItemGroup>
+
+</Project>

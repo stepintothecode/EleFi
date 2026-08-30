@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(EleFiTargetFramework)</TargetFramework>
+    <RootNamespace>EleFi.Infrastructure</RootNamespace>
+    <AssemblyName>EleFi.Infrastructure</AssemblyName>
+    <Description>Adapters: EF Core over SQLCipher, Google Drive, crypto, FX, export. The only project that performs I/O.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../EleFi.Application/EleFi.Application.csproj" />
+    <ProjectReference Include="../EleFi.Domain/EleFi.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

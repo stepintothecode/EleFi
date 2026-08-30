@@ -1,0 +1,29 @@
+<Project>
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove($(MSBuildThisFile), $(MSBuildThisFileDirectory)..))" />
+
+  <PropertyGroup Label="Test projects">
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!--
+      Tests do not carry XML docs. A test name states its intent, and the
+      invariant it covers is in its name: T4_SameCurrency_AmountsMustMatch.
+    -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!-- CA1707: underscores in test names are deliberate. See .editorconfig. -->
+    <NoWarn>$(NoWarn);CA1707;CA2007;CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="Shared by every test project">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup Label="Global usings for tests">
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

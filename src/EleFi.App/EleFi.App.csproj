@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup Label="Target">
+    <!--
+      Android only for now. iOS is roadmap slice S28 and Windows is not a target;
+      adding either is a line here plus a Platforms/ folder that already exists.
+    -->
+    <TargetFrameworks>$(EleFiAndroidTargetFramework)</TargetFrameworks>
+    <SupportedOSPlatformVersion>28.0</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <EnableDefaultCssItems>false</EnableDefaultCssItems>
+    <MauiXamlInflator>SourceGen</MauiXamlInflator>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Identity">
+    <RootNamespace>EleFi.App</RootNamespace>
+    <AssemblyName>EleFi.App</AssemblyName>
+    <Description>MAUI Blazor Hybrid shell: UI, view models, and Android platform surfaces.</Description>
+    <ApplicationTitle>EleFi</ApplicationTitle>
+    <ApplicationId>com.stepintothecode.elefi</ApplicationId>
+    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Analysis">
+    <!--
+      Razor and XAML source generators emit code this project cannot fix, so
+      analysis runs at the default level here rather than the repository level.
+      Every layer below this one (Domain, Application, Infrastructure) keeps the
+      stricter setting, and that is where the logic lives.
+    -->
+    <AnalysisMode>Default</AnalysisMode>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Label="Layers">
+    <ProjectReference Include="../EleFi.Ui/EleFi.Ui.csproj" />
+    <ProjectReference Include="../EleFi.Application/EleFi.Application.csproj" />
+    <!--
+      Referenced only so composition can call AddEleFiInfrastructure() in
+      MauiProgram. EleFi.Architecture.Tests fails the build if any other
+      Infrastructure type is used from this project.
+    -->
+    <ProjectReference Include="../EleFi.Infrastructure/EleFi.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Label="Packages">
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+  </ItemGroup>
+
+  <ItemGroup Label="App resources">
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
+    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+    <MauiImage Include="Resources\Images\*" />
+    <MauiFont Include="Resources\Fonts\*" />
+    <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

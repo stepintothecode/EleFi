@@ -1,8 +1,19 @@
 ---
-status: accepted
+status: superseded
+superseded-by: 0009-dotnet-maui-over-expo-typescript.md
+superseded-on: 2026-08-29
 ---
 
 # Expo/TypeScript, despite the developer being more fluent in C#
+
+> **Superseded on 2026-08-29 by
+> [ADR-0009](0009-dotnet-maui-over-expo-typescript.md).** The project moved to C# on .NET
+> MAUI. This ADR is kept in full and unedited because its reasoning is still the best
+> account of what the reversal costs: the animation argument below was correct, and
+> ADR-0009 accepts that cost rather than disputing it.
+>
+> The risk this ADR named - *"the main risk it creates is abandonment"* - is precisely the
+> one ADR-0009 acts on. Read them together or neither makes sense.
 
 The whole app is TypeScript on Expo (React Native), even though the developer is
 substantially more fluent in C# and an all-C# path existed (.NET MAUI Blazor Hybrid with
@@ -28,11 +39,11 @@ that good".
 - **This ADR exists because the decision is surprising.** A future reader who knows the
   developer's C# background will wonder why the app is in TypeScript. This is the answer:
   it was a deliberate trade of daily fluency for animation quality and ecosystem depth.
-- **The main risk it creates is abandonment** — daily friction in a less-fluent language
+- **The main risk it creates is abandonment** - daily friction in a less-fluent language
   is the most likely cause of the project stalling. Mitigated by keeping `domain/` plain
   functions over plain data, which is the least framework-dependent code to learn in.
 - The audit trail moves from an EF Core interceptor to **SQLite triggers**
-  ([ADR-0008](0008-audit-via-sqlite-triggers.md)) — arguably stronger, since it cannot be
+  ([ADR-0008](0008-audit-via-sqlite-triggers.md)) - arguably stronger, since it cannot be
   bypassed by application code.
 - Native quick-capture surfaces (widget, tile, bubble) require Kotlin behind Expo modules
   rather than being written in the app's own language.

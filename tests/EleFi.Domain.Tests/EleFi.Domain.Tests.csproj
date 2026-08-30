@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(EleFiTargetFramework)</TargetFramework>
+    <RootNamespace>EleFi.Domain.Tests</RootNamespace>
+    <AssemblyName>EleFi.Domain.Tests</AssemblyName>
+    <Description>Unit tests for EleFi.Domain. Pure, no I/O, milliseconds.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/EleFi.Domain/EleFi.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(EleFiTargetFramework)</TargetFramework>
+    <RootNamespace>EleFi.Infrastructure.Tests</RootNamespace>
+    <AssemblyName>EleFi.Infrastructure.Tests</AssemblyName>
+    <Description>Real in-memory SQLite with SQLCipher: migrations, constraints, triggers, query filters.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/EleFi.Infrastructure/EleFi.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/EleFi.Application/EleFi.Application.csproj" />
+    <ProjectReference Include="../../src/EleFi.Domain/EleFi.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

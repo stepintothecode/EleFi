@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EleFi.App/EleFi.App.csproj" />
+    <Project Path="src/EleFi.Application/EleFi.Application.csproj" />
+    <Project Path="src/EleFi.Domain/EleFi.Domain.csproj" />
+    <Project Path="src/EleFi.Infrastructure/EleFi.Infrastructure.csproj" />
+    <Project Path="src/EleFi.Ui/EleFi.Ui.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EleFi.Application.Tests/EleFi.Application.Tests.csproj" />
+    <Project Path="tests/EleFi.Architecture.Tests/EleFi.Architecture.Tests.csproj" />
+    <Project Path="tests/EleFi.Domain.Tests/EleFi.Domain.Tests.csproj" />
+    <Project Path="tests/EleFi.Infrastructure.Tests/EleFi.Infrastructure.Tests.csproj" />
+    <Project Path="tests/EleFi.Properties.Tests/EleFi.Properties.Tests.csproj" />
+    <Project Path="tests/EleFi.Ui.Tests/EleFi.Ui.Tests.csproj" />
+  </Folder>
+</Solution>

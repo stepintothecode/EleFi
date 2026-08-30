@@ -1,0 +1,21 @@
+<Project>
+
+  <!-- Chain to the repository root first, then add what only production code needs. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove($(MSBuildThisFile), $(MSBuildThisFileDirectory)..))" />
+
+  <PropertyGroup Label="Public API documentation">
+    <!--
+      Every public type and member carries an XML doc comment. CS1591 is the
+      compiler telling you one is missing, and here it fails the build.
+      Tests are exempt - see tests/Directory.Build.props.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn)</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Shipping code">
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+</Project>

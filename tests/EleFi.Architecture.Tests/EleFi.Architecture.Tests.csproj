@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(EleFiTargetFramework)</TargetFramework>
+    <RootNamespace>EleFi.Architecture.Tests</RootNamespace>
+    <AssemblyName>EleFi.Architecture.Tests</AssemblyName>
+    <Description>Guards the layer boundaries in software-development.md section 2, and the src-to-tests mirror.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/EleFi.Ui/EleFi.Ui.csproj" />
+    <ProjectReference Include="../../src/EleFi.Infrastructure/EleFi.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/EleFi.Application/EleFi.Application.csproj" />
+    <ProjectReference Include="../../src/EleFi.Domain/EleFi.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NetArchTest.Rules" />
+  </ItemGroup>
+
+</Project>

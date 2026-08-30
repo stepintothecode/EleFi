@@ -6,7 +6,7 @@ status: accepted
 
 A transaction carries exactly one Label (from a two-level hierarchy) and any number of
 Tags. All money arithmetic uses the Label; **no total is ever computed from a Tag**. We
-chose this because multi-label categorisation double-counts — a ₹2,000 shop tagged both
+chose this because multi-label categorisation double-counts - a ₹2,000 shop tagged both
 *Food* and *Household* contributes ₹2,000 to each, so the category chart sums to ₹4,000
 against ₹2,000 of real money, and the dashboard ends up having to explain why its own
 numbers don't add up.
@@ -25,7 +25,7 @@ numbers don't add up.
 
 - `Σ spend_by_label(filter) == total_spend(filter)` holds exactly, and is enforced by a
   property test (NFR-3.9).
-- Tags provide the flexibility multi-labelling would have, without touching arithmetic —
+- Tags provide the flexibility multi-labelling would have, without touching arithmetic -
   which is exactly why they're safe to allow without limit.
 - Labels declare a side (Expense / Income / Both), so the capture picker shows a short
   relevant list rather than everything.

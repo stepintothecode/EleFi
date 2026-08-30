@@ -1,0 +1,65 @@
+<Project>
+
+  <!--
+    Central package version management. A project references a package by name
+    only; the version is decided here, once, for the whole repository. Putting a
+    Version on a PackageReference in a .csproj is a build error.
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Persistence - EF Core over SQLCipher-encrypted SQLite">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2" />
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="3.0.4" />
+  </ItemGroup>
+
+  <ItemGroup Label="Application composition">
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+  </ItemGroup>
+
+  <ItemGroup Label="Cloud backup - ADR-0006, drive.appdata scope only">
+    <PackageVersion Include="Google.Apis.Drive.v3" Version="1.71.0.3900" />
+  </ItemGroup>
+
+  <ItemGroup Label="Crypto - Argon2id is not in the BCL; AES-256-GCM is">
+    <PackageVersion Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="UI - MAUI Blazor Hybrid, ADR-0011">
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.2" />
+  </ItemGroup>
+
+  <ItemGroup Label="Test harness - shared by every test project">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit.v3" Version="3.0.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+  </ItemGroup>
+
+  <ItemGroup Label="Test tooling">
+    <PackageVersion Include="CsCheck" Version="4.3.0" />
+    <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="bunit" Version="1.40.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Transitive pins - reasons, not preferences">
+    <!--
+      bunit 1.40.0 pulls AngleSharp 1.2.0, which carries GHSA-pgww-w46g-26qg.
+      Transitive pinning lifts it to a fixed version without waiting for bunit.
+      Delete this line once bunit ships a version that pulls a clean AngleSharp.
+    -->
+    <PackageVersion Include="AngleSharp" Version="1.3.0" />
+  </ItemGroup>
+
+</Project>

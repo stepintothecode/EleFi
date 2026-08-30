@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(EleFiTargetFramework)</TargetFramework>
+    <RootNamespace>EleFi.Domain</RootNamespace>
+    <AssemblyName>EleFi.Domain</AssemblyName>
+    <Description>Pure domain model: money, transactions, containers, filters, alert parsing. References nothing but the BCL.</Description>
+  </PropertyGroup>
+
+</Project>

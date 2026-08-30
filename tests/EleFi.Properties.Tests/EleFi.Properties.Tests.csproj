@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(EleFiTargetFramework)</TargetFramework>
+    <RootNamespace>EleFi.Properties.Tests</RootNamespace>
+    <AssemblyName>EleFi.Properties.Tests</AssemblyName>
+    <Description>Universal properties that must hold for all inputs. See software-development.md section 5.2.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/EleFi.Infrastructure/EleFi.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/EleFi.Application/EleFi.Application.csproj" />
+    <ProjectReference Include="../../src/EleFi.Domain/EleFi.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CsCheck" />
+  </ItemGroup>
+
+</Project>

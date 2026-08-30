@@ -1,0 +1,59 @@
+<Project>
+
+  <!--
+    Settings shared by every project in the repository, C# or otherwise.
+    Anything that differs between production and test code belongs in
+    src/Directory.Build.props or tests/Directory.Build.props, not here.
+  -->
+
+  <PropertyGroup Label="Language">
+    <!--
+      The framework version lives here once. Projects opt in with
+      <TargetFramework>$(EleFiTargetFramework)</TargetFramework> rather than
+      inheriting it, because EleFi.App targets net10.0-android and a silently
+      inherited value would fight with it.
+    -->
+    <EleFiTargetFramework>net10.0</EleFiTargetFramework>
+    <EleFiAndroidTargetFramework>net10.0-android</EleFiAndroidTargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Quality gates">
+    <!-- software-development.md section 4. A warning that is allowed to persist is not a gate. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <AnalysisMode>Recommended</AnalysisMode>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <ReportAnalyzer>false</ReportAnalyzer>
+
+    <!--
+      Dependency audit, matching software-development.md section 4: a high or
+      critical advisory fails the build. Moderate and low are reported, and are
+      fixed by pinning in Directory.Packages.props rather than by ignoring them.
+    -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>high</NuGetAuditLevel>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Build hygiene">
+    <Deterministic>true</Deterministic>
+    <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Identity">
+    <Product>EleFi</Product>
+    <Company>stepintothecode</Company>
+    <Authors>stepintothecode</Authors>
+    <Copyright>Copyright (c) 2026 stepintothecode</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryType>git</RepositoryType>
+    <NeutralLanguage>en-IN</NeutralLanguage>
+  </PropertyGroup>
+
+</Project>

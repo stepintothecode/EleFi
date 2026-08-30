@@ -5,9 +5,9 @@ status: accepted
 # Backup to the user's Google Drive, client-side encrypted; sync deferred to v3
 
 v1 uploads encrypted snapshots of the local database to the user's own Google Drive using
-only the `drive.appdata` scope. It is **backup, not sync** — restoring on a second device
+only the `drive.appdata` scope. It is **backup, not sync** - restoring on a second device
 replaces that device's data. We chose this because losing a phone must not lose the
-ledger, while true multi-device merge is ~2–3 weeks of work that complicates every
+ledger, while true multi-device merge is ~2-3 weeks of work that complicates every
 feature built afterwards, for a benefit a single user may never need.
 
 Encryption is on by default (AES-256-GCM, key derived by Argon2id from a user passphrase,
@@ -25,7 +25,7 @@ backup is readable by the storage provider.
 ## Consequences
 
 - **Verified:** `drive.appdata` and `drive.file` are **non-sensitive** OAuth scopes
-  requiring only basic verification — no security assessment, no annual fee. Broader
+  requiring only basic verification - no security assessment, no annual fee. Broader
   Drive scopes (`drive`, `drive.readonly`, `drive.metadata`) are restricted and must
   never be requested.
 - Backups are invisible in the user's Drive UI, so they can't be deleted by accident, and
