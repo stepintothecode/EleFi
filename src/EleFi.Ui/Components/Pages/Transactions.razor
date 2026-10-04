@@ -1,0 +1,363 @@
+@page "/transactions"
+@using System.Globalization
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Export
+@using EleFi.Domain.Containers
+@using EleFi.Domain.Filters
+@using EleFi.Domain.Labels
+@using EleFi.Domain.Money
+@using EleFi.Domain.Transactions
+@using EleFi.Ui.Services
+@inject ToastService Toasts
+@inject ITransactionRepository Ledger
+@inject IContainerRepository Containers
+@inject ILabelRepository Labels
+@inject CsvExporter Exporter
+@inject IFileShare FileShare
+@inject IClock Clock
+
+@*
+    All Transactions.
+
+    The export button sits here rather than in settings, and it carries the live row count
+    (FR-7.18, FR-7.19). That is not decoration: it is the visible proof that the export and
+    the list are the same set. Change a filter and the number on the button changes with the
+    list, because both come from one query (X1).
+*@
+
+<PageTitle>All transactions</PageTitle>
+
+@* section-head gives the button breathing room. It used to sit flush against the card
+   below, so its bottom border read as that card's top edge. *@
+<div class="section-head">
+    <h1>All transactions</h1>
+    @* Written out rather than bound to the bool: Blazor renders a bool attribute value as a
+       boolean attribute, so `false` would omit aria-expanded entirely. *@
+    <button class="btn-ghost" @onclick="() => _filtersOpen = !_filtersOpen"
+            aria-expanded="@(_filtersOpen ? "true" : "false")">
+        @(_filtersOpen ? "Hide filters" : "Filters")
+        @if (!_filter.IsEmpty)
+        {
+            <span class="chip on small" style="min-height:auto;padding:2px 8px;">on</span>
+        }
+    </button>
+</div>
+
+@if (_filtersOpen)
+{
+    <div class="card enter">
+        <h2 style="margin-top:0;">Dates</h2>
+        <div class="chips">
+            <button class="chip @(_preset == "cycle" ? "on" : "")" @onclick='() => ApplyPreset("cycle")'>This month</button>
+            <button class="chip @(_preset == "last" ? "on" : "")" @onclick='() => ApplyPreset("last")'>Last month</button>
+            <button class="chip @(_preset == "fy" ? "on" : "")" @onclick='() => ApplyPreset("fy")'>This FY</button>
+            <button class="chip @(_preset == "all" ? "on" : "")" @onclick='() => ApplyPreset("all")'>All time</button>
+        </div>
+
+        <h2>Kind</h2>
+        <div class="chips">
+            @foreach (var kind in new[] { TransactionKind.Debit, TransactionKind.Credit, TransactionKind.SelfTransfer })
+            {
+                <button class="chip @(_filter.Kinds.Contains(kind) ? "on" : "")"
+                        @onclick="() => ToggleKind(kind)">@kind.DisplayName()</button>
+            }
+        </div>
+
+        <h2>Container</h2>
+        <div class="chips">
+            @foreach (var container in _containers)
+            {
+                <button class="chip @(_filter.ContainerIds.Contains(container.Id) ? "on" : "")"
+                        @onclick="() => ToggleContainer(container.Id)">@container.Name</button>
+            }
+        </div>
+
+        <h2>Label</h2>
+        <div class="chips">
+            @foreach (var label in _labels)
+            {
+                <button class="chip @(_filter.LabelIds.Contains(label.Id) ? "on" : "")"
+                        @onclick="() => ToggleLabel(label.Id)">@label.Name</button>
+            }
+            @* Labels are optional, so unlabelled is common and needs its own way in. *@
+            <button class="chip @(_filter.UnlabelledOnly ? "on" : "")"
+                    @onclick="ToggleUnlabelledAsync">Unlabelled</button>
+        </div>
+        <p class="muted small" style="margin: 6px 0 0;">
+            Picking several shows anything carrying any of them.
+        </p>
+
+        <h2>Search</h2>
+        <input placeholder="Description, party, app..." value="@_filter.Search"
+               @oninput="OnSearchAsync" autocomplete="off" />
+
+        @if (!_filter.IsEmpty)
+        {
+            <button class="btn-ghost btn-block" style="margin-top:12px;" @onclick="ClearAsync">Clear all filters</button>
+        }
+    </div>
+}
+
+<div class="card row between">
+    <div>
+        <div class="muted small">@(_filter.IsEmpty ? "Everything" : "Filtered")</div>
+        <div class="amount">@_count @(_count == 1 ? "transaction" : "transactions")</div>
+    </div>
+    <button class="primary" disabled="@(_exporting || _count == 0)" @onclick="ExportAsync">
+        @(_exporting ? "Exporting..." : $"Export {_count}")
+    </button>
+</div>
+
+@if (_loading)
+{
+    <div class="card">
+        @for (var i = 0; i < 5; i++)
+        {
+            <div class="skeleton" style="margin-bottom:10px; width:@(60 + (i * 7))%;"></div>
+        }
+    </div>
+}
+else if (_rows.Count == 0)
+{
+    <div class="card muted">
+        @(_filter.IsEmpty
+            ? "Nothing recorded yet. The Capture tab is where money gets in."
+            : "No transactions match these filters.")
+    </div>
+}
+else
+{
+    <div class="card">
+        @foreach (var group in _rows.GroupBy(r => r.OccurredOn).OrderByDescending(g => g.Key))
+        {
+            <div class="date-header">@FormatDate(group.Key)</div>
+            @foreach (var row in group)
+            {
+                var kind = row.Kind;
+                @* The whole row opens the editor. A separate edit button on every row would
+                   compete with the amount for attention on the screen people scan most. *@
+                <a class="txn txn-link" href="transactions/@row.Id">
+                    <div class="grow">
+                        <div class="who">@Counterparty(row)</div>
+                        <div class="meta">
+                            @kind.DisplayName()
+                            @foreach (var label in row.Labels.Where(l => l.Label is not null))
+                            {
+                                <span> &middot; @label.Label!.Name</span>
+                            }
+                            @if (row.OccurredAtTime is { } at)
+                            {
+                                <span> &middot; @at.ToString("HH\\:mm")</span>
+                            }
+                            @if (row.NeedsReview)
+                            {
+                                <span class="review-flag"> &middot; needs review</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="amount @CssFor(kind)">
+                        @Sign(kind)@MoneyText.ToDisplayString(row.SourceAmount)
+                    </div>
+                    <span class="chev" aria-hidden="true">&rsaquo;</span>
+                </a>
+            }
+        }
+    </div>
+
+    @if (_rows.Count < _count)
+    {
+        <button class="btn-ghost btn-block" @onclick="LoadMoreAsync">
+            Show more (@(_count - _rows.Count) left)
+        </button>
+    }
+}
+
+@code {
+    private const int PageSize = 50;
+
+    private TransactionFilter _filter = TransactionFilter.Empty;
+    private IReadOnlyList<Transaction> _rows = [];
+    private IReadOnlyList<Container> _containers = [];
+    private IReadOnlyList<Label> _labels = [];
+
+    private int _count;
+    private bool _loading = true;
+    private bool _filtersOpen;
+    private bool _exporting;
+    private string _preset = "all";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _containers = await Containers.ListSelectableAsync();
+        _labels = await Labels.ListAsync();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+
+        // One query behind both the count and the rows, and the same one the exporter
+        // calls. There is no second definition of "what is selected" anywhere.
+        _count = await Ledger.CountAsync(_filter);
+        _rows = await Ledger.QueryAsync(_filter, 0, PageSize);
+
+        _loading = false;
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        var more = await Ledger.QueryAsync(_filter, _rows.Count, PageSize);
+        _rows = [.. _rows, .. more];
+    }
+
+    private async Task ApplyPreset(string preset)
+    {
+        _preset = preset;
+        var today = Clock.Today;
+
+        _filter = preset switch
+        {
+            "cycle" => _filter with { From = new DateOnly(today.Year, today.Month, 1), To = today },
+            "last" => _filter with
+            {
+                From = new DateOnly(today.Year, today.Month, 1).AddMonths(-1),
+                To = new DateOnly(today.Year, today.Month, 1).AddDays(-1),
+            },
+            // The Indian financial year: 1 April to 31 March. The one an accountant asks for.
+            "fy" => _filter with
+            {
+                From = today.Month >= 4 ? new DateOnly(today.Year, 4, 1) : new DateOnly(today.Year - 1, 4, 1),
+                To = today,
+            },
+            _ => _filter with { From = null, To = null },
+        };
+
+        await ReloadAsync();
+    }
+
+    private async Task ToggleKind(TransactionKind kind)
+    {
+        var kinds = _filter.Kinds.ToList();
+        if (!kinds.Remove(kind))
+        {
+            kinds.Add(kind);
+        }
+
+        _filter = _filter with { Kinds = kinds };
+        await ReloadAsync();
+    }
+
+    private async Task ToggleContainer(Guid id)
+    {
+        var ids = _filter.ContainerIds.ToList();
+        if (!ids.Remove(id))
+        {
+            ids.Add(id);
+        }
+
+        _filter = _filter with { ContainerIds = ids };
+        await ReloadAsync();
+    }
+
+    private async Task ToggleLabel(Guid id)
+    {
+        var ids = _filter.LabelIds.ToList();
+        if (!ids.Remove(id))
+        {
+            ids.Add(id);
+        }
+
+        _filter = _filter with { LabelIds = ids, UnlabelledOnly = false };
+        await ReloadAsync();
+    }
+
+    private async Task ToggleUnlabelledAsync()
+    {
+        // Mutually exclusive with picking labels: "carries no label" and "carries this
+        // label" cannot both be true, and offering the combination would return nothing.
+        _filter = _filter with { UnlabelledOnly = !_filter.UnlabelledOnly, LabelIds = [] };
+        await ReloadAsync();
+    }
+
+    private async Task OnSearchAsync(ChangeEventArgs e)
+    {
+        _filter = _filter with { Search = e.Value?.ToString() };
+        await ReloadAsync();
+    }
+
+    private async Task ClearAsync()
+    {
+        _filter = TransactionFilter.Empty;
+        _preset = "all";
+        await ReloadAsync();
+    }
+
+    private async Task ExportAsync()
+    {
+        _exporting = true;
+
+        try
+        {
+            var names = _containers
+                .Where(c => _filter.ContainerIds.Contains(c.Id))
+                .Select(c => c.Name)
+                .ToList();
+
+            var export = await Exporter.ExportAsync(_filter, null, names);
+            await FileShare.ShareAsync(export.FileName, export.Contents, "Export transactions");
+
+            Toasts.Ok($"{export.RowCount} {(export.RowCount == 1 ? "row" : "rows")} written to {export.FileName}.");
+        }
+        catch (Exception ex)
+        {
+            Toasts.Error($"The export did not finish: {ex.Message}");
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
+    private static string Counterparty(Transaction row)
+    {
+        // The interesting end is whichever one is not a container, and for a transfer it is
+        // both containers.
+        var source = row.SourceParty?.Name;
+        var destination = row.DestinationParty?.Name;
+
+        return row.Kind switch
+        {
+            TransactionKind.Debit => destination ?? "Unknown",
+            TransactionKind.Credit => source ?? "Unknown",
+            _ => "Transfer between containers",
+        };
+    }
+
+    private static string CssFor(TransactionKind kind) => kind switch
+    {
+        TransactionKind.Debit => "out",
+        TransactionKind.Credit => "in",
+        _ => "transfer",
+    };
+
+    // Colour is never the only carrier of meaning (NFR-6.3), so the sign says it too.
+    private static string Sign(TransactionKind kind) => kind switch
+    {
+        TransactionKind.Debit => "-",
+        TransactionKind.Credit => "+",
+        _ => "",
+    };
+
+    private string FormatDate(DateOnly date)
+    {
+        if (date == Clock.Today)
+        {
+            return "Today";
+        }
+
+        return date == Clock.Today.AddDays(-1)
+            ? "Yesterday"
+            : date.ToString("ddd d MMM yyyy", CultureInfo.InvariantCulture);
+    }
+}

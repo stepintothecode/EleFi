@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Ele, complete: background and mascot in one file.
+
+    This is the standalone icon, for anything that wants a single image rather than the two
+    layers Android's adaptive icons need. Rasterise it at whatever size you want, including
+    the 512 a store listing asks for:
+
+        inkscape -w 512 -h 512 elefi-icon.svg -o elefi-icon-512.png
+        magick -background none -density 600 elefi-icon.svg -resize 512x512 elefi-icon-512.png
+
+    The app does NOT build from this file. Its source of truth is the two layers in
+    src/EleFi.App/Resources/AppIcon/, and this is kept in step with them by hand. If you
+    change one, change both.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6E5A96"/>
+      <stop offset="1" stop-color="#4A3E6B"/>
+    </linearGradient>
+    <linearGradient id="hide" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EFEAF6"/>
+      <stop offset="1" stop-color="#CFC6DF"/>
+    </linearGradient>
+    <linearGradient id="earInner" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B9A9D0"/>
+      <stop offset="1" stop-color="#9F8CBC"/>
+    </linearGradient>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="512" height="512" rx="114" ry="114"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+
+    <g transform="translate(0 -22) scale(0.92) translate(20.5 22)">
+      <ellipse cx="150" cy="236" rx="62" ry="82" fill="url(#hide)" transform="rotate(-14 150 236)"/>
+      <ellipse cx="362" cy="236" rx="62" ry="82" fill="url(#hide)" transform="rotate(14 362 236)"/>
+      <ellipse cx="156" cy="240" rx="38" ry="54" fill="url(#earInner)" transform="rotate(-14 156 240)"/>
+      <ellipse cx="356" cy="240" rx="38" ry="54" fill="url(#earInner)" transform="rotate(14 356 240)"/>
+
+      <ellipse cx="256" cy="240" rx="112" ry="104" fill="url(#hide)"/>
+
+      <path d="M256 316 C 256 372, 246 404, 276 420 C 300 432, 322 418, 320 396"
+            fill="none" stroke="url(#hide)" stroke-width="46" stroke-linecap="round"/>
+
+      <path d="M206 330 C 196 356, 200 372, 214 380" fill="none" stroke="#FBF9FF"
+            stroke-width="15" stroke-linecap="round" opacity="0.95"/>
+      <path d="M306 330 C 316 356, 312 372, 298 380" fill="none" stroke="#FBF9FF"
+            stroke-width="15" stroke-linecap="round" opacity="0.95"/>
+
+      <circle cx="212" cy="220" r="16" fill="#3B3154"/>
+      <circle cx="300" cy="220" r="16" fill="#3B3154"/>
+      <circle cx="218" cy="214" r="5" fill="#FFFFFF" opacity="0.9"/>
+      <circle cx="306" cy="214" r="5" fill="#FFFFFF" opacity="0.9"/>
+
+      <path d="M186 186 C 200 176, 224 176, 238 184" fill="none" stroke="#3B3154"
+            stroke-width="9" stroke-linecap="round" opacity="0.55"/>
+      <path d="M274 184 C 288 176, 312 176, 326 186" fill="none" stroke="#3B3154"
+            stroke-width="9" stroke-linecap="round" opacity="0.55"/>
+    </g>
+  </g>
+</svg>

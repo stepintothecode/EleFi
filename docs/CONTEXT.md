@@ -21,6 +21,12 @@ reserved for the user's login identity and for the specific *Bank Account* conta
 kind. Saying "account" when you mean "container" is the single most common way this
 model gets muddled.
 
+**Cash and Wallet are not the same thing**, and the difference is worth stating because
+they read as synonyms. Cash is physical notes and coins. A Wallet is a stored balance that
+can only be spent in one place: a Paytm or PhonePe balance, a gift card, a piggy bank.
+Merging them would turn "money I can hand over anywhere" and "money locked inside one app"
+into a single number.
+
 Every container is exactly one of:
 
 - an **Asset Container** - its balance is money the user has (bank account, cash, FD)
@@ -51,7 +57,7 @@ play, which is why they share a single suggestion list during entry.
 
 ### Transaction
 One movement of money, recorded once. It has a **Source Party**, a **Destination
-Party**, an amount at each end, a date, and a label.
+Party**, an amount at each end, a date, and any number of labels.
 
 **Never** say "To" and "From" - those were the original sketch terms and they are
 ambiguous, because they meant a container in some rows and a person in others. The
@@ -79,29 +85,24 @@ The anchor every derived balance is calculated from. Not a transaction.
 ## Classification
 
 ### Label
-The single category describing what a transaction was *for* - Food, Travel, Rent,
-Salary. Exactly one per transaction, so category totals always reconcile to real money
-spent.
+A word describing what a transaction was *for* - Food, Travel, Rent, Salary. A
+transaction carries **any number of them, including none**, the way an issue carries tags.
+One flat list: no parent, no child, no expense/income side.
 
-Labels form a shallow hierarchy, at most two deep: *Food → Groceries*. A parent label
-in a filter or report includes its children.
+**Unlabelled** is a state, not a label. There is no *Uncategorised* row. A transaction
+nobody has got round to labelling shows up in its own bucket in the breakdown, so the money
+is visible rather than hidden behind a fake category.
 
-Each label declares which **side** it applies to - expense, income, or both - so the
-picker shows only the handful that make sense for what is being entered.
+Because labels overlap, the per-label figures can add up to more than was spent: a shop
+labelled both Food and Household counts in full under each. The breakdown therefore always
+carries its own **total**, counted once per transaction, and every screen showing the bars
+says so. See [ADR-0013](adr/0013-multiple-flat-labels.md).
 
-A Self Transfer normally carries **no label**: moving money between your own containers
-is not spending, and letting transfers into the category charts inflates every report.
+A Self Transfer carries **no label**: moving money between your own containers is not
+spending, and letting transfers into the charts inflates every report.
 
-### Tag
-A free-form marker attached to a transaction for ad-hoc grouping - `goa-trip`,
-`reimbursable`, `wedding`. Any number per transaction.
-
-Tags deliberately carry **no arithmetic**. They filter and they group, but no total is
-ever computed by tag, which is precisely why a transaction may have many of them
-without breaking anything.
-
-The distinction that matters: **one Label answers "what was this for", many Tags answer
-"what else is this connected to".**
+There is no separate **Tag** concept. There was one; it did the same job as a label and
+made the user learn which of the two counted toward totals.
 
 ### App
 A service, portal, or platform involved in a transaction - Zomato, Uber, Blinkit, GPay,
@@ -146,7 +147,8 @@ so it counts only once a human says yes.
 
 ### Capture Source
 Where a transaction came from: the app itself, a widget, a notification, the bubble, the
-share sheet, a confirmed Capture Suggestion, or an import. Recorded on every transaction
+share sheet, a confirmed Capture Suggestion (from an SMS, or from a Payment App notification
+alone), or an import. Recorded on every transaction
 and shown in its audit trail.
 
 ### Needs Review
@@ -161,18 +163,35 @@ full transaction in every way, and counts toward every balance and every report.
 ## Alerts and suggestions
 
 ### Transaction Alert
-An incoming SMS from a bank, card issuer, or wallet that appears to describe a real
-movement of money - "Rs.450.00 debited from a/c XX4417 on 29-Aug-26 to ZOMATO".
+An incoming message that appears to describe a real movement of money. It arrives on one
+of two **Alert Channels**:
+
+- an **SMS** from a bank, card issuer, or wallet - "Rs.450.00 debited from a/c XX4417 on
+  29-Aug-26 to ZOMATO"
+- a **Payment App Notification** from an allow-listed Payment App - "Paid ₹450 to Zomato"
 
 An alert is **evidence that something happened**, not the record of it. It is read on the
-device, matched against a Parse Rule, and then discarded. Only messages from a recognised
-**Sender ID** are ever looked at; everything else - OTPs, marketing, personal messages -
-is dropped at the receiver without being read further.
+device, matched against a Parse Rule, and then discarded. Only alerts from a recognised
+**Sender ID** are ever looked at; everything else - OTPs, marketing, personal messages,
+every other app's notifications - is dropped at the receiver without being read further.
+
+### Payment App Notification
+The notification a Payment App (GPay, PhonePe, Paytm, Amazon Pay, CRED) posts when a payment
+completes. It knows who was paid and any note the user typed, which a bank SMS usually does
+not; it does not know which account paid, which the SMS does. Read only for apps on a fixed
+allow-list. See [ADR-0014](adr/0014-payment-app-notification-ingest.md).
 
 ### Sender ID
-The alphanumeric SMS originating address a bank sends from, such as `VM-HDFCBK` or
-`AD-ICICIB`. India's TRAI header scheme makes these stable and registered, which is what
-makes sender-based filtering reliable enough to be the first gate.
+Who an alert came from. For an SMS, the alphanumeric originating address a bank sends from,
+such as `VM-HDFCBK` or `AD-ICICIB`; India's TRAI header scheme makes these stable and
+registered. For a Payment App Notification, the app's package name, which Android supplies
+and an app cannot forge. Either way it is the first gate.
+
+### Corroboration
+Two alerts about the same payment, one from each Alert Channel, merged into one Capture
+Suggestion: the bank's SMS supplies the Container, the Payment App supplies the payee's name,
+the note, and the Payment App. Same amount, same direction, different channels, minutes
+apart. Never two alerts from the same channel.
 
 ### Parse Rule
 A named pattern that turns a Transaction Alert from a given Sender ID into a Capture
@@ -197,11 +216,22 @@ all, so it produces nothing until a human agrees. The app never books money on t
 strength of a text message.
 
 ### Suggestion Prompt
-The local notification raised for a Capture Suggestion - "₹450 to Zomato from HDFC?" with
-Add and Dismiss. The only way a suggestion is ever surfaced.
+The local notification raised for a Capture Suggestion - "₹450 to Zomato?" with Review and
+Dismiss. The only way a suggestion is surfaced outside the app. Review opens the Suggestion
+Inbox; there is no one-tap Add on the notification, because the Container and labels are
+checked there first.
 
 Dismissing destroys the suggestion. Unactioned suggestions expire and are destroyed too.
 Nothing accumulates.
+
+### Suggestion Inbox
+The screen listing every pending Capture Suggestion, titled **To confirm** in the app, where
+each one is checked, corrected, and added or dismissed. The dashboard shows how many are
+waiting.
+
+Deliberately not called "to review", which would blur it with
+[Needs Review](#needs-review): a Needs Review item is a real transaction you recorded and
+should check; an item in the inbox is not a transaction at all yet.
 
 ---
 
@@ -278,7 +308,8 @@ the most common thing anyone exports.
 
 ### Filter
 A composable set of criteria selecting a subset of transactions: dates, kinds,
-containers, labels, tags, parties, apps, amount range, text.
+containers, labels, parties, apps, amount range, text. Several labels selected together
+means **any of them**, and "unlabelled" is selectable on its own.
 
 One filter concept serves both the transaction list and the export. **The export is the
 filtered view, serialised** - there is no separate notion of "what to export".

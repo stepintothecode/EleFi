@@ -98,8 +98,10 @@ These are invariants, not preferences. Breaking one is a bug even if the tests p
   credit-card bill payments double-counting.
 - Deletes are **soft**. The one exception is a dismissed or expired Capture Suggestion,
   which is machine-derived data the user rejected.
-- The only egress path for user data is the **encrypted Drive backup**. A new one requires
-  an ADR, not a pull request comment.
+- The only **automatic** egress path for user data is the encrypted Drive backup. A new one
+  requires an ADR, not a pull request comment. The CSV export and the local JSON backup are
+  not egress: they are files the user explicitly asked for, handed to the OS share sheet,
+  and the UI says plainly that they are unencrypted.
 - Only the `drive.appdata` scope. Broader Drive scopes are restricted and forbidden.
 - Only the **last 4 digits** of an account number are ever stored.
 - **An SMS body is never persisted, logged, audited, backed up, or exported.** It is a

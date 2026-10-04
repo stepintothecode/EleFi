@@ -1,27 +1,83 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">EleFi.App</a>
-    </div>
-</div>
+@*
+    Bottom tabs, not a drawer. Primary actions belong in the lower half of the screen so
+    they are reachable one-handed (NFR-6.6), and Quick sits in the middle where the thumb
+    already rests.
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+    The glyphs are inline SVG rather than text characters. A geometric-shape character
+    renders differently on every OEM's font, and several were landing as a filled square.
+    An SVG is the same drawing everywhere and takes the current colour, so the active tab
+    tints without a second asset.
+*@
+<nav class="tabs">
+    <NavLink href="" Match="NavLinkMatch.All" ActiveClass="active">
+        <span class="glyph" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 10.6 12 3.6l9 7v9.1a1.3 1.3 0 0 1-1.3 1.3H4.3A1.3 1.3 0 0 1 3 19.7Z" />
+                <path d="M9.4 21V13.4h5.2V21" />
+            </svg>
+        </span>
+        <span>Home</span>
+    </NavLink>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-    </nav>
-</div>
+    <NavLink href="containers" ActiveClass="active">
+        <span class="glyph" aria-hidden="true">
+            @* A wallet: a rounded body with a clasp. Reads as "where money sits". *@
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3.6 7.6A2 2 0 0 1 5.6 5.6h11a2 2 0 0 1 2 2" />
+                <rect x="3.6" y="7.6" width="16.8" height="11.4" rx="2.4" />
+                <path d="M20.4 11.6h-3.6a2 2 0 0 0 0 4h3.6" />
+            </svg>
+        </span>
+        <span>Containers</span>
+    </NavLink>
+
+    <NavLink href="quick" ActiveClass="active">
+        <span class="glyph glyph-accent" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <path d="M13.2 2.6 4.4 13.4h6.2l-.8 8 8.8-10.8h-6.2Z" />
+            </svg>
+        </span>
+        <span>Quick</span>
+    </NavLink>
+
+    <NavLink href="capture" ActiveClass="active">
+        <span class="glyph" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7.8v8.4M7.8 12h8.4" />
+            </svg>
+        </span>
+        <span>Capture</span>
+    </NavLink>
+
+    <NavLink href="transactions" ActiveClass="active">
+        <span class="glyph" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 6.6h16M4 12h16M4 17.4h10" />
+            </svg>
+        </span>
+        <span>All</span>
+    </NavLink>
+
+    <NavLink href="settings" ActiveClass="active">
+        <span class="glyph" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3.1" />
+                <path d="M19.1 14.4a1.6 1.6 0 0 0 .32 1.76l.06.06a1.9 1.9 0 1 1-2.7 2.7l-.06-.06a1.6 1.6 0 0 0-1.76-.32
+                         1.6 1.6 0 0 0-.97 1.46v.17a1.9 1.9 0 1 1-3.8 0v-.09a1.6 1.6 0 0 0-1.05-1.46 1.6 1.6 0 0 0-1.76.32
+                         l-.06.06a1.9 1.9 0 1 1-2.7-2.7l.06-.06a1.6 1.6 0 0 0 .32-1.76 1.6 1.6 0 0 0-1.46-.97h-.17a1.9 1.9 0 1 1 0-3.8
+                         h.09a1.6 1.6 0 0 0 1.46-1.05 1.6 1.6 0 0 0-.32-1.76l-.06-.06a1.9 1.9 0 1 1 2.7-2.7l.06.06
+                         a1.6 1.6 0 0 0 1.76.32h.08a1.6 1.6 0 0 0 .97-1.46v-.17a1.9 1.9 0 1 1 3.8 0v.09a1.6 1.6 0 0 0 .97 1.46
+                         1.6 1.6 0 0 0 1.76-.32l.06-.06a1.9 1.9 0 1 1 2.7 2.7l-.06.06a1.6 1.6 0 0 0-.32 1.76v.08
+                         a1.6 1.6 0 0 0 1.46.97h.17a1.9 1.9 0 1 1 0 3.8h-.09a1.6 1.6 0 0 0-1.46.97Z" />
+            </svg>
+        </span>
+        <span>Settings</span>
+    </NavLink>
+</nav>

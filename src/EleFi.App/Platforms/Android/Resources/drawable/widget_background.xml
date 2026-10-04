@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The brand ground from the app icon, so the widget reads as EleFi at a glance. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+       android:shape="rectangle">
+    <gradient
+        android:startColor="#6E5A96"
+        android:endColor="#4A3E6B"
+        android:angle="270" />
+    <corners android:radius="20dp" />
+</shape>

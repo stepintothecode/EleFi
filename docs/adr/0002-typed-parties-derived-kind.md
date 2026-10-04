@@ -29,6 +29,8 @@ a transaction whose type disagrees with its data literally unrepresentable.
 - External → External is rejected by the schema: it isn't the user's money.
 - **Split transactions are not possible.** Adding them later means either a postings table
   or per-label allocations - a real migration. Accepted deliberately; see
+  [ADR-0013](0013-multiple-flat-labels.md), which took the cheaper route of allowing several
+  labels on one transaction and reporting the overlap honestly, and which supersedes
   [ADR-0007](0007-single-label-plus-tags.md).
 - Reading data requires joining through `Party` to reach a container, which is slightly
   less direct than a `container_id` column would be.

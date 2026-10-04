@@ -84,16 +84,16 @@ The core feature. Everything else exists to make this worth doing.
 
 | ID | Requirement | Release |
 |---|---|---|
-| FR-2.1 | Record a transaction with source party, destination party, amount, date, label | 1.0 |
+| FR-2.1 | Record a transaction with source party, destination party, amount, and date. Labels are optional, and any number may be attached | 1.0 |
 | FR-2.2 | Derive and display the kind (Credit/Debit/SelfTransfer) from the chosen parties - never ask for it separately | 1.0 |
 | FR-2.3 | Offer a kind-first shortcut (Debit / Credit / Transfer) that pre-filters the party pickers, without kind ever becoming a stored field | 1.0 |
 | FR-2.4 | Default the date to today; allow any past date | 1.0 |
 | FR-2.5 | Reject future dates with a clear explanation | 1.0 |
-| FR-2.6 | Optional: description, marketplace app, payment app, tags | 1.0 |
-| FR-2.7 | Autocomplete every party, label, app, and tag field from previously entered values, ranked by recency and frequency | 1.0 |
+| FR-2.6 | Optional: description, marketplace app, payment app, labels | 1.0 |
+| FR-2.7 | Autocomplete every party, label, and app field from previously entered values, ranked by recency and frequency | 1.0 |
 | FR-2.8 | Draw source and destination suggestions from **one shared party pool** | 1.0 |
 | FR-2.9 | Draw marketplace and payment suggestions from **one shared app pool** | 1.0 |
-| FR-2.10 | Auto-create a party, app, or tag on first use, with no separate creation step | 1.0 |
+| FR-2.10 | Auto-create a party or app on first use, with no separate creation step | 1.0 |
 | FR-2.11 | Auto-fill the source container when a payment app has a default container | 1.0 |
 | FR-2.12 | Numeric keypad focused on open; amount is the first and default-focused field | 1.0 |
 | FR-2.13 | Complete a typical capture in **≤ 3 interactions** after opening the form | 1.0 |
@@ -151,14 +151,14 @@ The core feature. Everything else exists to make this worth doing.
 | ID | Requirement | Release |
 |---|---|---|
 | FR-4.1 | Reverse-chronological list, grouped by date, with sticky date headers | 1.0 |
-| FR-4.2 | Each row shows kind, counterparty, label, amount, and a `needs_review` indicator | 1.0 |
+| FR-4.2 | Each row shows kind, counterparty, its labels, amount, and a `needs_review` indicator | 1.0 |
 | FR-4.3 | Virtualised list; smooth at 50,000+ transactions | 1.0 |
-| FR-4.4 | Full-text search over description, party, app, and tag | 1.0 |
+| FR-4.4 | Full-text search over description, party, and app | 1.0 |
 | FR-4.5 | Filter by date range, with presets: This Cycle, Last Cycle, This FY, Last FY, Custom | 1.0 |
 | FR-4.6 | Filter by kind (multi-select) | 1.0 |
 | FR-4.7 | Filter by container (multi-select), matching **either end** of the transaction | 1.0 |
-| FR-4.8 | Filter by label (multi-select); selecting a parent includes its children | 1.0 |
-| FR-4.9 | Filter by tag, party, app, amount range, currency, and `needs_review` | 1.0 |
+| FR-4.8 | Filter by label (multi-select, matching **any** of the chosen labels), and by "unlabelled" on its own | 1.0 |
+| FR-4.9 | Filter by party, app, amount range, currency, and `needs_review` | 1.0 |
 | FR-4.10 | All filters compose with AND; multi-select within a dimension is OR | 1.0 |
 | FR-4.11 | Show the count and total of the filtered set | 1.0 |
 | FR-4.12 | Save a filter under a name; re-apply in one tap | 1.0 |
@@ -184,7 +184,8 @@ The core feature. Everything else exists to make this worth doing.
 |---|---|---|
 | FR-5.1 | Net worth headline in the home currency | 1.0 |
 | FR-5.2 | Three tiles: Liquid, Locked, Owed | 1.0 |
-| FR-5.3 | Spend by label for the current cycle, largest first | 1.0 |
+| FR-5.3 | Spend by label for the current cycle, largest first, including an "unlabelled" bucket | 1.0 |
+| FR-5.3a | State on the same screen that a transaction with several labels counts in full under each, so the bars can exceed the total. Bars are scaled to the largest label, never to the total | 1.0 |
 | FR-5.4 | Tap any label to drill into its filtered transaction list | 1.0 |
 | FR-5.5 | Cycle income vs spend vs net | 1.0 |
 | FR-5.6 | `needs_review` count with a link to the review queue | 1.0 |
@@ -229,7 +230,7 @@ app reads as one system.
 **User stories**
 
 30. As a user, I want my ring-fund RD's balance to be the goal's progress automatically, so a dedicated account needs no ongoing bookkeeping.
-31. As a user, I want to tag ₹10,000/month from my salary account toward the ring, so a goal works even when the money is mixed with everything else.
+31. As a user, I want to earmark ₹10,000/month from my salary account toward the ring, so a goal works even when the money is mixed with everything else.
 32. As a user, I want to know I need ₹8,300/month from here to hit ₹3L by Aug 2028, so the goal tells me what to do rather than just how I'm doing.
 33. As a user, I want warning when three goals claim more than my account holds, so I find out now rather than at the deadline.
 
@@ -250,7 +251,7 @@ other ID keeps its meaning; only the release column moved.
 | FR-7.4 | ISO-8601 dates (`2026-03-31`) | 1.0 |
 | FR-7.5 | Amounts as bare decimals, no symbol, no thousands separators; currency in its own column | 1.0 |
 | FR-7.6 | Separate columns for source and destination amounts and currencies | 1.0 |
-| FR-7.7 | Columns: date, kind, source, destination, amounts, currencies, label, parent label, tags, description, marketplace app, payment app, goal, needs_review, capture source, created/updated timestamps | 1.0 |
+| FR-7.7 | Columns: date, time, kind, source, destination, amounts, currencies, labels (semicolon-separated), description, marketplace app, payment app, needs_review, capture source, created/updated timestamps | 1.0 |
 | FR-7.8 | User-selectable column subset, remembered between exports | 1.0 |
 | FR-7.9 | Soft-deleted transactions never exported | 1.0 |
 | FR-7.10 | Delivered via the OS share sheet and save-to-file | 1.0 |
@@ -351,11 +352,15 @@ Paywalling the exit from a money app is corrosive.
 | FR-10.5 | Set cycle start day (1-28) | 1.0 |
 | FR-10.6 | Light, dark, and system theme | 1.0 |
 | FR-10.7 | Onboarding: create the first container and capture the first transaction inside two minutes | 1.0 |
-| FR-10.8 | Seed a starter label set (Food, Travel, Shopping, Bills, Rent, Salary, Health, Uncategorised) | 1.0 |
-| FR-10.9 | Manage labels, tags, apps, and parties: rename, merge, delete, recolour | 1.0 |
+| FR-10.8 | Seed a starter label set (Food, Travel, Shopping, Bills, Rent, Health, Salary, Investment). No system-owned label, and every seeded one is deletable | 1.0 |
+| FR-10.9 | Manage labels, apps, and parties: create, rename, delete, recolour. Creating and renaming a label happens in a dialog, not a form the user scrolls past the whole list to reach | 1.0 |
 | FR-10.10 | Merge duplicate parties or apps, reassigning their transactions | 1.1 |
 | FR-10.11 | "Privacy mode" blurring all amounts on demand | 1.1 |
 | FR-10.12 | Wipe all local data, with a typed confirmation | 1.0 |
+| FR-10.13 | Deleting a label or a container asks first, naming the thing and stating how many transactions reference it. A container in use offers Archive instead of failing after the fact | 1.0 |
+| FR-10.14 | Export every entity to a single local JSON file, and restore from one. The restore **replaces** local data rather than merging, says so before starting, and refuses a file written by a newer schema version | 1.0 |
+| FR-10.15 | Say plainly at the point of export that the JSON file is **not encrypted** | 1.0 |
+| FR-10.16 | An About section linking to the support page, the source repository, and the channel, as icons rather than paragraphs | 1.0 |
 
 **User stories**
 
@@ -402,7 +407,10 @@ Every requirement below is downstream of it.
 | FR-11.22 | **Paste-a-message fallback**, working with no SMS permission at all: paste a bank alert, get the same pre-filled form | 1.2 |
 | FR-11.23 | **Share-sheet fallback**: share a bank SMS into EleFi from the messaging app, get the same pre-filled form | 1.2 |
 | FR-11.24 | A one-tap toggle disabling SMS reading entirely, without uninstalling or revoking in system settings | 1.2 |
-| FR-11.25 | Notification-listener ingest as an alternative source for banks that push app notifications rather than SMS | 3.0 |
+| FR-11.25 | Notification-listener ingest for an allow-list of Payment Apps (GPay, PhonePe, Paytm, Amazon Pay, CRED), producing suggestions under the same rules as SMS (ADR-0014, `SM12`) | 1.2 |
+| FR-11.27 | When a bank SMS and a Payment App notification describe the same payment, merge them into one suggestion: the bank's container, the app's payee name, note, and Payment App (`SM14`) | 1.2 |
+| FR-11.28 | A separate in-app switch for Payment App notifications, off by default, which opens the system notification-access screen when turned on | 1.2 |
+| FR-11.29 | The dashboard shows how many payments are waiting to be confirmed, and says they are not yet counted | 1.2 |
 | FR-11.26 | Parse Rules are bundled with the app. No rule is ever fetched from a network | 1.2 |
 
 **FR-11.22 and FR-11.23 are not consolation prizes.** They are the requirements that keep

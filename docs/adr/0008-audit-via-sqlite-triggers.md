@@ -35,6 +35,21 @@ repository method.
   trusting at all.
 - Triggers must be maintained alongside every schema migration - a real ongoing cost, and
   the main argument against this approach.
+- **Triggers are created in exactly one place: `DatabaseInitialiser`, after migrating.** They
+  are dropped and recreated on every startup, so their text cannot drift from the schema the
+  way it does when it is pinned inside the migration that first created a table. A migration
+  may drop triggers by name; it must never call `AuditTriggers`, because that runs today's
+  definition against an older schema. This was learned the expensive way: when the trigger
+  set grew a pair on the `TransactionLabels` join table, the first migration started failing
+  on a fresh database with "no such table", three migrations before that table exists.
+- **A relationship in a join table needs its own triggers.** A trigger on `Transactions`
+  cannot see rows written to `TransactionLabels` in the same save, and the `Updated` trigger
+  will not even fire, because it requires a tracked column on `Transactions` to differ. Its
+  triggers write against the *transaction*, so the entry lands in the timeline being read,
+  and they resolve the label's name at trigger time so the trail still makes sense after that
+  label is renamed or deleted. The matching cost: any code that rewrites such a collection
+  must apply a difference rather than clearing and re-adding, or every save writes "removed
+  X, added X".
 - Triggers see rows, not intent, so user-meaningful actions (Reviewed, Restored) are
   distinguished by the columns that changed, and `capture_source` is written onto the row
   so the trigger can record *how* a change was made.

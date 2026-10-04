@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Widget metadata.
+
+    updatePeriodMillis is 0 on purpose: this widget shows static text, so waking the app on
+    a timer would spend battery to redraw the same thing. When it starts showing a balance,
+    it will be updated on change rather than on a clock.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+                    android:minWidth="180dp"
+                    android:minHeight="72dp"
+                    android:targetCellWidth="3"
+                    android:targetCellHeight="1"
+                    android:updatePeriodMillis="0"
+                    android:initialLayout="@layout/quick_capture_widget"
+                    android:resizeMode="horizontal"
+                    android:widgetCategory="home_screen"
+                    android:description="@string/widget_description" />

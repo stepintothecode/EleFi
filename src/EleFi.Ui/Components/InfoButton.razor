@@ -1,0 +1,32 @@
+@*
+    A small "i" that opens a sheet explaining a field.
+
+    The explanation used to sit under the field permanently, so every capture meant reading
+    past two paragraphs about what a payment rail is. The form now carries only the field
+    name, and the explanation is one tap away for whoever wants it.
+*@
+
+<button type="button" class="info-btn" aria-label="What is @Topic?" @onclick="() => _open = true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 11v5.2M12 7.8v.1" />
+    </svg>
+</button>
+
+<Modal Open="_open" Title="@Topic" OnCancel="() => _open = false">
+    <div class="info-body">@ChildContent</div>
+    <button type="button" class="primary btn-block" @onclick="() => _open = false">Got it</button>
+</Modal>
+
+@code {
+    private bool _open;
+
+    /// <summary>The field being explained. Also the sheet's title.</summary>
+    [Parameter]
+    public string Topic { get; set; } = string.Empty;
+
+    /// <summary>The explanation.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

@@ -11,6 +11,18 @@ Vocabulary from [CONTEXT.md](CONTEXT.md). Requirement IDs from
 The largest risk to this project is not a wrong technical decision - it is the project
 stalling before it becomes a habit. Every cut below serves that.
 
+**Status 2026-10-04.** S38 and S40 are built (SMS receiver, Payment App notifications,
+merging, the "To confirm" inbox), pending device verification, and capture had a usability
+pass: grouped container pickers, type-to-find payees over the whole history, labels in one
+row ordered by use, explanations behind info buttons, sheets for container editing, a
+back gesture that steps back instead of closing the app, and "Add other details" on quick
+capture. See [the decision log](prompts/2026-10-04-capture-ux-and-payment-alerts.md).
+
+**Status 2026-08-30.** S1 to S7 and S15 are implemented and green: 77 tests, 0 warnings,
+`dotnet build EleFi.slnx` and `dotnet test` both pass, and the Android head builds. What is
+implemented is marked below. S37's parser and its permission-free paste path landed early,
+because the parser is pure and the corpus tests cost almost nothing once the domain existed.
+
 **Re-cut 2026-08-29.** Three changes: the stack is C#/.NET MAUI
 ([ADR-0009](adr/0009-dotnet-maui-over-expo-typescript.md)), so S1 is rebuilt and gains a
 cold-start spike; CSV export moves from v1.1 into v1.0 as S15; and SMS-assisted capture
@@ -36,6 +48,8 @@ first slice now carries a stack the project has not built on before.
 ## v1.0 - Daily driver
 
 ### S1 · Foundation and stack proof
+
+> **Done**, except the cold-start measurement and the release pipeline's first real run.
 **Blocked by:** nothing
 
 **Partly done already.** The solution skeleton is on disk and green: `EleFi.slnx` with
@@ -67,6 +81,8 @@ reports its own cold start, and passes CI.
 ---
 
 ### S2 · Money primitives
+
+> **Done.** `Money`, `Currency`, `MoneyText`, round-trip property tests over four exponents.
 **Blocked by:** S1
 
 `EleFi.Domain.Money`: `Money` as a readonly record struct over integer minor units,
@@ -82,6 +98,8 @@ banning `Money` arithmetic outside this namespace.
 ---
 
 ### S3 · Containers
+
+> **Done.** All seven kinds, the Party row created with each container, the containers screen.
 **Blocked by:** S2
 
 `Container` and its `Party` row. All seven kinds with their kind-specific fields. Create,
@@ -94,22 +112,26 @@ tests. Opening balance and its as-of date.
 ---
 
 ### S4 · Classification entities
+
+> **Done.** Labels seeded, parties and apps auto-created on first use, ranked suggestions.
 **Blocked by:** S2
 
-`Label` (2-level, `applies_to`), `Tag`, `App` (with `default_container_id`), and external
-`Party`. Auto-create on first use. Ranked suggestion queries. Seeded starter labels.
-**FR-2.7-2.10, FR-10.8, FR-10.9**
+`Label` (flat, many per transaction, ADR-0013), `App` (with `default_container_id`), and
+external `Party`. Auto-create on first use. Ranked suggestion queries. Seeded starter
+labels, none of them system-owned. **FR-2.7-2.10, FR-10.8, FR-10.9**
 
 *Demoable:* type a new party name and see it persist and reappear as a suggestion.
 
 ---
 
 ### S5 · Capture - the core slice
+
+> **Done.** T1 to T7 enforced in `CaptureService` and again as CHECK constraints.
 **Blocked by:** S3, S4
 
 The `Transaction` entity with dual amounts, derived kind, invariants T1-T9. The capture
 form: amount-first, keypad focused, kind shortcut, party pickers over the shared pool,
-label picker filtered by side, optional description/apps/tags. Save and add another.
+multi-select label chips, optional description and apps. Save and add another.
 **FR-2.1-2.16**
 
 *Demoable:* record a Debit, a Credit, and a Self Transfer, offline, in under five seconds
@@ -121,6 +143,8 @@ each.
 ---
 
 ### S6 · Derived balances and net worth
+
+> **Done.** `INV-CC` and `D1` both covered by tests against a real database.
 **Blocked by:** S5
 
 Balance computation, liability and liquidity handling, net worth with liquid/locked/owed.
@@ -133,6 +157,8 @@ Property test: replaying all transactions equals the computed balance. Explicit 
 ---
 
 ### S7 · Transaction list and filters
+
+> **Done.** Every dimension, container matching either end, paging.
 **Blocked by:** S5
 
 Virtualised grouped list, the composable `TransactionFilter`, every filter dimension,
@@ -144,6 +170,8 @@ search, saved filters, filtered count and total. Container filter matches **eith
 ---
 
 ### S15 · Filtered CSV export
+
+> **Done.** `X1` is a test, not an intention.
 **Blocked by:** S7 · *moved here from v1.1*
 
 The export control on the All Transactions page, exporting exactly the current filtered
@@ -228,8 +256,28 @@ amounts. Tap the support link and land in Chrome, not inside EleFi.
 
 ---
 
+### S11b · Local JSON backup and restore
+
+> **Done.** `BackupFile` and `LocalBackup`, wired to the share sheet and the file picker.
+**Blocked by:** S5
+
+Export every entity to one plain JSON file, and restore from one. Enums travel by name and
+identifiers are preserved, so a restored transaction still points at the same container and
+the same labels. Restore **replaces** rather than merges, says so before it starts, and
+refuses a file written by a newer schema version. **FR-10.14, FR-10.15**
+
+*Demoable:* export, wipe, restore, and see the same balances.
+
+> The stopgap that makes S12 non-urgent rather than critical. Until Drive backup exists,
+> this is the only thing standing between a lost phone and a lost ledger, which is why it
+> shipped before the encrypted path rather than waiting for it. It is deliberately the
+> simplest thing that works: plain JSON, unencrypted, moved by the user, with the app saying
+> so at the point of export.
+
+---
+
 ### S12 · Encrypted Google Drive backup
-**Blocked by:** S5, S11
+**Blocked by:** S5, S11, S11b
 
 OAuth 2.0 with PKCE via `WebAuthenticator` (`drive.appdata` only), passphrase setup,
 Argon2id key derivation, recovery code, AES-256-GCM snapshot, upload via WorkManager,
@@ -270,8 +318,8 @@ required-monthly, over-allocation warning, dashboard summary.
 **Blocked by:** S4
 
 Merge duplicate parties and apps with transaction reassignment; privacy mode; maturity and
-due-date reminders. Full JSON export.
-**FR-10.10-10.11, FR-1.13-1.14, FR-7.14**
+due-date reminders. Full JSON export moved forward into S11b and is done.
+**FR-10.10-10.11, FR-1.13-1.14**
 
 ---
 
@@ -298,6 +346,14 @@ nothing. All of it on a device that has never been asked for a permission.
 ---
 
 ### S38 · SMS receiver and Suggestion Prompts
+
+> **Built 2026-10-04, not yet verified on a device.** Receiver, prompts with Dismiss and
+> Review, the "To confirm" inbox, the dashboard count, expiry on inbox load, and the in-app
+> switch. Two departures: the receiver parses in-process under `goAsync` instead of handing
+> off to WorkManager, because WorkManager would persist the message text (`SM1`); and the
+> `SM1` *analyzer* is still to do, so the guarantee rests on the `SmsBody` ref struct plus a
+> schema test. NFR-10.8's OEM-device test is outstanding.
+
 **Blocked by:** S37 · **FR-11.1-11.2, 11.5-11.6, 11.10-11.14, 11.20-11.21, 11.24**
 
 The Android `BroadcastReceiver`, sender-gated and handing straight off to WorkManager. The
@@ -393,7 +449,7 @@ bulk entry. No SMS, by nature.
 | S34 · Attachments | S12 | Receipt photos; watch backup size |
 | S35 · Voice capture | S21 | "four fifty Zomato" |
 | S36 · Statement import | S7 | Per-bank formats; a maintenance treadmill |
-| S40 · Notification-listener ingest | S38 | **FR-11.25.** For issuers that push app notifications rather than SMS. Its own permission, its own policy review, its own ADR |
+| S40 · Notification-listener ingest | S38 | **Built 2026-10-04, moved into v1.2** ([ADR-0014](adr/0014-payment-app-notification-ingest.md)). **FR-11.25, 11.27-11.29.** Allow-listed Payment Apps, merged with SMS for the same payment. Notification wording is best effort and needs real-device samples in the corpus |
 
 ---
 

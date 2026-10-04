@@ -1,101 +1,964 @@
+/*
+  EleFi design system.
+
+  Tokens first, components second. Every colour, radius, and duration is defined once
+  here; a component that hard-codes one is a bug, because the next theme change will
+  miss it (NFR-2.3a).
+*/
+
+:root {
+  color-scheme: light dark;
+
+  /* Brand: an elephant grey-blue, warm enough not to feel clinical. */
+  --ele-accent: #4f6d8c;
+  --ele-accent-strong: #37506b;
+  --ele-accent-soft: #e8eef4;
+
+  /* Money reads by hue and by sign, never by hue alone (NFR-6.3). */
+  --ele-out: #c2410c;
+  --ele-in: #15803d;
+  --ele-transfer: #6366f1;
+  --ele-owed: #b91c1c;
+
+  --ele-bg: #f6f7f9;
+  --ele-surface: #ffffff;
+  --ele-surface-2: #f1f3f6;
+  --ele-text: #16202b;
+  --ele-text-dim: #5b6773;
+  --ele-line: #dfe4ea;
+
+  /*
+    The mascot's own palette. Not the accent: the accent is tuned for text contrast, and a
+    large filled shape drawn in it disappeared into the card behind it.
+  */
+  --ele-mascot-hide: #B9A5D8;
+  --ele-mascot-hide-dark: #8E77B4;
+  --ele-mascot-ear: #7C63A6;
+  --ele-mascot-ink: #2A2140;
+
+  --ele-radius: 14px;
+  --ele-radius-sm: 9px;
+  --ele-gap: 12px;
+
+  /*
+    Safe areas, resolved once.
+
+    Android 15 forces apps edge-to-edge, so the WebView sits under the status bar at the
+    top and the gesture pill or button bar at the bottom. Without these, the first heading
+    hides behind the clock and the tab bar hides behind the navigation buttons.
+
+    env() returns 0 where there is no inset, so the max() keeps a sane minimum on devices
+    and older Android versions that report nothing.
+  */
+  --ele-safe-top: max(env(safe-area-inset-top), 8px);
+  --ele-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ele-safe-left: env(safe-area-inset-left, 0px);
+  --ele-safe-right: env(safe-area-inset-right, 0px);
+
+  /* Tab bar height, needed by the page's bottom padding so nothing hides under it. */
+  --ele-tabs-height: 60px;
+
+  /* One motion vocabulary. Springs are approximated with these curves. */
+  --ele-quick: 120ms cubic-bezier(0.2, 0, 0, 1);
+  --ele-settle: 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ele-accent: #8fb0d0;
+    --ele-accent-strong: #b3ccdf;
+    --ele-accent-soft: #1e2a36;
+    --ele-out: #fb923c;
+    --ele-in: #4ade80;
+    --ele-transfer: #a5b4fc;
+    --ele-owed: #f87171;
+    --ele-bg: #101720;
+    --ele-surface: #18212c;
+    --ele-surface-2: #1f2a37;
+    --ele-text: #e8edf2;
+    --ele-text-dim: #9aa8b6;
+    --ele-line: #2b3947;
+
+    /* Lifted, so Ele stays visible against a dark card. */
+    --ele-mascot-hide: #CDBCE8;
+    --ele-mascot-hide-dark: #A38FC8;
+    --ele-mascot-ear: #8E77B4;
+    --ele-mascot-ink: #241C36;
+  }
+}
+
+/*
+  NFR-2.8: when the OS says reduce motion, transitions become instant and nothing
+  breaks. Motion decorates; it never carries meaning on its own.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+* { box-sizing: border-box; }
+
 html, body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: var(--ele-bg);
+  color: var(--ele-text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* NFR-6.5: relative units so a 200% system font scale reflows instead of clipping. */
+  font-size: 1rem;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
 }
 
-a, .btn-link {
-    color: #006bb7;
+.page {
+  padding-top: calc(16px + var(--ele-safe-top));
+  padding-left: calc(16px + var(--ele-safe-left));
+  padding-right: calc(16px + var(--ele-safe-right));
+  /* Clear the tab bar and whatever the system draws below it. */
+  padding-bottom: calc(32px + var(--ele-tabs-height) + var(--ele-safe-bottom));
+  max-width: 720px;
+  margin: 0 auto;
 }
 
-.btn-primary {
-    color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
+/* No tab bar on this one, so it does not need to clear it. */
+.page-bare { padding-bottom: calc(28px + var(--ele-safe-bottom)); }
+
+/*
+  Quick capture: three steps on an arc.
+
+  A curve rather than a row, because three items read as a shape at a glance where a
+  progress bar reads as a diagram to be studied. The active step sits lowest, nearest the
+  thumb that is about to act on it.
+*/
+.quick { display: flex; flex-direction: column; min-height: 74vh; }
+
+.quick-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 4px;
 }
 
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+/* A cross with its word beneath: instant to read, still unambiguous. */
+.close-stack {
+  background: none;
+  border: none;
+  padding: 4px;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: var(--ele-text-dim);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: color var(--ele-quick), transform var(--ele-quick);
+}
+.close-stack svg { width: 22px; height: 22px; }
+.close-stack:active { color: var(--ele-text); transform: scale(0.94); }
+
+.quick-steps {
+  position: relative;
+  height: 132px;
+  margin: 8px 0 4px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
 }
 
-.content {
-    padding-top: 1.1rem;
+.quick-step {
+  position: absolute;
+  top: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--ele-text-dim);
+  transition: transform var(--ele-settle), color var(--ele-settle), opacity var(--ele-settle);
+  opacity: 0.5;
+}
+.quick-step .dot {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid var(--ele-line);
+  background: var(--ele-surface);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  transition: transform var(--ele-settle), background var(--ele-settle), border-color var(--ele-settle);
+}
+.quick-step .cap { font-size: 0.74rem; letter-spacing: 0.04em; text-transform: uppercase; }
+
+.quick-step.done { opacity: 0.9; color: var(--ele-in); }
+.quick-step.done .dot { border-color: var(--ele-in); color: var(--ele-in); }
+
+.quick-step.on { opacity: 1; color: var(--ele-accent-strong); }
+.quick-step.on .dot {
+  background: var(--ele-accent);
+  border-color: var(--ele-accent);
+  color: #fff;
+  transform: scale(1.22);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--ele-accent) 45%, transparent);
+}
+.quick-step.on .cap { font-weight: 700; }
+
+.quick-stage { flex: 1 1 auto; display: flex; align-items: flex-start; }
+.quick-panel {
+  width: 100%;
+  animation: quick-slide var(--ele-settle) both;
+}
+.quick-panel label { font-size: 1rem; color: var(--ele-text); font-weight: 600; margin-bottom: 10px; }
+.quick-panel input { width: 100%; }
+
+@keyframes quick-slide {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: none; }
 }
 
-h1:focus {
-    outline: none;
+.quick-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.quick-actions { display: flex; gap: var(--ele-gap); margin-top: 18px; }
+
+.quick-done {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #dcfce7;
+  color: #14532d;
+  border-radius: var(--ele-radius);
+  padding: 14px;
+}
+.quick-done .glyph { font-size: 1.8rem; }
+@media (prefers-color-scheme: dark) {
+  .quick-done { background: #14321f; color: #bbf7d0; }
 }
 
-.valid.modified:not([type=checkbox]) {
-    outline: 1px solid #26b050;
+/* Shown by index.html before Blazor has started. */
+.boot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 100vh;
+  padding: var(--ele-safe-top) 24px calc(24px + var(--ele-safe-bottom));
+  color: var(--ele-text-dim);
+  font-size: 0.9rem;
+  text-align: center;
 }
 
-.invalid {
-    outline: 1px solid #e50000;
+.boot-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid var(--ele-line);
+  border-top-color: var(--ele-accent);
+  animation: boot-spin 900ms linear infinite;
 }
 
-.validation-message {
-    color: #e50000;
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+
+h1 { font-size: 1.35rem; margin: 4px 0 16px; letter-spacing: -0.01em; }
+h2 { font-size: 1.05rem; margin: 20px 0 10px; color: var(--ele-text-dim); font-weight: 600; }
+
+/*
+  A header row with a heading on the left and a button on the right. The button used to sit
+  flush against the card below it, so its border read as the first row's top edge.
+*/
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ele-gap);
+  margin: 4px 0 14px;
+}
+.section-head h1, .section-head h2 { margin: 0; }
+
+.card {
+  background: var(--ele-surface);
+  border: 1px solid var(--ele-line);
+  border-radius: var(--ele-radius);
+  padding: 16px;
+  margin-bottom: var(--ele-gap);
 }
 
+.muted { color: var(--ele-text-dim); }
+.small { font-size: 0.85rem; }
+.row { display: flex; align-items: center; gap: var(--ele-gap); }
+.row.between { justify-content: space-between; }
+.row.wrap { flex-wrap: wrap; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.stack { display: flex; flex-direction: column; gap: var(--ele-gap); }
+
+/* Money is tabular so columns of figures line up and scan. */
+.amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.amount.out { color: var(--ele-out); }
+.amount.in { color: var(--ele-in); }
+.amount.transfer { color: var(--ele-transfer); }
+.amount.owed { color: var(--ele-owed); }
+
+.headline {
+  font-size: 2.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  margin: 2px 0 2px;
+}
+
+/*
+  minmax(0, 1fr) rather than 1fr. A grid track defaults to min-content, so a long amount
+  like -12,34,567.00 forced the track wider than its share and pushed the whole page into
+  horizontal scroll. The min of 0 lets the track shrink and the text below handles the rest.
+*/
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ele-gap); }
+.tile {
+  background: var(--ele-surface-2);
+  border-radius: var(--ele-radius-sm);
+  padding: 10px 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+.tile .label { font-size: 0.75rem; color: var(--ele-text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.tile .value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin-top: 2px;
+  /* Shrink rather than overflow. A tile that clips is better than a page that slides. */
+  font-size: clamp(0.78rem, 3.4vw, 1rem);
+  overflow-wrap: anywhere;
+}
+
+/*
+  Nothing may push the page sideways. A money screen that slides feels broken.
+
+  clip on the body alone, never hidden on html. `overflow-x: hidden` forces the computed
+  overflow-y to auto and turns that element into a scroll container; setting it on both
+  html and body in an Android WebView loses the viewport scroll entirely, and every page in
+  the app stopped scrolling vertically.
+
+  `clip` does not create a scroll container, so it cannot take the scroll with it. The real
+  work is done by the tiles above, which shrink instead of overflowing.
+*/
+body { overflow-x: clip; }
+
+/* NFR-6.1: every target is at least 44px. */
+button, .btn, select, input, textarea {
+  font: inherit;
+  min-height: 44px;
+  border-radius: var(--ele-radius-sm);
+  border: 1px solid var(--ele-line);
+  background: var(--ele-surface);
+  color: var(--ele-text);
+  padding: 10px 12px;
+}
+
+button, .btn {
+  cursor: pointer;
+  transition: transform var(--ele-quick), background var(--ele-quick);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+}
+button:active, .btn:active { transform: scale(0.97); }
+
+.btn-primary, button.primary {
+  background: var(--ele-accent);
+  border-color: var(--ele-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.btn-ghost { background: transparent; }
+.btn-block { width: 100%; }
+
+label { display: block; font-size: 0.85rem; color: var(--ele-text-dim); margin-bottom: 4px; }
+.field { margin-bottom: var(--ele-gap); }
+.field input, .field select, .field textarea { width: 100%; }
+
+/* The amount field is the first thing focused and the biggest thing on the form. */
+.amount-input {
+  font-size: 2rem !important;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  min-height: 64px !important;
+}
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  border: 1px solid var(--ele-line);
+  background: var(--ele-surface);
+  border-radius: 999px;
+  padding: 8px 14px;
+  min-height: 40px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background var(--ele-quick), border-color var(--ele-quick);
+}
+.chip.on {
+  background: var(--ele-accent-soft);
+  border-color: var(--ele-accent);
+  color: var(--ele-accent-strong);
+  font-weight: 600;
+}
+
+.txn {
+  display: flex;
+  align-items: center;
+  gap: var(--ele-gap);
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--ele-line);
+}
+.txn:last-child { border-bottom: none; }
+.txn .who { font-weight: 500; }
+.txn .meta { font-size: 0.8rem; color: var(--ele-text-dim); }
+
+/* A whole row that opens the editor. */
+.txn-link {
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--ele-quick);
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: var(--ele-radius-sm);
+}
+.txn-link:active { background: var(--ele-surface-2); }
+.txn-link .chev { color: var(--ele-text-dim); font-size: 1.4rem; line-height: 1; flex: 0 0 auto; }
+
+/* The flag is a nudge, so it is coloured but not alarming. */
+.review-flag { color: var(--ele-out); font-weight: 600; }
+
+.timeline-entry {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ele-line);
+}
+.timeline-entry:last-child { border-bottom: none; }
+.timeline-entry:first-child { padding-top: 0; }
+
+.timeline-changes {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 0.86rem;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.timeline-changes li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.timeline-changes .meta { min-width: 88px; }
+.timeline-changes .was { color: var(--ele-text-dim); text-decoration: line-through; }
+.timeline-changes .now { font-weight: 600; }
+
+.date-header {
+  position: sticky;
+  top: 0;
+  background: var(--ele-bg);
+  padding: 10px 4px 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ele-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  z-index: 1;
+}
+
+.bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--ele-accent);
+  transition: width var(--ele-settle);
+}
+
+/* A compact action inside a list row, so Edit and Delete do not dominate the name. */
+.btn-icon {
+  min-height: 40px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  flex: 0 0 auto;
+}
+.danger { color: var(--ele-owed); border-color: color-mix(in srgb, var(--ele-owed) 35%, var(--ele-line)); }
+button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owed); color: #fff; }
+
+/* Stands in for a control that has nothing to offer yet, without looking broken. */
+.empty-field {
+  border: 1px dashed var(--ele-line);
+  border-radius: var(--ele-radius-sm);
+  padding: 12px;
+  color: var(--ele-text-dim);
+  font-size: 0.88rem;
+}
+.empty-field a { color: var(--ele-accent); font-weight: 600; }
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+/* A disabled-looking switch, for settings that exist but are not built yet. */
+.switch { position: relative; display: inline-block; width: 46px; height: 28px; flex: 0 0 auto; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch .track {
+  position: absolute;
+  inset: 0;
+  background: var(--ele-line);
+  border-radius: 999px;
+  transition: background var(--ele-quick);
+}
+.switch .track::before {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  left: 3px;
+  top: 3px;
+  background: var(--ele-surface);
+  border-radius: 50%;
+  transition: transform var(--ele-settle);
+}
+.switch input:checked + .track { background: var(--ele-accent); }
+.switch input:checked + .track::before { transform: translateX(18px); }
+.switch input:disabled + .track { opacity: 0.45; }
+
+/* A bare icon button: the cross on a sheet, the close on quick capture. */
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--ele-text-dim);
+  padding: 0;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  transition: background var(--ele-quick), color var(--ele-quick);
+}
+.icon-btn svg { width: 20px; height: 20px; }
+.icon-btn:active { background: var(--ele-surface-2); color: var(--ele-text); }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 80;
+  animation: fade-in 160ms ease both;
+}
+
+.modal-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 81;
+  background: var(--ele-surface);
+  border-radius: var(--ele-radius) var(--ele-radius) 0 0;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.3);
+  padding: 8px calc(16px + var(--ele-safe-right)) calc(16px + var(--ele-safe-bottom)) calc(16px + var(--ele-safe-left));
+  /* Never taller than the screen, and scrollable when the content is long. */
+  max-height: 86vh;
+  overflow-y: auto;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.modal-head h2 { margin: 0; color: var(--ele-text); font-size: 1.05rem; }
+
+.enter-sheet { animation: sheet-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.label-picker .chip { display: inline-flex; align-items: center; gap: 7px; }
+.label-picker .swatch { width: 10px; height: 10px; }
+
+/*
+  One row that scrolls sideways. The fade on the right edge says "there is more" without a
+  scrollbar, which Android hides anyway until the row is touched. The negative margin lets
+  chips scroll under the card's padding instead of being clipped at it.
+*/
+.scroller {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  margin: 0 -16px;
+  padding: 2px 16px 4px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 28px), transparent 100%);
+}
+.scroller::-webkit-scrollbar { display: none; }
+.scroller > * { flex: 0 0 auto; scroll-snap-align: start; white-space: nowrap; }
+
+/* A label with something beside it, such as the info button. */
+.field-head { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.field-head label { margin-bottom: 0; }
+
+.info-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--ele-accent);
+  /* The visible glyph is small; the padding keeps the touch target near 44px (NFR-6.1). */
+  margin: -6px -6px -6px 0;
+}
+.info-btn svg { width: 18px; height: 18px; }
+.info-btn:active { background: var(--ele-accent-soft); }
+.info-body p { margin: 0 0 12px; }
+
+/*
+  The answers drawn above a type-to-find field.
+
+  Tinted and outlined so it reads as belonging to the field rather than as more form. Above
+  the field rather than below, so the keyboard never covers it.
+*/
+.typeahead-panel {
+  background: var(--ele-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--ele-accent) 45%, var(--ele-line));
+  border-radius: var(--ele-radius-sm);
+  padding: 8px 10px 10px;
+  margin-bottom: 8px;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--ele-accent) 14%, transparent);
+  animation: fade-in 140ms ease both;
+}
+.typeahead-caption {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ele-accent-strong);
+  margin-bottom: 6px;
+}
+.typeahead-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.typeahead-options .chip { min-height: 38px; padding: 6px 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.typeahead-empty { font-size: 0.85rem; color: var(--ele-text-dim); }
+.typeahead input { width: 100%; }
+
+/* Containers as chips in titled sections, for quick capture's From step. */
+.container-choices { display: flex; flex-direction: column; gap: 12px; }
+.choice-heading {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ele-text-dim);
+  margin-bottom: 6px;
+}
+
+.quick-more { margin-top: 10px; color: var(--ele-accent-strong); }
+
+/* The count of payments waiting to be confirmed, on the dashboard. */
+.inbox-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: var(--ele-gap);
+  border-radius: var(--ele-radius);
+  background: var(--ele-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--ele-accent) 40%, var(--ele-line));
+  color: var(--ele-text);
+  text-decoration: none;
+}
+.inbox-banner .count {
+  min-width: 30px;
+  height: 30px;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+  background: var(--ele-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.inbox-banner .chev { margin-left: auto; color: var(--ele-text-dim); font-size: 1.4rem; line-height: 1; }
+
+/* Where a suggestion's facts came from: the bank's SMS, the payment app, or both. */
+.evidence { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.evidence span {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--ele-surface-2);
+  color: var(--ele-text-dim);
+}
+
+details.paste summary { cursor: pointer; color: var(--ele-accent-strong); font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+
+.notice {
+  border-radius: var(--ele-radius-sm);
+  padding: 10px 12px;
+  margin-bottom: var(--ele-gap);
+  font-size: 0.9rem;
+}
+.notice.error { background: #fee2e2; color: #7f1d1d; }
+.notice.ok { background: #dcfce7; color: #14532d; }
+@media (prefers-color-scheme: dark) {
+  .notice.error { background: #451a1a; color: #fecaca; }
+  .notice.ok { background: #14321f; color: #bbf7d0; }
+}
+
+/*
+  Toasts.
+
+  Messages used to render at the top of the page. When you are at the Save button with the
+  page scrolled down, a confirmation up there is invisible: you press Save, nothing appears
+  to happen, and you press it again. These float above the tab bar instead, where your
+  thumb already is.
+*/
+.toast-host {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--ele-tabs-height) + var(--ele-safe-bottom) + 10px);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 calc(16px + var(--ele-safe-left)) 0 calc(16px + var(--ele-safe-right));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  max-width: 560px;
+  width: 100%;
+  border-radius: var(--ele-radius);
+  padding: 12px 14px;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  animation: toast-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.toast.leaving { animation: toast-out 180ms ease-in both; }
+.toast .glyph { font-size: 1.1rem; line-height: 1.3; flex: 0 0 auto; }
+.toast .body { flex: 1 1 auto; min-width: 0; }
+.toast .close {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.75;
+  min-height: auto;
+  padding: 0 2px;
+  font-size: 1rem;
+}
+
+.toast.ok { background: #14532d; color: #dcfce7; }
+.toast.error { background: #7f1d1d; color: #fee2e2; }
+.toast.info { background: var(--ele-accent-strong); color: #fff; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes toast-out {
+  to { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+
+/* NFR-2.10: skeletons, never spinners, for anything over 200ms. */
+.skeleton {
+  background: linear-gradient(90deg, var(--ele-surface-2) 25%, var(--ele-line) 37%, var(--ele-surface-2) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: var(--ele-radius-sm);
+  height: 18px;
+}
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+
+.enter { animation: enter var(--ele-settle) both; }
+@keyframes enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+nav.tabs {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  background: var(--ele-surface);
+  border-top: 1px solid var(--ele-line);
+  /*
+    The inset is padding rather than margin so the bar's own background extends behind the
+    gesture pill. A gap of page colour under a fixed bar looks like a rendering fault.
+  */
+  padding-bottom: var(--ele-safe-bottom);
+  padding-left: var(--ele-safe-left);
+  padding-right: var(--ele-safe-right);
+  z-index: 10;
+}
+nav.tabs a {
+  flex: 1;
+  text-align: center;
+  padding: 8px 4px;
+  min-height: var(--ele-tabs-height);
+  color: var(--ele-text-dim);
+  text-decoration: none;
+  font-size: 0.72rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+nav.tabs a.active { color: var(--ele-accent); font-weight: 600; }
+nav.tabs .glyph { display: block; width: 22px; height: 22px; }
+nav.tabs .glyph svg { width: 100%; height: 100%; display: block; }
+
+/* Quick capture is the reason the app exists, so its tab is the one that is coloured. */
+nav.tabs .glyph-accent { color: var(--ele-accent); }
+nav.tabs a.active .glyph-accent { color: inherit; }
+
+/* Six tabs on a narrow phone: let the labels shrink rather than wrap or clip. */
+nav.tabs a { font-size: clamp(0.6rem, 2.6vw, 0.72rem); }
+
+.mascot { display: block; width: 88px; height: 88px; }
+
+.about-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 4px 0 18px;
+}
+.about-hero .mascot { width: 96px; height: 96px; flex: 0 0 auto; }
+
+/* In Settings the hero doubles as the way into the full About page. */
+a.about-hero {
+  color: inherit;
+  text-decoration: none;
+  padding: 4px;
+  margin: -4px -4px 14px;
+  border-radius: var(--ele-radius);
+  transition: background var(--ele-quick);
+}
+a.about-hero:active { background: var(--ele-surface-2); }
+a.about-hero .who { color: var(--ele-text); }
+a.about-hero .mascot { width: 64px; height: 64px; }
+a.about-hero .chev { width: 18px; height: 18px; margin-left: auto; color: var(--ele-text-dim); }
+
+/* Icons rather than three paragraphs of link text. */
+.about-links {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.about-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 6px;
+  background: var(--ele-surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--ele-radius);
+  color: var(--ele-text-dim);
+  font-size: 0.76rem;
+  font-weight: 600;
+  min-height: 74px;
+  transition: transform var(--ele-quick), background var(--ele-quick), color var(--ele-quick);
+}
+.about-link svg { width: 22px; height: 22px; }
+.about-link:active { transform: scale(0.96); }
+
+/* Only the one that costs the user something gets a colour. */
+.about-link.support { color: #e11d48; }
+.about-link.support:active { background: color-mix(in srgb, #e11d48 14%, var(--ele-surface-2)); }
+.about-link.youtube { color: #dc2626; }
+
+.swatch-btn {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  padding: 0;
+  transition: transform var(--ele-quick), border-color var(--ele-quick);
+}
+.swatch-btn.on {
+  border-color: var(--ele-text);
+  transform: scale(1.1);
+}
+
+/*
+  The error bar sits above the tab bar and clears the system navigation, so it is readable
+  rather than half-hidden behind the gesture pill. It is the one piece of UI a user only
+  ever sees when something is already wrong; hiding it makes a bad moment worse.
+*/
 #blazor-error-ui {
-    color-scheme: light only;
-    background: lightyellow;
-    bottom: 0;
-    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
-    box-sizing: border-box;
-    display: none;
-    left: 0;
-    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
-    position: fixed;
-    width: 100%;
-    z-index: 1000;
+  background: #b91c1c;
+  color: #fff;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  z-index: 1000;
+  padding: 14px calc(44px + var(--ele-safe-right)) calc(14px + var(--ele-safe-bottom)) calc(16px + var(--ele-safe-left));
+  font-size: 0.9rem;
+  line-height: 1.45;
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.25);
+}
+#blazor-error-ui .blazor-error-text { display: block; margin-bottom: 8px; }
+#blazor-error-ui .reload {
+  color: #fff;
+  font-weight: 600;
+  text-decoration: underline;
+  display: inline-block;
+  min-height: 44px;
+  line-height: 44px;
+}
+#blazor-error-ui .dismiss {
+  cursor: pointer;
+  position: absolute;
+  right: calc(12px + var(--ele-safe-right));
+  top: 10px;
+  font-size: 1.1rem;
+  padding: 8px;
 }
 
-    #blazor-error-ui .dismiss {
-        cursor: pointer;
-        position: absolute;
-        right: 0.75rem;
-        top: 0.5rem;
-    }
-
-.blazor-error-boundary {
-    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #b32121;
-    padding: 1rem 1rem 1rem 3.7rem;
-    color: white;
-}
-
-    .blazor-error-boundary::after {
-        content: "An error has occurred."
-    }
-
-.darker-border-checkbox.form-check-input {
-    border-color: #929292;
-}
-
-.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
-    color: var(--bs-secondary-color);
-    text-align: end;
-}
-
-.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
-    text-align: start;
-}
-
-.status-bar-safe-area {
-    display: none;
-}
-
-@supports (-webkit-touch-callout: none) {
-    .status-bar-safe-area {
-        display: flex;
-        position: sticky;
-        top: 0;
-        height: env(safe-area-inset-top);
-        background-color: #f7f7f7;
-        width: 100%;
-        z-index: 1;
-    }
-
-    .flex-column, .navbar-brand {
-        padding-left: env(safe-area-inset-left);
-    }
-}
+/* Sticky date headers must clear the status bar too, or they slide under the clock. */
+.date-header { top: var(--ele-safe-top); }

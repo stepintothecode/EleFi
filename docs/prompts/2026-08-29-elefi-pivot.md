@@ -162,18 +162,317 @@ decisions. Their words, verbatim:
 
 ---
 
-## 7. Final shape
+## 7. Step 3: implementation, 2026-08-30
 
-Settled: the name, the .NET stack, Blazor Hybrid, the five-project Clean Architecture
-boundary, SMS as suggestion-not-transaction, export as the serialised filtered list, free
-forever under MIT with a voluntary support link, and the re-cut roadmap.
+> go ahead with step 3 then. Make sure to read and take into account also the other 2 uncommited prompts in doc/prompts directory. Give me a nice working perfect solution, which first I use and then tell how to improve
 
-Built and verified: `EleFi.slnx` with five projects in `src/` and six in `tests/`,
-`Directory.Build.props` x3, `Directory.Packages.props`, `.editorconfig`, `global.json`,
-`LICENSE`, `.github/FUNDING.yml`. `dotnet build` and `dotnet test` both pass, 9 tests
-green, 0 warnings.
+Built S1 to S7 plus S15, and S37's parser with its permission-free paste path. 77 tests,
+0 warnings, Android head builds.
 
-Nothing about the domain is implemented. Step 1 of the brief is complete and part of Step 2
-arrived early, because the user asked for the skeleton directly.
+| # | Question | Decision |
+|---|---|---|
+| 28 | Which slices, given "a working solution I can use"? | The critical path to a daily driver: money, containers, capture, balances, list, filters, export. Not goals, not backup, not the SMS receiver. A narrower thing that works beats a wider thing that half does |
+| 29 | `Microsoft.EntityFrameworkCore.Sqlite` or `.Sqlite.Core`? | **Core.** The full package bundles `bundle_e_sqlite3`, the plain unencrypted engine. With both present the provider race decides which one keys the file, and losing it means the database opens unencrypted with nothing saying so |
+| 30 | How is `SM1` actually enforced? | `SmsBody` is a `ref struct`. It cannot be a field, boxed, captured by a lambda, or held across an `await`, so there is no expressible path that stores a message body. `ToString` is overridden to return a placeholder so an accidental interpolation cannot leak one either |
+| 31 | Audit trail: interceptor or triggers? | Triggers, created inside the migration that creates each table. Written as C# that emits SQL so the four trigger shapes are declared once rather than copied five times |
+| 32 | How to prove `X1` rather than assert it? | A test that runs the list query and the export over the same filter and compares row for row, in order, against a real SQLCipher database |
+| 33 | Where does the mascot live? | `IMascotService` in Application, `MascotService` owning `IJSRuntime` in the app, `elefi-mascot.js` in `wwwroot/js`. A hand-drawn canvas elephant ships now so the whole path works before any art does. Your mascot prompt slots in by replacing the JS and nothing else |
+| 34 | Cross-container name collisions | Three hit during the build: `EleFi.Application` vs MAUI's `Application`, `FileShare` vs `System.IO.FileShare`, and Razor components whose injected property matched the component class name. All resolved by renaming, all noted in the code where they will recur |
 
-Deliberately left open: which GitHub account the project lives under.
+### Bugs the tests caught, not review
+
+| What | Why it matters |
+|---|---|
+| `"Rs. 450.50"` failed to parse | Stripping non-digits left `".450.50"`, two decimal points, rejected. That is the single most common format in Indian bank SMS, so the SMS feature would have silently matched almost nothing. Fixed by scanning for the number instead of stripping around it |
+| `"1.2.3"` then parsed as `1.2` | The scan fix truncated instead of refusing. A plausible wrong amount is the one output a money parser must never produce, so a malformed-number guard was added |
+| bUnit pulled a vulnerable AngleSharp | The audit gate fired. Pinned forward with a comment saying when the pin can go |
+| The layout test failed on its own first run | `EleFi.Architecture` and `EleFi.Properties` have no `src` counterpart. Made explicit in a list with reasons |
+
+## 8. First run on a real phone, 2026-08-30
+
+> After installation of the apk, as soon as I open the app, it gives me "An unhandled error has occured. Reload". Btw, that also is hidden behind the bottom nav bar buttons of my phone. Also it says "Loading..." on top but is hidden behind the notification bar over it.
+>
+> And lastly, the icon of the app is literally ".NET" icon in purple color. Please create a new icon for this app using a grey or purple elephant in it (our mascot Ele). Keep icon images in multiple dimensions and sizes.
+
+Four bugs, three of them things no test in the suite could have caught, because every test
+ran on a desktop runner with no screen.
+
+| # | Bug | Cause and fix |
+|---|---|---|
+| 35 | Crash on first open | `default(Currency)` had a null code, and `Exponent` looked it up in a dictionary, which throws on a null key. The dashboard's net-worth tiles rendered on the synchronous first pass, before `OnInitializedAsync` had replaced `default(NetWorth)`. **Fix:** a struct can always be default-constructed, so every member on one must answer for that case. `Code` is now never null, and an unspecified currency is the additive identity, because zero is zero in every currency. Two different *real* currencies still refuse to combine |
+| 36 | Content behind the status bar and gesture pill | Android 15 forces edge-to-edge, so the WebView genuinely sits under both. **Fix:** `env(safe-area-inset-*)` resolved once into CSS variables and applied to the page, the tab bar, the sticky date headers, and the error bar |
+| 37 | The error bar was the only thing shown, and it was half-hidden | An error at the root of the tree takes the whole app down. **Fix:** an `ErrorBoundary` in `MainLayout` contains the failure to one page, keeps the tabs working, and says the thing that matters: the data on the device is untouched. The boundary recovers on navigation, or it latches and every later page shows a stale error |
+| 38 | The icon was the .NET bot | **Fix:** Ele, as two SVG layers. MAUI rasterises five Android densities from them at build |
+
+### Found while fixing, not reported
+
+| What | Why it mattered |
+|---|---|
+| `IMascotService` was registered scoped, and `MascotViewer` disposes it | Navigating away from the dashboard disposed the shared instance, and the mascot never animated again for the rest of the session. Now transient, so the component that disposes it is the component that owns it |
+| Startup blocked the Android main thread on `SecureStorage` and on migrations | It happens to work today. On a slower device or a colder keystore it is a deadlock presenting as a frozen splash screen with no message. Both now go through `Task.Run` first |
+| Ele sat low inside the adaptive-icon safe zone | He is drawn head-first, so his visual centre is y 293 on a 512 grid, not 256. A circular launcher mask crops around 256 and would have clipped his trunk. The foreground SVG lifts him 34 units |
+
+**The lesson worth keeping:** 89 tests passed while the app could not open. Everything ran
+on a desktop runner, and the three failures were a value type's default state, an OS layout
+behaviour, and a launcher mask. A device is not an optional part of the test matrix.
+
+### Round two: the app still would not open
+
+The first round fixed a real crash and missed the one that mattered. Symptom the second
+time: the boot spinner never resolved, which says the root component never rendered at all,
+so nothing in any page could be responsible.
+
+| # | Bug | Cause and fix |
+|---|---|---|
+| 39 | Router threw before rendering anything | `Routes.razor` names `NotFound` as the `NotFoundPage`, and .NET 10's `Router` validates that eagerly in `SetParametersAsync`: a type with no `RouteAttribute` throws before it renders. `NotFound.razor` had no `@page` directive, because it was hand-written rather than kept from the template. **Fix:** one line, `@page "/not-found"` |
+
+The diagnosis came from a test, not from reading code. Every attempt to reason about it was
+wrong, and three of those wrong guesses were plausible enough to have been worth a rebuild
+each.
+
+| Why the suite missed it | |
+|---|---|
+| `HomeTests` calls `RenderComponent<Home>()` | Renders the page directly, skipping the router and the layout |
+| `MainLayoutTests` renders the shell directly | Same gap, one level up |
+| Nothing rendered `Routes` | So the first component the app actually renders had no test at all |
+
+`RoutesTests` now covers it, including a test that every tab destination has a page
+claiming that route, because a typo there is a dead tab nobody notices until they tap it.
+
+### Diagnosis is now possible at all
+
+An hour went into this blind, because the app has no crash reporting and never will:
+NFR-5.8 forbids transmitting anything and there is no server to transmit to. That leaves
+the device as the only possible source of an answer, and nothing was writing to it.
+
+`FileErrorLog` writes error-level logs to `elefi-errors.log` in the app's data directory.
+Read it with
+`adb shell run-as com.stepintothecode.elefi cat files/elefi-errors.log`. It stays inside
+NFR-5.9: exception type, message, and stack only, no scopes and no state.
+
+## 9. Twenty-two pieces of feedback, 2026-08-31
+
+First real use of the app produced 22 items. Three needed a decision before building.
+
+| # | Question | Decision |
+|---|---|---|
+| 40 | Tags, which you asked me to confirm first | **Labels only for now.** Tags stay in the schema and the vocabulary, so they arrive later without a migration. Label add, rename and delete built, because you could not create one at all. *(Reversed the next day: see section 11. Tags were removed entirely and labels became the many-per-transaction concept instead.)* |
+| 41 | Quick capture surface | **Widget plus Quick Settings tile**, both launching an in-app flow. The animated stepper cannot live in a widget: Android widgets draw through `RemoteViews`, which permits no custom drawing and no animation. The widget is the door, not the room |
+| 42 | Drive backup | **UI placeholders only, no backend.** Settings says plainly that it is not built and that the ledger currently exists on one device |
+| 43 | Cash versus Wallet | **Kept both.** Cash is physical notes; a Wallet is a balance spendable in exactly one place. Merging them would put "money I can hand anyone" and "money locked in one app" into one number. The picker now shows a description per kind |
+| 44 | Container with no amount | **Left as is.** A new wallet or a just-cleared card genuinely holds zero, and demanding a number invites a made-up one |
+| 45 | Investment kinds | Added `MutualFund`, `Stocks`, `Nps`, all Locked. **Their balance is cost basis, not market value**: balances are derived from transactions and there is no price feed. Said so in the UI rather than letting the user assume otherwise |
+| 46 | Time on a transaction | A separate nullable `TimeOnly`, not folded into the date. Combining them makes the transaction an instant, and an instant shifts across timezones. Nullable because a back-dated entry has no honest time |
+
+### The credit-card bug
+
+Reported as "repaying makes it say I owe more". Two things were wrong.
+
+`ContainerBalance.AmountOwed` took `Abs()` of the ledger balance, throwing away the sign
+that distinguishes debt from credit. Paying 2,000 onto a card with nothing on it reported
+"2,000 owed" when the issuer in fact owed you, and the number moved the wrong way as you
+repaid. Owed is now the negation of the balance, keeps its sign, and the UI says "in credit"
+when it goes the other way.
+
+The second was that nothing explained the model. The Containers page now spells out that
+spending is a Debit **from** the card, repayment is a Self Transfer **to** it, and that a
+negative amount is never the answer because direction comes from which container you pick.
+
+### The migration nearly bricked the app
+
+Making container names unique meant a unique index, and existing databases already contain
+duplicates. A naive `CREATE UNIQUE INDEX` fails, and a migration that throws leaves the app
+unable to open with the user's data still inside it.
+
+The de-duplication is written into the migration: rank duplicates, rename all but the oldest.
+The first attempt used a correlated count, which is evaluated per row against rows already
+updated, so the second and third "HDFC" both became "(2)" and the index still failed. A
+window function computed once fixes it. `MigrationSafetyTests` builds a database at the old
+schema, inserts the duplicates, and migrates forward.
+
+### Messages nobody could see
+
+Confirmations and errors rendered at the top of the page, so pressing Save at the bottom of
+a long form appeared to do nothing and invited a second press. They are toasts now, above
+the tab bar where the thumb already is. Errors do not auto-dismiss: a confirmation can slide
+away unread at no cost, but the message telling you what went wrong is the only thing
+standing between you and repeating it.
+
+## 10. Scrolling, editing, and the trail that recorded nothing, 2026-09-01
+
+| # | Issue | Cause and fix |
+|---|---|---|
+| 47 | **No page scrolled at all** | Mine, from the previous round. `html, body { overflow-x: hidden }` was added to stop the dashboard sliding sideways. `overflow-x: hidden` forces the computed `overflow-y` to `auto` and turns the element into a scroll container; setting it on both `html` and `body` in an Android WebView loses the viewport scroll entirely. **Fix:** `overflow-x: clip` on `body` alone, which does not create a scroll container. The sideways problem was already solved by the tile `minmax(0, 1fr)` |
+| 48 | No way out of quick capture | It opens from a widget, so it is often the only thing on screen and the system back gesture was the only exit. Cancel button added |
+| 49 | The confirmation never cleared | "Added successfully" sat there until the next save, over an empty form, with no telling whether it meant the thing just typed or the one before. Clears itself after 3.2s, keyed so a fast second save is not wiped by the first one's timer |
+| 50 | **Transactions could not be edited** | The review flag marked rows nobody could fix, which made it a permanent stain rather than a nudge. Full edit page at `/transactions/{id}`, reachable by tapping any row |
+| 51 | No delete | Now at the bottom of the edit page, in red, behind a confirmation. Soft: it leaves every balance and export at once (T9) and stays restorable |
+
+### The audit trail was recording that something changed, but not what
+
+`FR-8.2` asks for field-level before and after. The triggers wrote `Changes = NULL`, so the
+trail could say a transaction was edited and nothing more. That is a rumour, not a record.
+
+The triggers now build a JSON array of the fields that actually differed, using `IS NOT`
+rather than `<>` because the latter is not null-safe: a note going from nothing to text
+compares as `NULL`, which is not true, so the single most common edit would have recorded
+silence. The `WHEN` clause also requires at least one tracked field to differ, so saving a
+form without touching it adds no line.
+
+**A design problem surfaced while doing it.** Trigger SQL names the columns it compares, so
+it is derived from the schema the way an index is. Pinning its text inside the migration
+that first created a table means every column added later is silently untracked, and nothing
+fails when someone forgets: the trail just quietly stops mentioning that field. Triggers are
+now dropped and recreated from their current definition on every startup, which makes drift
+impossible for a few milliseconds a launch.
+
+**On storing values.** The trail holds amounts and names, which is not a breach of NFR-5.9.
+That rule is about logs. This is user-facing history inside the encrypted database, and it
+is the entire reason a surprising number can be explained six months later.
+
+## 11. Labels become tags, and a local backup, 2026-09-01
+
+Seven pieces of feedback, all from the same instinct: fewer concepts, fewer words, and a
+dialog where a dialog belongs.
+
+| # | Asked | Done |
+|---|---|---|
+| 52 | The "Used for" text on a label is inconsistent, and why have it at all? A transaction's Kind is enough | `AppliesTo` removed from the model, not just from the screen. A label no longer declares a side, so nothing has to be kept consistent |
+| 53 | "Rename a label" and "New label" should be a popup, not something you scroll past every label to reach | New `Modal` bottom sheet, used by both, plus a colour palette. It also carries the delete confirmations added below |
+| 54 | Drop "Inside". Standalone labels, and **any transaction can have multiple, like tags in JIRA**. Forget tags as a separate feature | The reversal of ADR-0007, recorded as [ADR-0013](../adr/0013-multiple-flat-labels.md). Hierarchy gone, Tag entity gone, `TransactionLabel` join table in |
+| 55 | Deleting a container should be as cautious as deleting a transaction | Confirmation sheet naming the container, its balance, and its transaction count. In use, it offers Archive rather than failing after the user has committed |
+| 56 | Until Drive backup exists, give me export and import for local backup. JSON, keep it simple | `BackupFile` and `LocalBackup`: one JSON document, enums by name, ids preserved. Restore replaces rather than merges, and refuses a newer schema version |
+| 57 | Replace quick capture's Cancel button with a cross, maybe with "cancel" as subtext | A cross glyph with the word beneath it, top right where a close control is looked for |
+| 58 | Settings needs an About section like ytclipnshare, linking to the support page. Heart, GitHub and YouTube **icons**, not lots of text | A three-icon grid. Only the support heart is coloured, because it is the only one that asks anything of the user. The identity row above it opens the longer About page |
+
+### The arithmetic problem ADR-0007 was built to avoid
+
+0007 allowed exactly one label precisely so `Σ spend_by_label == total_spend` would hold.
+Multiple labels breaks that, and the objection was correct: a 2,000 shop labelled both Food
+and Household puts 2,000 in each bucket, so the buckets sum to 4,000 against 2,000 of real
+money.
+
+It is now handled rather than avoided. `SpendByLabelAsync` returns
+`SpendBreakdown(ByLabel, TotalMinor)`, where `TotalMinor` is computed **from the
+transactions, each counted once**, and never by summing the buckets. That is a structural
+fix rather than a rule to remember: there is no code path that can add the buckets up by
+accident, because the total arrives already computed. The chart scales its bars to the
+largest label instead of to the total, and says on the same screen that a transaction with
+two labels counts under both. NFR-3.9 was rewritten to assert what is actually true now: no
+bucket exceeds the total, and the total matches an independent sum over transactions.
+
+**Unlabelled became a real state.** There is no `Uncategorised` row any more, so quick
+capture invents nothing, no seeded label is undeletable, and the breakdown carries an
+explicit unlabelled bucket so that money stays visible rather than disappearing.
+
+### The migration was the risky part
+
+`MultipleFlatLabels` runs against real data on a phone. The scaffolded version dropped
+`Transactions.LabelId` before creating the join table, which would have thrown every
+existing categorisation away. Hand-written instead, in this order: create `TransactionLabels`,
+copy every non-system `LabelId` into it, delete the system `Uncategorised` label, de-duplicate
+names that the old per-parent uniqueness had allowed, then drop the columns and the Tag
+tables. Tag assignments are deliberately **not** promoted to labels: a tag was documented as
+never affecting arithmetic, so turning them into labels would silently change every
+historical chart.
+
+**A test-harness bug surfaced on the way.** `TestDatabase.DisposeAsync` called
+`SqliteConnection.ClearAllPools()` so the temp file could be deleted. That pool is
+process-wide, so a finishing test was closing pooled connections belonging to tests still
+running in parallel, and one would fail to reopen at random. It now clears only its own
+pool. Turning pooling off entirely was tried first and was worse: SQLCipher re-derives the
+key on every open, and the suite went from ninety seconds to minutes.
+
+### Moving labels out of the transaction row broke the audit trail, twice
+
+Labels live in a join table now, and a trigger on `Transactions` cannot see rows written to
+another table in the same save. Worse, the `Updated` trigger's `WHEN` requires a tracked
+column on `Transactions` to differ, and `UpdatedAt` is not one, so **changing only a
+transaction's labels left no trace at all.** `TransactionLabels` has its own pair of triggers
+now, writing against the transaction so the entry lands in the timeline the user is looking
+at, and resolving the label's name at trigger time so the trail still reads correctly after
+that label is renamed or deleted.
+
+That exposed a second problem in the edit path. It cleared the label collection and re-added
+it, which with insert and delete triggers underneath means opening a form and pressing save
+without touching anything writes "removed Food, added Food". It applies the difference now.
+
+**And a third, which was the design mistake.** `InitialSchema` created the triggers by
+calling `AuditTriggers.CreateStatements`. That is a migration depending on today's code, and
+it broke the moment the trigger set grew a pair referencing `TransactionLabels`: replaying
+the first migration on a fresh database failed with "no such table", three migrations before
+that table exists. Every test in the class went red at once, which is the useful kind of
+failure. Migrations now only ever drop triggers, by name; `DatabaseInitialiser` is the single
+place that creates them, and it always sees the finished schema. The rule is written on
+`AuditTriggers` itself so the next person does not rediscover it.
+
+## 12. Final shape
+
+All three steps of the brief are done.
+
+**Built and verified.** 136 tests across six projects, 0 warnings, the whole solution
+including the Android head builds. The app runs: create containers, capture Debit, Credit
+and Self Transfer with any number of labels, see derived balances and net worth split three
+ways, filter the list every way, export exactly what is filtered, back the whole thing up to
+a JSON file and restore it, and paste a bank SMS to get a suggestion that records nothing
+until you confirm it. The database is SQLCipher-encrypted with a key from the Android
+keystore, migrations run at startup, and the audit trail is written by triggers.
+
+**Not built, deliberately.** Goals (S14), Drive backup (S12), FX (S17), the Android SMS
+receiver (S38), and biometric lock (S11). The next two prompts already queued, CI release
+and the mascot, have their seams waiting: the release workflow is written and the
+`IMascotService` boundary plus its JS module are in place. The full list of what is left,
+entity by entity, is in section 13.
+
+**Deliberately left open:** which GitHub account the project lives under, and the cold-start
+measurement that NFR-1.1 needs from a real device.
+
+---
+
+## 13. What is still missing, entity by entity
+
+Written against [domain-model.md](../requirements/domain-model.md) so the gap between the
+model and the build is visible at a glance, rather than having to be rediscovered. Each row
+names the slice in [roadmap.md](../roadmap.md) that closes it.
+
+### Entities in the model with no table yet
+
+| Entity | What is missing | Consequence today | Slice |
+|---|---|---|---|
+| **Goal** and **GoalContainer** | The whole thing: entity, `funding_mode`, linked containers, allocation warnings, `GL1`-`GL6`. `Transaction.GoalId` exists as a column but nothing writes it | No savings goals. Net worth is unaffected either way, since `GL3` keeps goals out of it by design | S14 |
+| **FxRate** | Table, provider, and the manual-rate path | Aggregates skip foreign-currency containers rather than converting them. Dual amounts are stored correctly per `ADR-0004`, so nothing is lost, but a USD account does not appear in net worth | S17 |
+| **UserSettings** | Home currency, cycle start day, theme, auto-lock delay | All four are hard-coded: INR, calendar month, system theme, no lock. Changing them means a rebuild | S11 |
+
+### Columns that exist but nothing populates
+
+| Column | State | Slice |
+|---|---|---|
+| `Container.InterestRateBps`, `MaturityDate`, `TenureMonths`, `InstallmentMinor` | On the entity and in the schema; no form collects them and nothing displays "matures in 3 months". Interest is never synthesised, which is deliberate | unscheduled |
+| `Container.Ifsc`, `Icon`, `SortOrder` | Stored, never edited from the UI. Sort order is always insertion order | S11 |
+| `Transaction.GoalId` | Waiting on Goal | S14 |
+| `Transaction.Status` | Ships with `Cleared` only, deliberately reserved so that adding `Pending` and `Scheduled` is not a migration over real data | v2 |
+| `Party.UsageCount`, `LastUsedAt` | Written and ranked on, so suggestions already improve with use. No gap | done |
+| `App.DefaultContainerId` | Populated and used to auto-fill the source container. No gap | done |
+
+### Behaviour the model requires that is not wired
+
+| Rule | Missing piece | Slice |
+|---|---|---|
+| `SM3`-`SM6`, `SM9`-`SM11` | The Android `BroadcastReceiver`, the runtime permission flow, and the notification prompt. Parsing itself works today via paste, and `SmsBody` is already a `ref struct` so `SM1` is a compiler guarantee whichever path arrives | S38 |
+| `FR-9.*` | Google Drive: OAuth with PKCE, Argon2id key derivation, the recovery code, AES-256-GCM, WorkManager upload, rolling retention. The UI placeholder is in Settings and says plainly that nothing is built | S12 |
+| `FR-10.1`-`10.3` | Biometric lock, auto-lock, app-switcher masking. The database is encrypted, but an unlocked phone is an unlocked app | S11 |
+| `FR-10.10` | Merging duplicate parties or apps. They can be created, never consolidated | S16 |
+| `FR-5.9`-`5.13` | Net worth trend, month-over-month per label, top parties, month-in-review | S19, S25 |
+| `FR-3.*` | Notification-based quick capture, and learned defaults by time of day and amount band | S21, S22 |
+| `NFR-1.1` | The cold-start budget has never been measured on a real device. It is a number, and it is currently a guess | S11 |
+
+### Known gaps that are not entities
+
+- **The mascot is a placeholder.** `IMascotService` and its JS module are wired and called
+  on save, but the drawing is a stand-in. The queued mascot prompt replaces it.
+- **The release workflow has never run.** `.github/workflows/` is written and the secrets are
+  documented, but no tag has been pushed, so it is untested.
+- **Parse Rules cover one message shape.** They are data, so a new bank is a rule plus a
+  corpus test, but the corpus is currently thin.
+- **Restore is destructive by design and has no undo.** Exporting first is the only safety
+  net, which is why the Settings copy says so before the button.

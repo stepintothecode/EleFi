@@ -1,0 +1,25 @@
+# .editorconfig asks for LF everywhere. Without this, whether that holds depends on each
+# machine's core.autocrlf, and the EF Core scaffolder writes CRLF on Windows regardless, so
+# `dotnet format --verify-no-changes` fails the first time anyone adds a migration.
+* text=auto eol=lf
+
+# Binary, so never touched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.keystore binary
+*.jks binary
+*.apk binary
+*.aab binary
+*.db binary
+
+# Windows-only, and cmd.exe genuinely needs CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf

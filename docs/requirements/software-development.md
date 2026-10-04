@@ -32,8 +32,8 @@ documents are unaffected; this document describes means, not requirements.
 | Cloud | `Google.Apis.Drive.v3`, `drive.appdata` scope only | ADR-0006 |
 | Crypto | `System.Security.Cryptography.AesGcm` (BCL) + `Konscious.Security.Cryptography.Argon2` | AES-256-GCM and Argon2id. NFR-5.2. Argon2 is not in the BCL |
 | Key storage | Android Keystore via `SecureStorage` | NFR-5.3 |
-| SMS ingest | Android `BroadcastReceiver` on `SMS_RECEIVED`, behind `ISmsAlertSource` | Android only. ADR-0010, NFR-10.7 |
-| Notifications | `NotificationCompat` + `RemoteInput` (AndroidX), behind `INotificationSurface` | Suggestion Prompts and quick capture share one abstraction |
+| Alert ingest | Android `BroadcastReceiver` on `SMS_RECEIVED`, and a `NotificationListenerService` for allow-listed Payment Apps, both handing text to `IncomingAlertHandler` | Android only. ADR-0010, ADR-0014, NFR-10.7 |
+| Notifications | Platform `Notification.Builder`, behind `ISuggestionPromptSurface` | Suggestion Prompts today; quick capture's notification (S22) is still to come |
 | Background work | AndroidX **WorkManager** for backup and expiry sweeps | Survives OEM battery managers better than a bare service. NFR-10.3 |
 | Testing | **xUnit v3**, **CsCheck** (properties), **bUnit** (Razor), **NSubstitute** | §5 |
 | Architecture tests | **NetArchTest** | §2's dependency rule, enforced not trusted |
@@ -80,7 +80,7 @@ src/
     Alerts/                         Parse Rule evaluation: string in, suggestion out
   EleFi.Application/                use cases, and the ports the outside world implements
     Abstractions/                   ITransactionRepository, IBackupStore, IClock, ...
-    Transactions/  Containers/  Export/  Suggestions/
+    Transactions/  Containers/  Export/  Suggestions/  Backup/
   EleFi.Infrastructure/             every adapter. the only project that does I/O
     Persistence/                    EleFiDbContext, configurations, migrations, triggers
     Persistence/Repositories/       ONLY place that touches the database
@@ -184,8 +184,8 @@ over substantial functionality.
 | Drive | `IBackupStore` | All network. Fake in tests |
 | Crypto | `IBackupCipher`, `IKeyVault` | Key handling. Deterministic double |
 | FX | `IRateSource` | Rate fetching. Fixture rates |
-| SMS | `ISmsAlertSource` | The Android receiver. Tests feed message strings directly |
-| Notifications | `INotificationSurface` | Prompt posting. Recording double |
+| Alerts | `IncomingAlertHandler` (+ `IAlertAccess` for permissions) | The Android receivers call it. Tests feed alert strings directly |
+| Notifications | `ISuggestionPromptSurface` | Prompt posting. Recording double |
 | Clock | `IClock` | `DateTimeOffset.UtcNow`. Nothing in the app calls it directly |
 | Export | `ITransactionExporter` | Serialisation. Tested against the list's own query |
 | Mascot | `IMascotService` | The Rive runtime and all `IJSRuntime` interop. A recording double in bUnit tests |
@@ -261,7 +261,8 @@ Every invariant in [domain-model.md](domain-model.md) has a test named for its I
 Reserved for the properties that must hold universally:
 
 ```
-∀ transactions:  Σ spend_by_label(f) == total_spend(f)          -- NFR-3.9
+∀ labels l:      spend_by_label(f).by_label[l] <= .total        -- NFR-3.9
+∀ filters:       spend_by_label(f).total == Σ debit amounts     -- NFR-3.9, counted once
 ∀ containers:    replaying all transactions == balance(c)        -- NFR-3.2
 ∀ transactions:  same currency ⟹ source_amount == dest_amount    -- T4
 ∀ transactions:  kind(t) is derivable and never INVALID          -- T1
@@ -312,6 +313,48 @@ Small and stable. Only the flows whose breakage would be catastrophic:
 7. Capture in aeroplane mode
 8. Feed a test SMS via `adb`; confirm the prompt, then the transaction; verify a dismissed
    suggestion leaves no trace
+
+### 5.6a What a desktop runner cannot tell you
+
+On 2026-08-30 the app failed to open on a real phone while all 89 tests passed. Three
+separate causes, none of them reachable from a test project:
+
+| Failure | Why no test saw it |
+|---|---|
+| `default(Currency)` threw when formatted | The tests always constructed money through `Currency.Of`. A component rendering before its data loaded did not |
+| Content hid behind the status bar and gesture pill | Android 15 forces edge-to-edge. There is no viewport in a test runner |
+| The launcher cropped the icon off-centre | Adaptive-icon masks are a launcher behaviour |
+
+So: **a default-constructed value type is an input**, and every member on a struct has to
+answer sensibly for it. And **a real device is not an optional part of the matrix** (§5.7)
+however green the suite is.
+
+A second attempt then shipped, and the app still would not open. That one was the router:
+`Routes.razor` named a `NotFoundPage` with no `@page` directive, and .NET 10's `Router`
+validates that eagerly and throws before rendering anything.
+
+**Every UI test rendered a page or the layout directly, so nothing rendered `Routes` at
+all.** The first component the app actually renders had no test. The rule that falls out:
+
+> **Render the root.** A suite that only renders pages in isolation cannot tell you whether
+> the app starts. `RoutesTests` renders `Routes` and asserts every tab destination resolves.
+
+### 5.6b On-device diagnosis
+
+EleFi has no crash reporting and will not get any: NFR-5.8 forbids transmitting anything
+and there is no server to transmit to. The device is therefore the only place an answer can
+come from, so something has to write there.
+
+`FileErrorLog` (in `EleFi.App/Services`) writes error-level logs to
+`elefi-errors.log` in the app data directory:
+
+```
+adb shell run-as com.stepintothecode.elefi cat files/elefi-errors.log
+```
+
+It stays inside NFR-5.9 by writing only the exception type, message, and stack: no scopes,
+no state, no message arguments. EF Core runs with sensitive-data logging off, so its
+exceptions carry SQL shape but never parameter values.
 
 ### 5.7 Manual test matrix
 
@@ -462,9 +505,11 @@ boundary knows Android exists.
 that writes its own SQL would bypass audit triggers and invariant checks - the exact class
 of bug that produces silently wrong balances.
 
-**The SMS receiver does no work on the broadcast thread.** It matches the sender and hands
-off to WorkManager. A `BroadcastReceiver` that opens an encrypted database inline is an
-ANR waiting for a slow morning.
+**The alert receivers do no work on the broadcast thread.** The SMS receiver takes `goAsync()`
+and parses on a background task; the Payment App listener hands off to a task likewise. Not
+WorkManager: a queued job would have to serialise the message text to disk to survive a
+process death, which `SM1` forbids (ADR-0014). A `BroadcastReceiver` that opens an encrypted
+database on the broadcast thread is an ANR waiting for a slow morning.
 
 ---
 

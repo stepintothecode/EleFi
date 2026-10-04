@@ -1,0 +1,72 @@
+@using EleFi.Domain.Containers
+
+@*
+    A container dropdown, sectioned: credit cards, then bank accounts, then the rest.
+
+    Still a native <select>, because Android's own picker is fast, accessible, and familiar.
+    The <optgroup> headings are what turn one long alphabetical list into sections the eye
+    can jump between.
+*@
+
+<select id="@Id" value="@(Value == Guid.Empty ? string.Empty : Value.ToString())" @onchange="OnChangeAsync" aria-label="@AriaLabel">
+    @if (Placeholder is not null && Value == Guid.Empty)
+    {
+        @* Shown only while nothing is chosen, so an unmatched container is asked for
+           rather than silently defaulted to the first one in the list. *@
+        <option value="">@Placeholder</option>
+    }
+    @foreach (var group in _groups)
+    {
+        <optgroup label="@group.Heading">
+            @foreach (var container in group.Containers)
+            {
+                <option value="@container.Id">@container.Name</option>
+            }
+        </optgroup>
+    }
+</select>
+
+@code {
+    private IReadOnlyList<ContainerGroup> _groups = [];
+    private IReadOnlyList<Container>? _groupedFrom;
+
+    /// <summary>The select's id, so a label can point at it.</summary>
+    [Parameter]
+    public string? Id { get; set; }
+
+    /// <summary>An accessible name, for when there is no visible label.</summary>
+    [Parameter]
+    public string? AriaLabel { get; set; }
+
+    /// <summary>The containers to choose from, in the user's preferred order.</summary>
+    [Parameter]
+    public IReadOnlyList<Container> Containers { get; set; } = [];
+
+    /// <summary>The chosen container.</summary>
+    [Parameter]
+    public Guid Value { get; set; }
+
+    /// <summary>
+    /// A first option shown while <see cref="Value"/> is empty, such as "Choose one". Null
+    /// for no placeholder.
+    /// </summary>
+    [Parameter]
+    public string? Placeholder { get; set; }
+
+    /// <summary>Raised when a different container is chosen.</summary>
+    [Parameter]
+    public EventCallback<Guid> ValueChanged { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_groupedFrom, Containers))
+        {
+            _groupedFrom = Containers;
+            _groups = ContainerGrouping.ForPicker(Containers);
+        }
+    }
+
+    private Task OnChangeAsync(ChangeEventArgs e) =>
+        Guid.TryParse(e.Value?.ToString(), out var id) ? ValueChanged.InvokeAsync(id) : Task.CompletedTask;
+}

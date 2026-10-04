@@ -15,12 +15,14 @@ ways.
 | [0004](0004-multi-currency-dual-amounts.md) | Each end of a transaction carries its own amount and currency | accepted |
 | [0005](0005-expo-typescript-over-csharp.md) | Expo/TypeScript over C# | **superseded by 0009** |
 | [0006](0006-google-drive-encrypted-backup.md) | Client-side encrypted backup to the user's Google Drive; sync deferred | accepted |
-| [0007](0007-single-label-plus-tags.md) | Exactly one Label per transaction, plus unlimited Tags | accepted |
+| [0007](0007-single-label-plus-tags.md) | Exactly one Label per transaction, plus unlimited Tags | **superseded by 0013** |
 | [0008](0008-audit-via-sqlite-triggers.md) | Audit trail written by SQLite triggers; soft deletes everywhere | accepted |
 | [0009](0009-dotnet-maui-over-expo-typescript.md) | C# on .NET MAUI, reversing 0005 | accepted |
 | [0010](0010-on-device-sms-assisted-capture.md) | SMS parsed on device into suggestions, never booked automatically | accepted |
 | [0011](0011-blazor-hybrid-over-native-xaml.md) | Blazor Hybrid rather than native XAML for the UI layer | accepted |
 | [0012](0012-free-forever-voluntary-support.md) | Free forever, MIT licensed, funded only by voluntary support | accepted |
+| [0013](0013-multiple-flat-labels.md) | Any number of flat Labels per transaction; Tags removed, reversing 0007 | accepted |
+| [0014](0014-payment-app-notification-ingest.md) | Allow-listed Payment App notifications as a second alert channel, merged with SMS | accepted |
 
 ## The load-bearing ones
 

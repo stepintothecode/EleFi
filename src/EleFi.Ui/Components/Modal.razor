@@ -1,0 +1,97 @@
+@*
+    A sheet that slides up from the bottom.
+
+    Bottom rather than centre, because this is a phone: the actions land under the thumb
+    instead of halfway up the screen. The backdrop dismisses, and so does the cross.
+
+    Exists because "New label" was a form appended below a list. On a long list you had to
+    scroll past everything to find it, and nothing about it said a new thing had appeared.
+
+    The system back gesture closes it too, the way every Android sheet behaves. Without that,
+    back went past the sheet and off the screen underneath it.
+*@
+@using EleFi.Ui.Services
+@implements IDisposable
+
+@if (Open)
+{
+    <div class="modal-backdrop" @onclick="OnCancelAsync"></div>
+
+    <div class="modal-sheet enter-sheet" role="dialog" aria-modal="true" aria-label="@Title">
+        <div class="modal-head">
+            <h2>@Title</h2>
+            <button type="button" class="icon-btn" aria-label="Close" @onclick="OnCancelAsync">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                     stroke-linecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="modal-body">
+            @ChildContent
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>Whether the sheet is showing.</summary>
+    [Parameter]
+    public bool Open { get; set; }
+
+    /// <summary>The heading, also the dialog's accessible name.</summary>
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>The sheet's contents.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Raised when the backdrop or the cross is used.</summary>
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    /// <summary>The app's back handling, cascaded from the router. Absent in isolated tests.</summary>
+    [CascadingParameter]
+    public BackNavigator? Back { get; set; }
+
+    private IDisposable? _backRegistration;
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (Open && _backRegistration is null)
+        {
+            _backRegistration = Back?.Intercept(OnBackAsync);
+        }
+        else if (!Open)
+        {
+            ReleaseBack();
+        }
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => ReleaseBack();
+
+    private void ReleaseBack()
+    {
+        _backRegistration?.Dispose();
+        _backRegistration = null;
+    }
+
+    private Task OnCancelAsync() => OnCancel.InvokeAsync();
+
+    // The navigator has already spent this registration. If the parent declined to close
+    // (a sheet mid-save, say), the sheet is still up and must catch the next back press too,
+    // or that press would navigate away underneath it.
+    private async Task OnBackAsync()
+    {
+        _backRegistration = null;
+        await OnCancelAsync();
+
+        if (Open && _backRegistration is null)
+        {
+            _backRegistration = Back?.Intercept(OnBackAsync);
+        }
+    }
+}

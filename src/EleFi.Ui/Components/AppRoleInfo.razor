@@ -1,0 +1,31 @@
+@*
+    The "i" beside Bought through and Paid with, with the explanation that used to sit under
+    each field permanently. Shared so the capture form and the editor say the same thing.
+*@
+
+@if (Payment)
+{
+    <InfoButton Topic="Paid with">
+        <p>The app or rail the money moved along: GPay, PhonePe, Net Banking, Cash.</p>
+        <p class="muted small">
+            It never changes a balance. The container you picked is the only thing that decides
+            where the money left from, so getting this wrong costs nothing.
+        </p>
+    </InfoButton>
+}
+else
+{
+    <InfoButton Topic="Bought through">
+        <p>The platform you ordered or booked on: Zomato, Amazon, Uber.</p>
+        <p class="muted small">
+            Leave it empty for a shop, a person, or anything paid directly. It is there so you
+            can later ask "how much went through Swiggy this month?".
+        </p>
+    </InfoButton>
+}
+
+@code {
+    /// <summary>True for Paid with, false for Bought through.</summary>
+    [Parameter]
+    public bool Payment { get; set; }
+}

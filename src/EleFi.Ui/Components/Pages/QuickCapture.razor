@@ -1,0 +1,452 @@
+@page "/quick"
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Transactions
+@using EleFi.Application.Typeahead
+@using EleFi.Domain.Containers
+@using EleFi.Domain.Money
+@using EleFi.Domain.Transactions
+@using EleFi.Ui.Services
+@implements IDisposable
+@inject CaptureService Capturing
+@inject IContainerRepository Containers
+@inject IPartyRepository Parties
+@inject IClock Clock
+@inject IMascotService Mascot
+@inject NavigationManager Nav
+@layout EleFi.Ui.Components.Layout.BareLayout
+
+@*
+    Three taps, and out.
+
+    Amount, Source, Destination. Nothing else is asked, because everything else has a defensible
+    default and asking for it is what makes the full form take thirty seconds instead of
+    three. The result is a complete, real Transaction flagged Needs Review, not a draft:
+    a guessed transaction that counts is worth more than a perfect one that never exists.
+
+    "Add other details" is the way out to the full form without losing what was typed: it
+    saves what it can and opens the editor, or hands the partial answer to the capture form
+    when there is not yet enough for a transaction.
+
+    Reached from the home-screen widget, the Quick Settings tile, or the tab bar.
+*@
+
+<PageTitle>Quick capture</PageTitle>
+
+<div class="quick">
+    @*
+        A cross, not the word. It sits where a close control is expected, reads instantly
+        without being parsed, and leaves the eye free for the amount field below. The word
+        is kept underneath it so the target is still unambiguous.
+    *@
+    <div class="quick-top">
+        <span class="muted small">Quick capture</span>
+        <button type="button" class="close-stack" aria-label="Cancel and go back" @onclick="Cancel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+            <span>Cancel</span>
+        </button>
+    </div>
+
+    <div class="quick-steps" role="group" aria-label="Step @(_step + 1) of 3">
+        @for (var i = 0; i < StepLabels.Length; i++)
+        {
+            var index = i;
+            var state = index < _step ? "done" : index == _step ? "on" : string.Empty;
+            <button type="button"
+                    class="quick-step @state"
+                    style="@ArcStyle(index)"
+                    disabled="@(index > _furthest)"
+                    aria-current="@(index == _step ? "step" : null)"
+                    @onclick="() => GoTo(index)">
+                <span class="dot">@(index < _step ? "✓" : (index + 1).ToString())</span>
+                <span class="cap">@StepLabels[index]</span>
+            </button>
+        }
+    </div>
+
+    <div class="quick-stage" @key="_step">
+        @if (_step == 0)
+        {
+            <div class="quick-panel">
+                <label for="q-amount">How much?</label>
+                <input id="q-amount" class="amount-input" type="text" inputmode="decimal"
+                       placeholder="0.00" autocomplete="off" autofocus enterkeyhint="next"
+                       @bind="_amountText" @bind:event="oninput" @onkeydown="OnAmountKey" />
+                <p class="muted small">@Clock.Today.ToString("ddd d MMM") at @Clock.TimeOfDay.ToString("HH:mm")</p>
+            </div>
+        }
+        else if (_step == 1)
+        {
+            <div class="quick-panel">
+                <label>Paid from</label>
+                @if (_containers.Count == 0)
+                {
+                    <p class="notice error">Add a container first. Quick capture needs somewhere for money to leave.</p>
+                }
+                else
+                {
+                    <ContainerChoices Containers="_containers" Selected="_containerId" OnChosen="ChooseContainer" />
+                }
+            </div>
+        }
+        else
+        {
+            <div class="quick-panel">
+                <label for="q-to">Paid to</label>
+                <TypeaheadInput Id="q-to"
+                                @bind-Value="_partyName"
+                                Candidates="_partyCandidates"
+                                PanelLabel="People and places you pay"
+                                EnterKeyHint="done"
+                                Placeholder="Zomato, Rahul, chai"
+                                OnPicked="ChooseParty"
+                                OnKeyDown="OnPartyKey" />
+            </div>
+        }
+    </div>
+
+    @if (_problem is not null)
+    {
+        <p class="notice error" role="alert">@_problem</p>
+    }
+
+    <div class="quick-actions">
+        @if (_step > 0)
+        {
+            <button class="btn-ghost" @onclick="StepBack">Back</button>
+        }
+        @if (_step < 2)
+        {
+            <button class="primary grow" disabled="@(!CanAdvance)" @onclick="Next">Next</button>
+        }
+        else
+        {
+            <button class="primary grow" disabled="@(_busy || !CanAdvance)" @onclick="AddAsync">Add</button>
+        }
+    </div>
+
+    @* Available once there is an amount, since that is the one thing the full form cannot
+       guess. Everything else carries across as far as it got. *@
+    <button type="button" class="btn-ghost btn-block quick-more" disabled="@(_busy || !HasAmount)"
+            @onclick="AddOtherDetailsAsync">
+        Add other details
+    </button>
+
+    @if (_added is not null)
+    {
+        <div class="quick-done enter" role="status">
+            <span class="glyph" aria-hidden="true">&#128018;</span>
+            <div>
+                <strong>Added successfully!</strong>
+                <div class="small">@_added Flagged for review, so you can fill in the rest later.</div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly string[] StepLabels = ["Amount", "Paid from", "Paid to"];
+
+    /// <summary>How long the confirmation stays before clearing itself.</summary>
+    /// <remarks>
+    /// It used to sit there until the next save, so the screen showed "Added successfully"
+    /// over an empty form and there was no telling whether it meant the thing just typed or
+    /// the one before it.
+    /// </remarks>
+    private const int ConfirmationMilliseconds = 3200;
+
+    /// <summary>The app's back handling, cascaded from the router.</summary>
+    [CascadingParameter]
+    public BackNavigator? Back { get; set; }
+
+    // Identifies the confirmation currently showing, so a fast second save does not have its
+    // message wiped by the first one's timer firing late.
+    private Guid _confirmationId;
+
+    private IReadOnlyList<Container> _containers = [];
+    private IReadOnlyList<TypeaheadCandidate> _partyCandidates = [];
+
+    private int _step;
+    private int _furthest;
+    private string _amountText = string.Empty;
+    private Guid _containerId;
+    private string _partyName = string.Empty;
+    private bool _busy;
+    private string? _added;
+    private string? _problem;
+
+    // While past the first step, the back gesture steps back through the form rather than
+    // leaving it and losing the amount.
+    private IDisposable? _stepBackRegistration;
+
+    private bool HasAmount => MoneyText.TryParse(_amountText, Currency.Inr, out var m) && m.Minor > 0;
+
+    private bool CanAdvance => _step switch
+    {
+        0 => HasAmount,
+        1 => _containerId != Guid.Empty,
+        _ => !string.IsNullOrWhiteSpace(_partyName),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Picker order, so the default is the first card: the usual way a quick spend is paid.
+        _containers = ContainerGrouping.InPickerOrder(await Containers.ListSelectableAsync());
+        _containerId = _containers.FirstOrDefault()?.Id ?? Guid.Empty;
+        await LoadCandidatesAsync();
+    }
+
+    public void Dispose() => ReleaseStepBack();
+
+    private async Task LoadCandidatesAsync() =>
+        _partyCandidates = TypeaheadCandidates.From(await Parties.ListExternalAsync());
+
+    // The steps sit on an arc rather than a line. Three items is few enough that a curve
+    // reads as a shape rather than a diagram, and it puts the active one nearest the thumb.
+    private static string ArcStyle(int index)
+    {
+        double[] angles = [-52, 0, 52];
+        var radians = angles[index] * System.Math.PI / 180.0;
+        var x = System.Math.Sin(radians) * 110;
+        var y = (1 - System.Math.Cos(radians)) * 62;
+
+        return $"transform: translate({x.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}px, "
+             + $"{y.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}px);";
+    }
+
+    private void GoTo(int index)
+    {
+        if (index <= _furthest)
+        {
+            SetStep(index);
+        }
+    }
+
+    private void StepBack() => SetStep(System.Math.Max(0, _step - 1));
+
+    private void SetStep(int step)
+    {
+        _step = step;
+        _problem = null;
+        SyncStepBack();
+    }
+
+    private void SyncStepBack()
+    {
+        if (_step > 0 && _stepBackRegistration is null)
+        {
+            _stepBackRegistration = Back?.Intercept(() =>
+            {
+                // The navigator has already dropped this registration before calling it.
+                _stepBackRegistration = null;
+                StepBack();
+                StateHasChanged();
+                return Task.CompletedTask;
+            });
+        }
+        else if (_step == 0)
+        {
+            ReleaseStepBack();
+        }
+    }
+
+    private void ReleaseStepBack()
+    {
+        _stepBackRegistration?.Dispose();
+        _stepBackRegistration = null;
+    }
+
+    // Home rather than browser-back: this screen is often the first thing on screen after a
+    // widget tap, so there is no history to go back to.
+    private void Cancel() => Nav.NavigateTo("/");
+
+    private async Task ClearConfirmationLaterAsync(Guid id)
+    {
+        await Task.Delay(ConfirmationMilliseconds).ConfigureAwait(false);
+
+        // Only clear the message this call raised. A second save inside the window replaces
+        // the id, and its own timer takes over.
+        await InvokeAsync(() =>
+        {
+            if (_confirmationId == id)
+            {
+                _added = null;
+                StateHasChanged();
+            }
+        });
+    }
+
+    private void Next()
+    {
+        if (!CanAdvance)
+        {
+            return;
+        }
+
+        SetStep(System.Math.Min(2, _step + 1));
+        _furthest = System.Math.Max(_furthest, _step);
+    }
+
+    private void ChooseContainer(Guid id)
+    {
+        _containerId = id;
+        Next();
+    }
+
+    // Tapping a name is the answer, so it records straight away rather than asking for Add.
+    private Task ChooseParty(string name)
+    {
+        _partyName = name;
+        return AddAsync();
+    }
+
+    private void OnAmountKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            Next();
+        }
+    }
+
+    private async Task OnPartyKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await AddAsync();
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        if (_busy || !CanAdvance)
+        {
+            return;
+        }
+
+        _busy = true;
+        _added = null;
+
+        try
+        {
+            var saved = await SaveAsync();
+            if (saved is null)
+            {
+                return;
+            }
+
+            _added = $"{MoneyText.ToDisplayString(saved.Value.Amount)} to {saved.Value.Counterparty}.";
+            _confirmationId = Guid.CreateVersion7();
+
+            try
+            {
+                await Mascot.CheerAsync();
+            }
+            catch (Exception)
+            {
+                // Celebration is never allowed to matter.
+            }
+
+            _amountText = string.Empty;
+            _partyName = string.Empty;
+            _furthest = 0;
+            SetStep(0);
+            await LoadCandidatesAsync();
+
+            _ = ClearConfirmationLaterAsync(_confirmationId);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>
+    /// Saves what there is and opens the full editor on it, or hands over to the capture form.
+    /// </summary>
+    /// <remarks>
+    /// A transaction needs both ends. With a counterparty typed there is enough, so it is
+    /// recorded now (flagged for review, as every quick capture is) and the editor opens on
+    /// it. Without one there is nothing that could honestly be saved, so the capture form
+    /// opens with the amount and container already filled in instead.
+    /// </remarks>
+    private async Task AddOtherDetailsAsync()
+    {
+        if (_busy || !HasAmount)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_partyName) || _containerId == Guid.Empty)
+        {
+            var query = $"capture?amount={Uri.EscapeDataString(_amountText.Trim())}";
+            if (_containerId != Guid.Empty)
+            {
+                query += $"&container={_containerId}";
+            }
+
+            Nav.NavigateTo(query);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            if (await SaveAsync() is { } saved)
+            {
+                Nav.NavigateTo($"transactions/{saved.TransactionId}");
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task<(Guid TransactionId, Money Amount, string Counterparty)?> SaveAsync()
+    {
+        _problem = null;
+
+        if (!MoneyText.TryParse(_amountText, Currency.Inr, out var amount) || amount.Minor <= 0)
+        {
+            _problem = "Enter an amount greater than zero.";
+            return null;
+        }
+
+        var containerParty = await Containers.PartyForAsync(_containerId);
+        if (containerParty is null)
+        {
+            _problem = "That container no longer exists. Pick another one.";
+            return null;
+        }
+
+        var counterparty = await Parties.GetOrCreateExternalAsync(_partyName);
+
+        var result = await Capturing.CaptureAsync(new CaptureRequest(
+            containerParty.Id,
+            counterparty.Id,
+            amount.Minor,
+            Currency.Inr.Code,
+            amount.Minor,
+            Currency.Inr.Code,
+            Clock.Today,
+            Clock.TimeOfDay,
+            // No labels. Quick capture asks three questions and labels are not one of
+            // them, and an invented one would be worse than none now that unlabelled is
+            // a real state.
+            LabelIds: null,
+            // Needs Review, because everything optional was skipped. It still counts
+            // toward every balance immediately: this is a real transaction, not a draft.
+            NeedsReview: true,
+            CaptureSource: CaptureSource.Widget));
+
+        if (!result.Succeeded)
+        {
+            _problem = result.Error;
+            return null;
+        }
+
+        return (result.Transaction!.Id, amount, counterparty.Name ?? _partyName);
+    }
+}

@@ -1,10 +1,65 @@
+@using EleFi.Application.Abstractions
+@using EleFi.Ui.Services
+@implements IDisposable
+@inject ILaunchIntent Launch
+@inject ISystemBack SystemBack
+@inject BackNavigator Back
+@inject NavigationManager Nav
+
 @*
-    Routable components live in this library, not in the MAUI host, so bUnit can
-    reach them without a device. AppAssembly points here for the same reason.
+    Routable components live in this library, not in the MAUI host, so bUnit can reach them
+    without a device. AppAssembly points here for the same reason.
+
+    NotFoundPage must name a component with an @page directive. The router validates that in
+    SetParametersAsync and throws before rendering anything, so getting it wrong stops the
+    app opening rather than breaking a 404.
+
+    The back navigator is cascaded rather than injected into each sheet, so a component
+    rendered on its own in a test, with no router above it, simply has no back handling.
 *@
-<Router AppAssembly="typeof(Routes).Assembly" NotFoundPage="typeof(Pages.NotFound)">
-    <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
-    </Found>
-</Router>
+
+<CascadingValue Value="Back" IsFixed="true">
+    <Router AppAssembly="typeof(Routes).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+        <Found Context="routeData">
+            <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+    </Router>
+</CascadingValue>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Launch.RouteRequested += GoToRequestedRoute;
+        SystemBack.Pressed += OnSystemBack;
+
+        // A cold launch from the widget, the tile, or a Suggestion Prompt. Consuming the
+        // request here rather than peeking means one tap produces one navigation.
+        if (Launch.ConsumeRequestedRoute() is { } route)
+        {
+            Nav.NavigateTo(route);
+        }
+
+        // After the launch route, so the history starts on the screen actually shown with
+        // the dashboard behind it.
+        Back.Start();
+    }
+
+    public void Dispose()
+    {
+        Launch.RouteRequested -= GoToRequestedRoute;
+        SystemBack.Pressed -= OnSystemBack;
+    }
+
+    // The app was already open when the request arrived, so there was no cold start to
+    // read it during. Fired from the activity's OnNewIntent, off the UI thread.
+    private void GoToRequestedRoute() => InvokeAsync(() =>
+    {
+        if (Launch.ConsumeRequestedRoute() is { } route)
+        {
+            Nav.NavigateTo(route);
+        }
+    });
+
+    private void OnSystemBack() => InvokeAsync(Back.GoBackAsync);
+}

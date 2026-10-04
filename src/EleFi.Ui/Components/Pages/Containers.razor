@@ -1,0 +1,371 @@
+@page "/containers"
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Containers
+@using EleFi.Domain.Balances
+@using EleFi.Domain.Containers
+@using EleFi.Domain.Money
+@using EleFi.Ui.Services
+@inject ContainerService Service
+@inject ToastService Toasts
+@inject IClock Clock
+
+@*
+    Money Containers. Never "accounts" - that word means a login identity, or the specific
+    BankAccount kind, and using it for the general concept is how this model gets muddled.
+
+    A credit card shows what is owed, visually distinct from an asset balance, so debt is
+    never mistaken for money. An overpaid card says "in credit" rather than reporting the
+    overpayment as more debt.
+*@
+
+<PageTitle>Containers</PageTitle>
+
+<div class="section-head">
+    <h1>Containers</h1>
+    <button class="btn-ghost" @onclick="StartAdd">Add</button>
+</div>
+
+@* A sheet rather than a form pushed in above the list. The list stays where it was, the
+   cross and the back gesture both close it, and nothing about the page shifts under the
+   user's thumb while they type. *@
+<Modal Open="FormOpen" Title="@(_editingId is null ? "Add a container" : "Edit container")" OnCancel="CloseForm">
+        <div class="field">
+            <label for="name">Name</label>
+            <input id="name" @bind="_name" placeholder="HDFC Savings" autocomplete="off" />
+        </div>
+
+        @if (_editingId is null)
+        {
+            <div class="field">
+                <label for="kind">Kind</label>
+                <select id="kind" @bind="_kind">
+                    @foreach (var kind in Enum.GetValues<ContainerKind>())
+                    {
+                        <option value="@kind">@kind.DisplayName()</option>
+                    }
+                </select>
+                @* Cash and Wallet look interchangeable until you read this. *@
+                <div class="muted small" style="margin-top:6px;">@_kind.Description()</div>
+            </div>
+
+            <div class="field">
+                <label for="opening">@OpeningLabel</label>
+                <input id="opening" class="amount-input" type="text" inputmode="decimal"
+                       @bind="_openingText" placeholder="0.00" autocomplete="off" />
+                <div class="muted small" style="margin-top:6px;">@OpeningHelp</div>
+            </div>
+
+            @if (_kind.IsBankLike())
+            {
+                <div class="field">
+                    <label for="institution">Bank <span class="muted small">(optional)</span></label>
+                    <input id="institution" @bind="_institution" placeholder="HDFC Bank" autocomplete="off" />
+                </div>
+                <div class="field">
+                    <label for="last4">Last 4 digits <span class="muted small">(optional)</span></label>
+                    <input id="last4" @bind="_last4" maxlength="4" inputmode="numeric" placeholder="4417" autocomplete="off" />
+                    <div class="muted small" style="margin-top:6px;">
+                        Only four digits are ever stored. A full number cannot help you and is the
+                        worst thing to leak.
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="field">
+                <label for="institution">Bank <span class="muted small">(optional)</span></label>
+                <input id="institution" @bind="_institution" placeholder="HDFC Bank" autocomplete="off" />
+            </div>
+            <div class="field">
+                <label for="last4">Last 4 digits <span class="muted small">(optional)</span></label>
+                <input id="last4" @bind="_last4" maxlength="4" inputmode="numeric" autocomplete="off" />
+            </div>
+            <p class="muted small">
+                Kind and currency cannot change once a container exists: they would
+                reinterpret every amount already recorded against it.
+            </p>
+        }
+
+        <button class="primary btn-block" disabled="@_busy" @onclick="SaveAsync">
+            @(_editingId is null ? "Add container" : "Save changes")
+        </button>
+</Modal>
+
+@if (_balances.Count == 0)
+{
+    <div class="card muted">
+        Nothing here yet. Add the bank account or wallet you use most, with the balance it has today.
+    </div>
+}
+
+<div class="card">
+    @foreach (var balance in _balances)
+    {
+        <div class="txn">
+            <div class="grow">
+                <div class="who">@balance.Name</div>
+                <div class="meta">
+                    @balance.Kind.DisplayName()
+                    @if (!balance.Kind.IsLiquid())
+                    {
+                        <span> &middot; locked</span>
+                    }
+                    @if (balance.Kind.TracksCostBasis())
+                    {
+                        <span> &middot; invested</span>
+                    }
+                </div>
+            </div>
+            <div style="text-align:right;">
+                <div class="amount @AmountCss(balance)">@Display(balance)</div>
+                <div class="meta">@Caption(balance)</div>
+            </div>
+            <button class="btn-ghost btn-icon" aria-label="Edit @balance.Name"
+                    @onclick="() => StartEdit(balance)">Edit</button>
+            <button class="btn-ghost btn-icon danger" aria-label="Delete @balance.Name"
+                    @onclick="() => ConfirmDeleteAsync(balance)">Delete</button>
+        </div>
+    }
+</div>
+
+@if (_balances.Any(b => b.IsLiability))
+{
+    <div class="card">
+        <h2 style="margin-top:0;">How a credit card works here</h2>
+        <ol class="small" style="padding-left: 18px; margin: 0;">
+            <li style="margin-bottom:6px;">
+                <strong>Spending on the card</strong> is a Debit with the card as
+                <em>Paid from</em>. It increases what you owe and touches no bank balance.
+            </li>
+            <li style="margin-bottom:6px;">
+                <strong>Paying the bill</strong> is a Self Transfer from your bank
+                <em>to</em> the card. Your bank goes down, what you owe goes down, and net
+                worth does not move: one asset down, one debt down.
+            </li>
+            <li>
+                Never enter a negative amount. Direction comes from which container you pick,
+                not from a minus sign.
+            </li>
+        </ol>
+    </div>
+}
+
+@* Deleting a container is as consequential as deleting a transaction, so it asks in the
+   same way: name the thing, say what happens, and make the destructive button the one that
+   has to be reached for. *@
+<Modal Open="_deleting is not null" Title="Delete this container?" OnCancel="() => _deleting = null">
+    @if (_deleting is { } target)
+    {
+        <p class="small">
+            <strong>@target.Name</strong> holds
+            @MoneyText.ToDisplayString(target.IsLiability ? target.AmountOwed.Abs() : target.Balance).
+        </p>
+
+        @if (_deletingUsage > 0)
+        {
+            <p class="small notice error">
+                It has @_deletingUsage @(_deletingUsage == 1 ? "transaction" : "transactions"),
+                so it cannot be deleted. Archive it instead: it disappears from the pickers and
+                your history stays correct.
+            </p>
+            <button class="btn-ghost btn-block" @onclick="() => ArchiveAsync(target)">Archive it</button>
+        }
+        else
+        {
+            <p class="small muted">
+                Nothing references it, so this removes it cleanly. Your other containers and
+                every transaction are untouched.
+            </p>
+            <div class="row">
+                <button class="btn-ghost grow" @onclick="() => _deleting = null">Keep it</button>
+                <button class="primary danger grow" @onclick="DeleteAsync">Delete</button>
+            </div>
+        }
+    }
+</Modal>
+
+@code {
+    private IReadOnlyList<ContainerBalance> _balances = [];
+    private ContainerBalance? _deleting;
+    private int _deletingUsage;
+    private bool _adding;
+    private bool _busy;
+    private Guid? _editingId;
+
+    private string _name = string.Empty;
+    private ContainerKind _kind = ContainerKind.BankAccount;
+    private string _openingText = string.Empty;
+    private string? _institution;
+    private string? _last4;
+
+    // A card holds what you owe, which is the opposite of what every other kind holds, so
+    // the question has to change with it.
+    private string OpeningLabel => _kind.IsLiability()
+        ? "How much do you owe on it right now?"
+        : _kind.TracksCostBasis() ? "How much have you put in so far?" : "How much is in it right now?";
+
+    private string OpeningHelp => _kind switch
+    {
+        ContainerKind.CreditCard =>
+            "The outstanding balance on your statement, as a positive number. Not your credit limit "
+            + "and not the credit you have left.",
+        ContainerKind.MutualFund or ContainerKind.Stocks or ContainerKind.Nps =>
+            "What you have invested. EleFi has no price feed, so this tracks what you put in rather "
+            + "than what it is worth today.",
+        _ => "What it holds right now. Every balance is derived from this plus what you record.",
+    };
+
+    private bool FormOpen => _adding || _editingId is not null;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _balances = await Service.BalancesAsync();
+
+    private void StartAdd()
+    {
+        _editingId = null;
+        _kind = ContainerKind.BankAccount;
+        Reset();
+        _adding = true;
+    }
+
+    private async Task StartEdit(ContainerBalance balance)
+    {
+        // Loaded rather than left blank. The balance row carries no bank or last four, and
+        // an edit sheet that opened empty saved those blanks over what was stored.
+        var container = (await Service.ListAsync()).FirstOrDefault(c => c.Id == balance.ContainerId);
+
+        _adding = false;
+        _editingId = balance.ContainerId;
+        _name = balance.Name;
+        _kind = balance.Kind;
+        _institution = container?.InstitutionName;
+        _last4 = container?.AccountNumberLast4;
+    }
+
+    private void CloseForm()
+    {
+        _adding = false;
+        _editingId = null;
+        Reset();
+    }
+
+    private void Reset()
+    {
+        _name = string.Empty;
+        _openingText = string.Empty;
+        _institution = null;
+        _last4 = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            if (_editingId is { } id)
+            {
+                var edited = await Service.RenameAsync(id, _name, _institution, _last4);
+                if (!edited.Succeeded)
+                {
+                    Toasts.Error(edited.Error!);
+                    return;
+                }
+
+                Toasts.Ok($"Saved {edited.Container!.Name}.");
+                _editingId = null;
+                Reset();
+                await ReloadAsync();
+                return;
+            }
+
+            if (!MoneyText.TryParse(string.IsNullOrWhiteSpace(_openingText) ? "0" : _openingText,
+                    Currency.Inr, out var opening))
+            {
+                Toasts.Error("That opening balance is not a number I can read.");
+                return;
+            }
+
+            // The user is asked for "what you owe", which is kinder than asking them to
+            // think in signs. A liability's ledger balance is negative while money is owed.
+            var minor = _kind.IsLiability() ? -System.Math.Abs(opening.Minor) : opening.Minor;
+
+            var result = await Service.CreateAsync(new CreateContainerRequest(
+                _name, _kind, Currency.Inr.Code, minor, Clock.Today,
+                InstitutionName: _institution,
+                AccountNumberLast4: _last4));
+
+            if (!result.Succeeded)
+            {
+                Toasts.Error(result.Error!);
+                return;
+            }
+
+            Toasts.Ok($"Added {result.Container!.Name}.");
+            _adding = false;
+            Reset();
+            await ReloadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ConfirmDeleteAsync(ContainerBalance balance)
+    {
+        // Counted before asking, so the dialog states what will actually happen rather than
+        // discovering it after the user has committed.
+        _deletingUsage = await Service.TransactionCountAsync(balance.ContainerId);
+        _deleting = balance;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_deleting is not { } target)
+        {
+            return;
+        }
+
+        var result = await Service.DeleteAsync(target.ContainerId);
+        _deleting = null;
+
+        if (!result.Succeeded)
+        {
+            // C4: the message explains archiving rather than just refusing.
+            Toasts.Error(result.Error!);
+            return;
+        }
+
+        Toasts.Ok($"Deleted {target.Name}.");
+        await ReloadAsync();
+    }
+
+    private async Task ArchiveAsync(ContainerBalance balance)
+    {
+        await Service.ArchiveAsync(balance.ContainerId, true);
+        _deleting = null;
+
+        Toasts.Ok($"Archived {balance.Name}. Its history is untouched.");
+        await ReloadAsync();
+    }
+
+    private static string Display(ContainerBalance balance) =>
+        MoneyText.ToDisplayString(balance.IsLiability ? balance.AmountOwed.Abs() : balance.Balance);
+
+    private static string AmountCss(ContainerBalance balance) =>
+        balance.IsLiability && !balance.IsInCredit ? "owed" : string.Empty;
+
+    private static string Caption(ContainerBalance balance)
+    {
+        if (!balance.IsLiability)
+        {
+            return balance.Kind.TracksCostBasis() ? "invested" : string.Empty;
+        }
+
+        // An overpaid card is not a debt, and calling it one moves the number the wrong way
+        // as you repay.
+        return balance.IsInCredit ? "in credit" : "owed";
+    }
+}

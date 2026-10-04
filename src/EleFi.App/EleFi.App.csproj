@@ -54,8 +54,20 @@
   </ItemGroup>
 
   <ItemGroup Label="App resources">
-    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
-    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+    <!--
+      MAUI rasterises these into every Android density at build time: mdpi 48, hdpi 72,
+      xhdpi 96, xxhdpi 144, xxxhdpi 192, plus the adaptive-icon layers and the Play
+      Store's 512. Editing the SVGs is how every size changes at once.
+
+      BaseSize scales the foreground down so Ele sits inside the adaptive-icon safe zone
+      rather than having his ears cropped by a circular launcher mask.
+    -->
+    <MauiIcon Include="Resources\AppIcon\appicon.svg"
+              ForegroundFile="Resources\AppIcon\appiconfg.svg"
+              Color="#4A3E6B"
+              BaseSize="512,512"
+              ForegroundScale="0.85" />
+    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#4A3E6B" BaseSize="192,192" />
     <MauiImage Include="Resources\Images\*" />
     <MauiFont Include="Resources\Fonts\*" />
     <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />

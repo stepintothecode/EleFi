@@ -1,6 +1,42 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true"></application>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.INTERNET" />
+  <application android:allowBackup="false"
+               android:icon="@mipmap/appicon"
+               android:roundIcon="@mipmap/appicon_round"
+               android:supportsRtl="true"
+               android:label="EleFi" />
+
+  <!--
+    allowBackup is false on purpose. Android's automatic cloud backup would copy the app's
+    data directory, including the encrypted database, to Google's servers outside the one
+    egress path this app allows (NFR-5.1). Backup happens through EleFi's own encrypted
+    Drive path or not at all.
+  -->
+
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.INTERNET" />
+
+  <!--
+    SMS-assisted capture (ADR-0010, roadmap S38). Declared, but never requested until the
+    user turns the feature on in Settings, and refusing it costs nothing but suggestions
+    (SM10). The receiver is gated by BROADCAST_SMS so only the system can deliver to it.
+
+    Notification access for Payment Apps (ADR-0014) needs no line here: it is granted by the
+    user in system settings and bound through the service's BIND_NOTIFICATION_LISTENER_SERVICE.
+
+    POST_NOTIFICATIONS is for Suggestion Prompts on Android 13 and later.
+  -->
+  <uses-permission android:name="android.permission.RECEIVE_SMS" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+  <queries>
+    <!--
+      Without this, Browser.OpenAsync with BrowserLaunchMode.External fails silently on
+      Android 11 and later, and the support link simply appears not to work (FR-12.4).
+    -->
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:scheme="https" />
+    </intent>
+  </queries>
 </manifest>

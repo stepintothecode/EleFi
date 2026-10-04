@@ -1,17 +1,42 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+@*
+    The error boundary is not decoration.
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
+    Without it, one component throwing takes down the whole Blazor circuit and the user gets
+    a red bar over a blank screen with no way back. With it, the failure is contained to the
+    page, the tabs still work, and the message says the thing that actually matters: the
+    data on the device is untouched.
+*@
 
-        <article class="content px-4">
+<main class="page">
+    <ErrorBoundary @ref="_boundary">
+        <ChildContent>
             @Body
-        </article>
-    </main>
-</div>
+        </ChildContent>
+        <ErrorContent Context="error">
+            <h1>This screen did not load</h1>
+            <div class="notice error" role="alert">
+                @error.Message
+            </div>
+            <p class="muted small">
+                Nothing was written and nothing was lost. Your ledger is on this device and is
+                unaffected by a screen failing to draw.
+            </p>
+            <button class="primary btn-block" @onclick="Recover">Try again</button>
+        </ErrorContent>
+    </ErrorBoundary>
+</main>
+
+<NavMenu />
+<ToastHost />
+
+@code {
+    private ErrorBoundary? _boundary;
+
+    // A boundary latches once it has caught something. Without this, navigating away and
+    // back shows the same error over a page that would now render perfectly well.
+    protected override void OnParametersSet() => _boundary?.Recover();
+
+    private void Recover() => _boundary?.Recover();
+}

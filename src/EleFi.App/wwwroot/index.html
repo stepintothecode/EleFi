@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
+    <!--
+        viewport-fit=cover is what makes env(safe-area-inset-*) report real numbers.
+        Android 15 forces apps edge-to-edge, so the WebView genuinely sits under the status
+        bar and the gesture pill; without the insets below, content hides behind both.
+    -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>EleFi</title>
     <base href="/" />
@@ -13,14 +18,20 @@
 
 <body>
 
-    <div class="status-bar-safe-area"></div>
-
-    <div id="app">Loading...</div>
+    <div id="app">
+        <div class="boot">
+            <div class="boot-mark" aria-hidden="true"></div>
+            <p>Opening your ledger</p>
+        </div>
+    </div>
 
     <div id="blazor-error-ui" data-nosnippet>
-        An unhandled error has occurred.
+        <div class="blazor-error-text">
+            <strong>Something went wrong.</strong>
+            Your data is safe on this device. Reloading does not lose anything.
+        </div>
         <a href="." class="reload">Reload</a>
-        <span class="dismiss">🗙</span>
+        <span class="dismiss" role="button" aria-label="Dismiss">&#10005;</span>
     </div>
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>

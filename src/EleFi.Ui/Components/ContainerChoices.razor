@@ -1,0 +1,54 @@
+@using EleFi.Domain.Containers
+
+@*
+    Containers as tappable chips, sectioned the same way as ContainerSelect.
+
+    For quick capture, where one tap should both choose and move on. The sections match the
+    full form's dropdown, so a card is found in the same place on both screens.
+*@
+
+<div class="container-choices">
+    @foreach (var group in _groups)
+    {
+        <section class="choice-group" aria-label="@group.Heading">
+            <div class="choice-heading">@group.Heading</div>
+            <div class="chips">
+                @foreach (var container in group.Containers)
+                {
+                    var on = container.Id == Selected;
+                    <button type="button"
+                            class="chip @(on ? "on" : string.Empty)"
+                            aria-pressed="@(on ? "true" : "false")"
+                            @onclick="() => OnChosen.InvokeAsync(container.Id)">@container.Name</button>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<ContainerGroup> _groups = [];
+    private IReadOnlyList<Container>? _groupedFrom;
+
+    /// <summary>The containers to choose from, in the user's preferred order.</summary>
+    [Parameter]
+    public IReadOnlyList<Container> Containers { get; set; } = [];
+
+    /// <summary>The container currently chosen.</summary>
+    [Parameter]
+    public Guid Selected { get; set; }
+
+    /// <summary>Raised when a chip is tapped.</summary>
+    [Parameter]
+    public EventCallback<Guid> OnChosen { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_groupedFrom, Containers))
+        {
+            _groupedFrom = Containers;
+            _groups = ContainerGrouping.ForPicker(Containers);
+        }
+    }
+}

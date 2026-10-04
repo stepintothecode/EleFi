@@ -1,0 +1,70 @@
+@using EleFi.Domain.Labels
+
+@*
+    Pick any number of labels, or none.
+
+    Chips rather than a dropdown, because multi-select in a native <select> on Android is a
+    modal list with no colour and no sense of how many are on. Chips show the whole set and
+    the current answer at once, which is what makes adding a second label feel free.
+
+    One row that scrolls sideways, not a wrapping block. A dozen labels wrapped into four
+    rows pushed the rest of the form off screen. Callers pass the labels most used first,
+    so the ones within reach without a swipe are the ones usually wanted.
+*@
+
+<div class="chips label-picker scroller" role="group" aria-label="Labels">
+    @foreach (var label in Labels)
+    {
+        var on = Selected.Contains(label.Id);
+        @* "true"/"false" as text, not the bool. Blazor treats a bool attribute value as a
+           boolean attribute: true renders a bare `aria-pressed` and false omits it entirely,
+           so an unselected chip would announce nothing rather than "not pressed". *@
+        <button type="button"
+                class="chip @(on ? "on" : string.Empty)"
+                style="@(on ? SelectedStyle(label) : null)"
+                aria-pressed="@(on ? "true" : "false")"
+                @onclick="() => ToggleAsync(label.Id)">
+            <span class="swatch" style="background: @(label.Colour ?? "var(--ele-accent)")"></span>
+            @label.Name
+        </button>
+    }
+
+    @if (Labels.Count == 0)
+    {
+        <span class="muted small">No labels yet. Add some in Settings.</span>
+    }
+</div>
+
+@code {
+    /// <summary>Every label that can be chosen.</summary>
+    [Parameter]
+    public IReadOnlyList<Label> Labels { get; set; } = [];
+
+    /// <summary>The labels currently on.</summary>
+    [Parameter]
+    public IReadOnlyList<Guid> Selected { get; set; } = [];
+
+    /// <summary>Raised with the new selection whenever a chip is tapped.</summary>
+    [Parameter]
+    public EventCallback<IReadOnlyList<Guid>> SelectedChanged { get; set; }
+
+    private Task ToggleAsync(Guid id)
+    {
+        var next = Selected.ToList();
+
+        if (!next.Remove(id))
+        {
+            next.Add(id);
+        }
+
+        return SelectedChanged.InvokeAsync(next);
+    }
+
+    // Tint the chip with the label's own colour, so a selected set reads as a palette rather
+    // than a row of identical highlights.
+    private static string SelectedStyle(Label label) =>
+        label.Colour is null
+            ? string.Empty
+            : $"background: color-mix(in srgb, {label.Colour} 18%, transparent); "
+            + $"border-color: {label.Colour};";
+}

@@ -1,0 +1,136 @@
+@using EleFi.Application.Typeahead
+
+@*
+    A text field with its likely answers drawn above it.
+
+    Replaces <datalist>. On Android the browser draws a datalist as its own popup over the
+    keyboard and down the whole screen, and it filtered only the twenty names it had been
+    handed. This draws the answers inside the page, above the field, where the keyboard
+    cannot cover them, and searches every name the user has ever entered.
+
+    With nothing typed it shows the few most used. Once something is typed it shows the best
+    matches from the whole history. Tapping one fills the field.
+*@
+
+<div class="typeahead">
+    @if (_shown.Count > 0 || HasQuery)
+    {
+        <div class="typeahead-panel" role="listbox" aria-label="@PanelLabel">
+            <div class="typeahead-caption">@(HasQuery ? "Matches" : "Most used")</div>
+
+            @if (_shown.Count == 0)
+            {
+                @* Said rather than left blank, so an empty panel reads as "this is new" and
+                   not as "the app has forgotten everyone". *@
+                <div class="typeahead-empty">No match. &ldquo;@Value.Trim()&rdquo; will be added as new.</div>
+            }
+            else
+            {
+                <div class="typeahead-options">
+                    @foreach (var name in _shown)
+                    {
+                        var on = string.Equals(name, Value.Trim(), StringComparison.OrdinalIgnoreCase);
+                        <button type="button"
+                                role="option"
+                                class="chip @(on ? "on" : string.Empty)"
+                                aria-selected="@(on ? "true" : "false")"
+                                @onclick="() => PickAsync(name)">@name</button>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <input id="@Id"
+           value="@Value"
+           placeholder="@Placeholder"
+           autocomplete="off"
+           autocapitalize="words"
+           enterkeyhint="@EnterKeyHint"
+           @oninput="OnInputAsync"
+           @onkeydown="OnKeyDown" />
+</div>
+
+@code {
+    private IReadOnlyList<string> _shown = [];
+    private IReadOnlyList<TypeaheadCandidate>? _rankedFrom;
+    private string? _rankedFor;
+
+    /// <summary>The input's id, so a label can point at it.</summary>
+    [Parameter]
+    public string? Id { get; set; }
+
+    /// <summary>The current text.</summary>
+    [Parameter]
+    public string Value { get; set; } = string.Empty;
+
+    /// <summary>Raised on every keystroke and on every pick.</summary>
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>Raised when an answer is tapped, after <see cref="ValueChanged"/>.</summary>
+    [Parameter]
+    public EventCallback<string> OnPicked { get; set; }
+
+    /// <summary>Raised for key presses in the field, such as Enter.</summary>
+    [Parameter]
+    public EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
+
+    /// <summary>Everything that could be offered. The whole history, not a recent slice.</summary>
+    [Parameter]
+    public IReadOnlyList<TypeaheadCandidate> Candidates { get; set; } = [];
+
+    /// <summary>How many to show before anything is typed. Zero shows nothing until typing starts.</summary>
+    [Parameter]
+    public int IdleCount { get; set; } = 3;
+
+    /// <summary>How many matches to show once something is typed.</summary>
+    [Parameter]
+    public int MatchCount { get; set; } = 5;
+
+    /// <summary>Placeholder text in the empty field.</summary>
+    [Parameter]
+    public string? Placeholder { get; set; }
+
+    /// <summary>What the keyboard's action key says.</summary>
+    [Parameter]
+    public string EnterKeyHint { get; set; } = "next";
+
+    /// <summary>The accessible name of the answer list.</summary>
+    [Parameter]
+    public string PanelLabel { get; set; } = "Suggestions";
+
+    private bool HasQuery => !string.IsNullOrWhiteSpace(Value);
+
+    /// <inheritdoc />
+    protected override void OnParametersSet() => Rerank();
+
+    // Ranked only when the text or the candidate list actually changed, so an unrelated
+    // re-render elsewhere on the form costs nothing here.
+    private void Rerank()
+    {
+        if (ReferenceEquals(_rankedFrom, Candidates) && string.Equals(_rankedFor, Value, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _rankedFrom = Candidates;
+        _rankedFor = Value;
+        _shown = TypeaheadRanker.Rank(Candidates, Value, HasQuery ? MatchCount : IdleCount);
+    }
+
+    private async Task OnInputAsync(ChangeEventArgs e)
+    {
+        Value = e.Value?.ToString() ?? string.Empty;
+        Rerank();
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task PickAsync(string name)
+    {
+        Value = name;
+        Rerank();
+        await ValueChanged.InvokeAsync(name);
+        await OnPicked.InvokeAsync(name);
+    }
+}

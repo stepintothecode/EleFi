@@ -54,6 +54,8 @@ and it converts an entire class of silent-corruption failure into a dismissed no
   have stopped sending SMS, and it avoids the restricted SMS permission. Deferred to S40
   rather than rejected: it is an even more invasive permission (it sees every notification
   on the device), it carries its own policy review, and it needs its own ADR.
+  *Update 2026-10-04:* adopted alongside SMS rather than instead of it, for an allow-list of
+  Payment Apps, in [ADR-0014](0014-payment-app-notification-ingest.md). `SM2` is unchanged.
 - **Remote-updatable Parse Rules.** New bank formats would become a data push rather than a
   release, which is genuinely better operationally. Rejected for v1.2: it opens a network
   channel that controls how the app reads the user's messages, which is a security decision

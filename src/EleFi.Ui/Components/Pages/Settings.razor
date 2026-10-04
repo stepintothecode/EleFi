@@ -1,0 +1,576 @@
+@page "/settings"
+@using System.Text
+@using System.Text.Json
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Backup
+@using EleFi.Application.Labels
+@using EleFi.Application.Suggestions
+@using EleFi.Domain.Alerts
+@using EleFi.Domain.Labels
+@using EleFi.Ui.Services
+@inject LabelService LabelsService
+@inject AlertCaptureSettings Capture
+@inject IAlertAccess Access
+@inject IDataWipe Wipe
+@inject ILocalBackup Backup
+@inject IFileShare FileShare
+@inject IFilePick FilePick
+@inject ILinkOpener Links
+@inject IClock Clock
+@inject ToastService Toasts
+@inject NavigationManager Nav
+
+@*
+    Settings, and the honest list of what is not built yet.
+
+    A backup section that says "not built" is more useful than no section at all, because it
+    tells you your data is currently on exactly one device. Until the encrypted Drive path
+    exists, the JSON export below is the answer to that.
+*@
+
+<PageTitle>Settings</PageTitle>
+
+<h1>Settings</h1>
+
+<div class="section-head">
+    <h2 style="margin:0;">Labels</h2>
+    <button class="btn-ghost" @onclick="StartCreate">Add</button>
+</div>
+
+<div class="card">
+    @if (_labels.Count == 0)
+    {
+        <p class="muted small" style="margin:0;">No labels yet.</p>
+    }
+    else
+    {
+        @foreach (var label in _labels)
+        {
+            <div class="txn">
+                <span class="swatch" style="background: @(label.Colour ?? "var(--ele-accent)")"></span>
+                <div class="grow">
+                    <div class="who">@label.Name</div>
+                </div>
+                <button class="btn-ghost btn-icon" aria-label="Rename @label.Name"
+                        @onclick="() => StartEdit(label)">Edit</button>
+                <button class="btn-ghost btn-icon danger" aria-label="Delete @label.Name"
+                        @onclick="() => ConfirmDeleteLabelAsync(label)">Delete</button>
+            </div>
+        }
+    }
+</div>
+
+<p class="muted small">
+    A transaction can carry as many labels as you like, or none at all.
+</p>
+
+<h2>Your data</h2>
+<div class="card">
+    <div class="who">Export everything</div>
+    <p class="small muted">
+        One JSON file with every container, label and transaction. Keep it somewhere safe and
+        you can put it all back.
+    </p>
+    <p class="small notice error">
+        <strong>The file is not encrypted.</strong> It is your whole financial history in
+        readable text, so where you put it matters.
+    </p>
+    <button class="btn-ghost btn-block" disabled="@_busy" @onclick="ExportAsync">Export to a file</button>
+</div>
+
+<div class="card">
+    <div class="who">Restore from a file</div>
+    <p class="small muted">
+        Replaces everything on this device with the contents of a backup. Merging is not
+        offered: it would produce a third state matching neither, which is the last thing you
+        want from a restore.
+    </p>
+    <button class="btn-ghost btn-block" disabled="@_busy" @onclick="StartRestore">Choose a backup file</button>
+</div>
+
+@* NFR-10.7: on a platform that cannot read alerts, no switch is shown at all. The paste
+   path works everywhere, so that is what remains. *@
+<div class="field-head" style="margin: 20px 0 10px;">
+    <h2 style="margin:0;">Automatic capture</h2>
+    <InfoButton Topic="Automatic capture">
+        <p>
+            EleFi reads payment alerts on this phone: bank SMS, and notifications from GPay,
+            PhonePe, Paytm, Amazon Pay and CRED. Each one becomes a payment <strong>to
+            confirm</strong>, never a transaction by itself.
+        </p>
+        <p class="muted small">
+            When the bank and the app both report the same payment, they are merged: the bank
+            says which card, the app says who you paid and your note.
+        </p>
+        <p class="muted small">
+            Nothing leaves the phone. The message text is never stored, and one-time passcodes
+            and every other app's notifications are ignored unread.
+        </p>
+        <p class="muted small">
+            If Android says a setting is restricted, open EleFi's App info, tap the menu, and
+            choose "Allow restricted settings". Android does this for apps not installed from
+            the Play Store.
+        </p>
+    </InfoButton>
+</div>
+<div class="card">
+    @if (Access.IsSupported)
+    {
+        <div class="row between">
+            <div class="grow">
+                <div class="who">Bank SMS</div>
+                <div class="meta">@SmsStatus</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" aria-label="Read bank SMS" @key="_smsRedraw" checked="@_smsOn" disabled="@_busy"
+                       @onchange="ToggleSmsAsync" />
+                <span class="track"></span>
+            </label>
+        </div>
+
+        <div class="row between" style="margin-top:14px;">
+            <div class="grow">
+                <div class="who">Payment apps</div>
+                <div class="meta">@AppsStatus</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" aria-label="Read payment app notifications" checked="@_appsOn" disabled="@_busy"
+                       @onchange="ToggleAppsAsync" />
+                <span class="track"></span>
+            </label>
+        </div>
+
+        @if (_appsOn && !Access.CanReadNotifications)
+        {
+            <button class="btn-ghost btn-block" style="margin-top:12px;" @onclick="Access.OpenNotificationAccessSettings">
+                Allow notification access
+            </button>
+        }
+    }
+
+    <a class="btn btn-ghost btn-block" style="margin-top:12px;" href="suggestions">
+        @(Access.IsSupported ? "Payments to confirm" : "Paste a bank message")
+    </a>
+</div>
+
+<h2>Google Drive backup</h2>
+<div class="card">
+    <div class="row between">
+        <div class="grow">
+            <div class="who">Encrypted backup to your own Drive</div>
+            <div class="meta">Not built yet</div>
+        </div>
+        <button class="btn-ghost" disabled>Set up</button>
+    </div>
+    <p class="small muted" style="margin-bottom:0;">
+        There is no EleFi account and never will be. It will use <em>your</em> Google account
+        and a private app folder, encrypted on this device before it leaves, so Google holds
+        something it cannot read. Until then, use the export above.
+    </p>
+</div>
+
+<h2>About</h2>
+<div class="card about-card">
+    @* The whole identity block is the way into the longer page, so the icon row below stays
+       three icons rather than four and the prose has somewhere to live. *@
+    <a class="about-hero" href="about">
+        <MascotViewer Mood="MascotMood.Happy" />
+        <div>
+            <div class="who">EleFi @Version</div>
+            <div class="meta">Free forever. No ads, no tracking, no account.</div>
+        </div>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" aria-hidden="true">
+            <path d="M9 5l7 7-7 7" />
+        </svg>
+    </a>
+
+    <div class="about-links">
+        <button type="button" class="about-link support" @onclick="() => OpenAsync(SupportUrl)"
+                aria-label="Support EleFi">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 21s-7.5-4.6-9.7-9A5.4 5.4 0 0 1 12 5.6 5.4 5.4 0 0 1 21.7 12c-2.2 4.4-9.7 9-9.7 9Z" />
+            </svg>
+            <span>Support</span>
+        </button>
+
+        <button type="button" class="about-link" @onclick="() => OpenAsync(GitHubUrl)" aria-label="GitHub">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.61-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.36 1.09 2.94.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" />
+            </svg>
+            <span>Source</span>
+        </button>
+
+        <button type="button" class="about-link youtube" @onclick="() => OpenAsync(YouTubeUrl)" aria-label="YouTube">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M23 12s0-3.4-.44-5.03a2.6 2.6 0 0 0-1.83-1.84C19.1 4.7 12 4.7 12 4.7s-7.1 0-8.73.43c-.9.24-1.6.95-1.83 1.84C1 8.6 1 12 1 12s0 3.4.44 5.03c.24.9.94 1.6 1.83 1.84 1.63.43 8.73.43 8.73.43s7.1 0 8.73-.43c.9-.24 1.6-.94 1.83-1.84C23 15.4 23 12 23 12ZM9.75 15.27V8.73L15.5 12l-5.75 3.27Z" />
+            </svg>
+            <span>YouTube</span>
+        </button>
+    </div>
+
+    <p class="small muted" style="margin-bottom:0;">
+        A tip buys nothing: no features, no priority, no say over the app. MIT licensed, so
+        you can read the code and check every claim on this page.
+    </p>
+</div>
+
+<h2>Danger</h2>
+<div class="card">
+    <div class="who">Wipe all data</div>
+    <p class="small muted">
+        Deletes every container, transaction and label on this device. Export first if you
+        want any of it back.
+    </p>
+    <button class="btn-ghost btn-block danger" @onclick="() => _wipeArmed = true">Wipe all data</button>
+</div>
+
+@* Labels, in a sheet. Appending a form below a long list meant scrolling past everything to
+   find it, and nothing about it said a new thing had appeared. *@
+<Modal Open="_editing is not null" Title="@(_editingId is null ? "New label" : "Rename label")"
+       OnCancel="CancelEdit">
+    <div class="field">
+        <label for="label-name">Name</label>
+        <input id="label-name" @bind="_editing" placeholder="Groceries" autocomplete="off" />
+    </div>
+
+    <div class="field">
+        <label>Colour</label>
+        <div class="chips">
+            @foreach (var colour in Palette)
+            {
+                <button type="button"
+                        class="swatch-btn @(_colour == colour ? "on" : string.Empty)"
+                        style="background: @colour"
+                        aria-label="@colour"
+                        @onclick="() => _colour = colour"></button>
+            }
+        </div>
+    </div>
+
+    <button class="primary btn-block" @onclick="SaveLabelAsync">Save</button>
+</Modal>
+
+<Modal Open="_deletingLabel is not null" Title="Delete this label?" OnCancel="() => _deletingLabel = null">
+    @if (_deletingLabel is { } label)
+    {
+        <p class="small">
+            <strong>@label.Name</strong> is on @_deletingUsage
+            @(_deletingUsage == 1 ? "transaction" : "transactions").
+        </p>
+        <p class="small muted">
+            Those transactions stay exactly as they are and their amounts do not change. They
+            simply stop carrying this label.
+        </p>
+        <div class="row">
+            <button class="btn-ghost grow" @onclick="() => _deletingLabel = null">Keep it</button>
+            <button class="primary danger grow" @onclick="DeleteLabelAsync">Delete</button>
+        </div>
+    }
+</Modal>
+
+<Modal Open="_wipeArmed" Title="Wipe everything?" OnCancel="CancelWipe">
+    <p class="small">
+        This deletes every container, transaction and label on this device. There is no cloud
+        copy, so unless you exported a file first, it is gone.
+    </p>
+    <div class="field">
+        <label for="wipe">Type <strong>WIPE</strong> to confirm</label>
+        <input id="wipe" @bind="_wipeConfirm" @bind:event="oninput" autocomplete="off" placeholder="WIPE" />
+    </div>
+    <div class="row">
+        <button class="btn-ghost grow" @onclick="CancelWipe">Cancel</button>
+        <button class="primary danger grow"
+                disabled="@(!string.Equals(_wipeConfirm, "WIPE", StringComparison.Ordinal))"
+                @onclick="WipeAsync">Wipe everything</button>
+    </div>
+</Modal>
+
+<Modal Open="_pendingRestore is not null" Title="Restore this backup?" OnCancel="() => _pendingRestore = null">
+    @if (_pendingRestore is { } file)
+    {
+        <p class="small">
+            Written @file.ExportedAt.ToLocalTime().ToString("d MMM yyyy, HH:mm").
+            It holds @file.Transactions.Count transactions, @file.Containers.Count containers
+            and @file.Labels.Count labels.
+        </p>
+        <p class="small notice error">
+            Everything currently on this device will be replaced.
+        </p>
+        <div class="row">
+            <button class="btn-ghost grow" @onclick="() => _pendingRestore = null">Cancel</button>
+            <button class="primary danger grow" @onclick="RestoreAsync">Replace everything</button>
+        </div>
+    }
+</Modal>
+
+@code {
+    private const string Version = "0.3.0";
+    private const string SupportUrl = "https://stepintothecode.github.io/support/?from=elefi-app";
+    private const string GitHubUrl = "https://github.com/menonkartikeya/EleFi";
+    private const string YouTubeUrl = "https://www.youtube.com/@StepIntoTheCode";
+
+    private static readonly string[] Palette =
+        ["#f97316", "#0ea5e9", "#a855f7", "#ef4444", "#f43f5e", "#10b981", "#22c55e", "#6366f1", "#94a3b8"];
+
+    private IReadOnlyList<Label> _labels = [];
+
+    private string? _editing;
+    private Guid? _editingId;
+    private string? _colour;
+
+    private Label? _deletingLabel;
+    private int _deletingUsage;
+
+    private bool _wipeArmed;
+    private string _wipeConfirm = string.Empty;
+
+    private BackupFile? _pendingRestore;
+    private bool _busy;
+
+    private bool _smsOn;
+    private int _smsRedraw;
+    private bool _appsOn;
+
+    // The switch says what the user asked for; the line under it says whether Android is
+    // actually letting it happen. Showing only one of the two is how a dead feature looks alive.
+    private string SmsStatus => !_smsOn
+        ? "Off. No messages are read."
+        : Access.CanReadSms ? "On. Bank messages become payments to confirm." : "On, but the SMS permission is missing.";
+
+    private string AppsStatus => !_appsOn
+        ? $"Off. {string.Join(", ", PaymentApps.All.Select(a => a.Name))}."
+        : Access.CanReadNotifications
+            ? "On. Fills in who you paid, and your note."
+            : "On, but notification access is not allowed yet.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _smsOn = Capture.SmsEnabled;
+        _appsOn = Capture.PaymentAppsEnabled;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync() => _labels = await LabelsService.ListAsync();
+
+    private async Task ToggleSmsAsync(ChangeEventArgs e)
+    {
+        var on = e.Value is true;
+        _busy = true;
+
+        try
+        {
+            // Asked for only now, when the user has said they want the feature (SM10).
+            if (on && !Access.CanReadSms && !await Access.RequestSmsAsync())
+            {
+                _smsOn = false;
+
+                // A new key redraws the box. Otherwise Blazor sees checked=false both before
+                // and after, changes nothing, and the box the user ticked stays ticked.
+                _smsRedraw++;
+                Toasts.Error("Android did not allow EleFi to read SMS. If it says the setting is restricted, see the i above.");
+                return;
+            }
+
+            _smsOn = on;
+            Capture.SmsEnabled = on;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ToggleAppsAsync(ChangeEventArgs e)
+    {
+        var on = e.Value is true;
+        _appsOn = on;
+        Capture.PaymentAppsEnabled = on;
+
+        if (!on)
+        {
+            return;
+        }
+
+        await Access.RequestPromptsAsync();
+
+        // Notification access has no runtime prompt. Android only grants it from its own
+        // settings screen, so that is opened rather than explained.
+        if (!Access.CanReadNotifications)
+        {
+            Toasts.Info("Turn on EleFi in the list that opens, then come back.");
+            Access.OpenNotificationAccessSettings();
+        }
+    }
+
+    private void StartCreate()
+    {
+        _editing = string.Empty;
+        _editingId = null;
+        _colour = Palette[0];
+    }
+
+    private void StartEdit(Label label)
+    {
+        _editing = label.Name;
+        _editingId = label.Id;
+        _colour = label.Colour ?? Palette[0];
+    }
+
+    private void CancelEdit()
+    {
+        _editing = null;
+        _editingId = null;
+    }
+
+    private async Task SaveLabelAsync()
+    {
+        var name = _editing ?? string.Empty;
+
+        var result = _editingId is { } id
+            ? await LabelsService.UpdateAsync(id, name, _colour)
+            : await LabelsService.CreateAsync(name, _colour);
+
+        if (!result.Succeeded)
+        {
+            Toasts.Error(result.Error!);
+            return;
+        }
+
+        Toasts.Ok(_editingId is null ? $"Added {result.Label!.Name}." : $"Renamed to {result.Label!.Name}.");
+        CancelEdit();
+        await ReloadAsync();
+    }
+
+    private async Task ConfirmDeleteLabelAsync(Label label)
+    {
+        // Count first, so the confirmation can say what it will actually affect rather than
+        // asking the user to guess.
+        _deletingUsage = await LabelsService.UsageAsync(label.Id);
+        _deletingLabel = label;
+    }
+
+    private async Task DeleteLabelAsync()
+    {
+        if (_deletingLabel is not { } label)
+        {
+            return;
+        }
+
+        var result = await LabelsService.DeleteAsync(label.Id);
+        _deletingLabel = null;
+
+        if (!result.Succeeded)
+        {
+            Toasts.Error(result.Error!);
+            return;
+        }
+
+        Toasts.Ok($"Deleted {label.Name}.");
+        await ReloadAsync();
+    }
+
+    private void CancelWipe()
+    {
+        _wipeArmed = false;
+        _wipeConfirm = string.Empty;
+    }
+
+    private async Task WipeAsync()
+    {
+        await Wipe.WipeEverythingAsync();
+
+        CancelWipe();
+        Toasts.Ok("Everything is gone. Starting fresh.");
+        Nav.NavigateTo("/", forceLoad: false);
+    }
+
+    private async Task ExportAsync()
+    {
+        _busy = true;
+        try
+        {
+            var file = await Backup.ExportAsync();
+
+            // Indented, because the point of choosing JSON was that a person can open it and
+            // see their own data rather than trusting the app about it.
+            var json = JsonSerializer.Serialize(file, new JsonSerializerOptions { WriteIndented = true });
+            var name = $"elefi-backup-{Clock.Today:yyyy-MM-dd}.json";
+
+            await FileShare.ShareAsync(name, Encoding.UTF8.GetBytes(json), "Save your EleFi backup");
+            Toasts.Ok($"{file.Transactions.Count} transactions written to {name}.");
+        }
+        catch (Exception ex)
+        {
+            Toasts.Error($"The export did not finish: {ex.Message}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task StartRestore()
+    {
+        _busy = true;
+        try
+        {
+            var json = await FilePick.PickTextFileAsync();
+            if (json is null)
+            {
+                return;
+            }
+
+            var file = JsonSerializer.Deserialize<BackupFile>(json);
+            if (file is null || file.SchemaVersion == 0)
+            {
+                Toasts.Error("That does not look like an EleFi backup.");
+                return;
+            }
+
+            // Confirmed against what is actually in the file, so the user is agreeing to
+            // something specific rather than to the word "restore".
+            _pendingRestore = file;
+        }
+        catch (JsonException)
+        {
+            Toasts.Error("That file is not valid JSON, so it cannot be an EleFi backup.");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RestoreAsync()
+    {
+        if (_pendingRestore is not { } file)
+        {
+            return;
+        }
+
+        _pendingRestore = null;
+        _busy = true;
+
+        try
+        {
+            var count = await Backup.RestoreAsync(file);
+
+            Toasts.Ok($"Restored {count} transactions.");
+            await ReloadAsync();
+            Nav.NavigateTo("/", forceLoad: false);
+        }
+        catch (Exception ex)
+        {
+            Toasts.Error($"The restore stopped: {ex.Message}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // Never an <a href>: under Blazor Hybrid that navigates this WebView and strands the
+    // user inside the app with no browser chrome and no way back.
+    private Task OpenAsync(string url) => Links.OpenAsync(url);
+}

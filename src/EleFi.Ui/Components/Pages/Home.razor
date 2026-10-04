@@ -1,5 +1,185 @@
-﻿@page "/"
+@page "/"
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Containers
+@using EleFi.Domain.Balances
+@using EleFi.Domain.Containers
+@using EleFi.Domain.Money
+@inject ContainerService Containers
+@inject ITransactionRepository Transactions
+@inject ISuggestionRepository Suggestions
+@inject IClock Clock
 
-<h1>Hello, world!</h1>
+@*
+    The dashboard answers one question in three seconds: what do I actually have?
 
-Welcome to your new app.
+    Net worth is never shown alone. Liquid, Locked, and Owed sit beside it because the
+    total on its own hides the situation that matters - most of the wealth untouchable,
+    or a card bill about to land.
+*@
+
+<PageTitle>EleFi</PageTitle>
+
+<div class="row between">
+    <div>
+        <div class="muted small">Net worth</div>
+        @if (_loading)
+        {
+            <div class="skeleton" style="width: 180px; height: 34px; margin: 6px 0;"></div>
+        }
+        else
+        {
+            <div class="headline">@Format(_netWorth.Total)</div>
+        }
+    </div>
+    <MascotViewer Mood="@_mood" />
+</div>
+
+@* Payments spotted but not confirmed. Shown above the figures because every one of them is
+   money those figures do not yet include (SM2). *@
+@if (_toConfirm > 0)
+{
+    <a class="inbox-banner enter" href="suggestions">
+        <span class="count">@_toConfirm</span>
+        <span>
+            <strong>@(_toConfirm == 1 ? "1 payment" : $"{_toConfirm} payments") to confirm</strong>
+            <span class="meta" style="display:block;">Spotted in your SMS and payment apps. Not counted yet.</span>
+        </span>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
+    </a>
+}
+
+@*
+    Guarded on _loading like everything else. These tiles used to render on the very first
+    pass, before OnInitializedAsync had run, formatting a default(NetWorth) whose currency
+    was unset. That threw and took the whole app down with "An unhandled error has
+    occurred". Money is now safe to format in that state, and the tiles wait anyway: a
+    skeleton is honest, a flash of zero is not.
+*@
+<div class="tiles enter">
+    <div class="tile">
+        <div class="label">Liquid</div>
+        <div class="value">@(_loading ? "..." : Format(_netWorth.Liquid))</div>
+    </div>
+    <div class="tile">
+        <div class="label">Locked</div>
+        <div class="value">@(_loading ? "..." : Format(_netWorth.Locked))</div>
+    </div>
+    <div class="tile">
+        <div class="label">Owed</div>
+        <div class="value @(!_loading && _netWorth.Owed.Minor > 0 ? "owed amount" : string.Empty)">
+            @(_loading ? "..." : Format(_netWorth.Owed))
+        </div>
+    </div>
+</div>
+
+<h2>This month</h2>
+@if (_loading)
+{
+    <div class="card"><div class="skeleton" style="width: 60%;"></div></div>
+}
+else if (_spend.ByLabel.Count == 0)
+{
+    <div class="card muted">
+        Nothing recorded this month yet.
+        <a class="btn btn-ghost" href="capture" style="margin-top: 10px;">Record something</a>
+    </div>
+}
+else
+{
+    <div class="card">
+        @* The total comes from the breakdown's own TotalMinor, counted once per
+           transaction. Summing the rows below would be larger, because a transaction with
+           two labels appears in full under both. *@
+        <div class="row between" style="margin-bottom: 10px;">
+            <span class="muted small">Spent</span>
+            <span class="amount out">@Format(Money.SignedMinor(_spend.TotalMinor, _home))</span>
+        </div>
+
+        @foreach (var row in _spend.ByLabel)
+        {
+            @* Bars are scaled against the largest label, not against the total. A share of
+               the total would be a lie: the parts overlap and can exceed the whole. *@
+            var share = _largestLabel == 0 ? 0 : (int)(row.AmountMinor * 100 / _largestLabel);
+            <div style="margin-bottom: 10px;">
+                <div class="row between small">
+                    <span>@row.LabelName</span>
+                    <span class="amount">@Format(Money.SignedMinor(row.AmountMinor, _home))</span>
+                </div>
+                <div class="bar" style="width: @(share)%; background: @(row.Colour ?? "var(--ele-accent)");"></div>
+            </div>
+        }
+
+        @* Only when the bars genuinely exceed the total. Two labels on two different
+           transactions do not overlap, and explaining a discrepancy that is not on screen
+           teaches the reader to distrust a total that was right all along. *@
+        @if (_labelsOverlap)
+        {
+            <p class="muted small" style="margin: 12px 0 0;">
+                A transaction with several labels is counted under each, so these add up to
+                more than the total above.
+            </p>
+        }
+    </div>
+}
+
+<h2>Containers</h2>
+@if (_balances.Count == 0 && !_loading)
+{
+    <div class="card muted">
+        No containers yet. Add the bank account or wallet you use most and give it the balance it has today.
+        <a class="btn btn-primary btn-block" href="containers" style="margin-top: 12px;">Add a container</a>
+    </div>
+}
+else
+{
+    <div class="card">
+        @foreach (var balance in _balances)
+        {
+            <div class="txn">
+                <div class="grow">
+                    <div class="who">@balance.Name</div>
+                    <div class="meta">@balance.Kind.DisplayName()@(balance.IsLiability ? " - owed" : string.Empty)</div>
+                </div>
+                <div class="amount @(balance.IsLiability ? "owed" : string.Empty)">
+                    @Format(balance.IsLiability ? balance.AmountOwed : balance.Balance)
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private NetWorth _netWorth;
+    private IReadOnlyList<ContainerBalance> _balances = [];
+    private SpendBreakdown _spend;
+    private long _largestLabel;
+    private bool _labelsOverlap;
+    private Currency _home = Currency.Inr;
+    private MascotMood _mood = MascotMood.Idle;
+    private int _toConfirm;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _toConfirm = await Suggestions.CountPendingAsync();
+
+        _balances = await Containers.BalancesAsync();
+        _netWorth = await Containers.NetWorthAsync(_home);
+
+        var today = Clock.Today;
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        _spend = await Transactions.SpendByLabelAsync(monthStart, today);
+        _largestLabel = _spend.ByLabel.Count == 0 ? 0 : _spend.ByLabel.Max(s => s.AmountMinor);
+
+        // Computed once, not per bar. The buckets exceed the total exactly when some
+        // transaction carries more than one label, which is the only case worth a note.
+        _labelsOverlap = _spend.ByLabel.Sum(s => s.AmountMinor) > _spend.TotalMinor;
+
+        // The mascot reacts, but nothing waits on it (NFR-2.7).
+        _mood = _netWorth.Owed.Minor > _netWorth.Liquid.Minor ? MascotMood.Concerned : MascotMood.Idle;
+
+        _loading = false;
+    }
+
+    private string Format(Money amount) => MoneyText.ToDisplayString(amount);
+}

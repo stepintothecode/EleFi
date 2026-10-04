@@ -1,0 +1,71 @@
+@using EleFi.Application.Abstractions
+@implements IAsyncDisposable
+@inject IMascotService Mascot
+
+@*
+    The elephant.
+
+    This component owns a canvas and nothing else. It never touches IJSRuntime: every call
+    goes through IMascotService, so swapping the Rive runtime for Lottie is one class rather
+    than a search through components (ADR-0011).
+
+    Nothing here is on the critical path of an interaction (NFR-2.7). Every call is
+    fire-and-forget and every failure is swallowed: a mascot that blocks a save, or throws
+    during a save, is a bug rather than a delight.
+*@
+
+<canvas id="@_canvasId" class="mascot" width="176" height="176"
+        role="img" aria-label="@AriaLabel"></canvas>
+
+@code {
+    private readonly string _canvasId = $"ele-mascot-{Guid.NewGuid():N}";
+    private MascotMood _applied = MascotMood.Idle;
+
+    /// <summary>The mood to show.</summary>
+    [Parameter]
+    public MascotMood Mood { get; set; } = MascotMood.Idle;
+
+    private string AriaLabel => Mood switch
+    {
+        MascotMood.Happy => "Mascot, pleased",
+        MascotMood.Concerned => "Mascot, concerned",
+        MascotMood.Thinking => "Mascot, working",
+        MascotMood.Sad => "Mascot, sorry",
+        _ => "Mascot, resting",
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (firstRender)
+            {
+                await Mascot.InitialiseAsync(_canvasId);
+            }
+
+            if (_applied != Mood)
+            {
+                _applied = Mood;
+                await Mascot.SetMoodAsync(Mood);
+            }
+        }
+        catch (Exception)
+        {
+            // Decoration is never allowed to break a screen that shows money.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // A BlazorWebView leaks DotNetObjectReference and module handles readily, so this
+        // is not optional bookkeeping.
+        try
+        {
+            await Mascot.DisposeAsync();
+        }
+        catch (Exception)
+        {
+            // Nothing useful to do while tearing down.
+        }
+    }
+}

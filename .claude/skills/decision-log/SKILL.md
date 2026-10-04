@@ -7,7 +7,7 @@ argument-hint: "Optional: topic name or path to an existing log to update"
 # Decision Log
 
 Write the session's **prompts and decisions** to a markdown file in the repo. Chat history
-is not a record — this file is.
+is not a record - this file is.
 
 ## When to write one
 
@@ -40,7 +40,7 @@ Never put it in a temp directory. The whole point is that it lives in the repo.
   usually the most valuable thing in the file.
 - **Don't duplicate other documents.** If an ADR, spec, or requirements doc already
   explains a decision, link to it rather than restating it.
-- **Redact secrets** — API keys, tokens, passwords, personal identifiers.
+- **Redact secrets** - API keys, tokens, passwords, personal identifiers.
 - **Stay minimal.** A table beats prose. Long verbatim quotes go in their own section so
   the table stays scannable.
 - Convert relative dates ("next month") to absolute ones.
@@ -50,7 +50,7 @@ Never put it in a temp directory. The whole point is that it lives in the repo.
 Adapt as the session warrants; skip sections that would be empty.
 
 ```md
-# <Project/topic> — brief and decision log
+# <Project/topic> - brief and decision log
 
 <Session date and how it started, e.g. "/grilling session, 2026-08-01">
 <Links to the documents this session produced>
@@ -84,5 +84,5 @@ Omit if nothing reversed.>
 
 ## After writing
 
-Tell the user the path and what's in each section. Offer to commit it — this file is only
+Tell the user the path and what's in each section. Offer to commit it - this file is only
 useful if it's in version control.

@@ -37,6 +37,12 @@ that this model exists to replace.
 **Say Capture Suggestion, not draft.** A parsed SMS is a suggestion, and it is not a
 transaction until a human confirms it. There are no drafts in this app.
 
+**Say Label, never tag or category.** There is one concept, and it behaves like a tag: flat,
+optional, many per transaction. A Tag entity existed and was removed in `ADR-0013`.
+
+**Say unlabelled, not Uncategorised.** It is the absence of labels, not a label. There is no
+row for it.
+
 ## Non-negotiables
 
 These are invariants, not preferences. Breaking one is a bug even if tests pass.
@@ -54,8 +60,12 @@ These are invariants, not preferences. Breaking one is a bug even if tests pass.
   is a `ref struct` and cannot escape the receiver.
 - **The export is the filtered list, serialised** (`X1`). Same rows, same order, no separate
   export configuration.
-- The only egress path for user data is the **encrypted Drive backup**. A new one requires
-  an ADR, not a PR comment.
+- The only **automatic** egress path for user data is the encrypted Drive backup. A new one
+  requires an ADR, not a PR comment. The CSV export and the local JSON backup are files the
+  user asked for, handed to the share sheet, with the UI saying they are unencrypted.
+- **Labels are flat, optional, and many per transaction** (`ADR-0013`). There is no
+  hierarchy, no Tag entity, and no `Uncategorised`. Unlabelled is a state. The spend
+  breakdown's total is counted once per transaction and is **never** the sum of the buckets.
 - Only `drive.appdata` scope. Broader Drive scopes are restricted and forbidden.
 - Only the **last 4 digits** of an account number are ever stored.
 

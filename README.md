@@ -20,15 +20,22 @@ nothing to keep running.
   message.
 - **Exports what you are looking at.** Filter the transaction list however you like, tap
   Export, and the CSV contains exactly those rows. No filters means everything.
+- **Labels like tags.** Attach as many as fit, or none. The breakdown reports its total
+  separately from the per-label figures, because a transaction with two labels counts under
+  both and the app says so rather than quietly disagreeing with itself.
 - **Remembers what changed.** Every edit, delete and restore is in a per-transaction
   timeline, and deletes are undoable.
+- **Backs up to a file you keep.** One JSON export of everything, and a restore that puts it
+  back. Plaintext, so the app tells you that before you save it.
 - **Tracks savings goals** against real container balances or attributed contributions.
 
 ## Status
 
-Early. The requirements, domain model, and architecture decisions are written, and the
-solution skeleton builds and tests green. No feature is implemented yet. See
-[docs/roadmap.md](docs/roadmap.md) for the slice plan.
+Usable, and not finished. Containers, capture, the filtered list, CSV export, editing with
+an audit trail, labels, and local JSON backup all work on a real phone. Not built yet:
+Google Drive backup, savings goals, currency conversion, biometric lock, and the Android SMS
+receiver (pasting a bank message works today). See [docs/roadmap.md](docs/roadmap.md) for
+the slice plan.
 
 ## Built with
 

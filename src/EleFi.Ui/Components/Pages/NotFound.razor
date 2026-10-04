@@ -1,5 +1,17 @@
-﻿@page "/not-found"
-@layout MainLayout
+@page "/not-found"
 
-<h3>Not Found</h3>
-<p>Sorry, the content you are looking for does not exist.</p>
+@*
+    The @page directive above is load-bearing, and not for the reason it looks.
+
+    Routes.razor names this component as the router's NotFoundPage, and .NET 10's Router
+    validates that eagerly in SetParametersAsync: a type with no RouteAttribute throws
+    before the router renders anything at all. Without it the app does not fail to show a
+    404, it fails to start, and the symptom is a boot spinner that never resolves.
+
+    RoutesTests covers this.
+*@
+
+<PageTitle>Not found</PageTitle>
+
+<h1>Nothing here</h1>
+<p class="muted">That screen does not exist. Everything EleFi can do is on the tabs below.</p>

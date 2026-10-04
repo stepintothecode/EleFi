@@ -1,0 +1,52 @@
+@using EleFi.Ui.Services
+@implements IDisposable
+@inject ToastService Toasts
+
+@*
+    Renders whatever ToastService is currently holding, above the tab bar.
+
+    Sits in MainLayout so every page gets it without asking, and so a message survives the
+    page that raised it navigating away.
+*@
+
+@if (Toasts.Current.Count > 0)
+{
+    <div class="toast-host" aria-live="polite" aria-atomic="false">
+        @foreach (var toast in Toasts.Current)
+        {
+            <div class="toast @CssFor(toast.Kind)" role="@RoleFor(toast.Kind)">
+                <span class="glyph" aria-hidden="true">@GlyphFor(toast.Kind)</span>
+                <span class="body">@toast.Message</span>
+                <button class="close" aria-label="Dismiss" @onclick="() => Toasts.Dismiss(toast.Id)">&#10005;</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    protected override void OnInitialized() => Toasts.Changed += OnChanged;
+
+    public void Dispose() => Toasts.Changed -= OnChanged;
+
+    // The dismissal timer fires on a thread-pool thread, so the re-render has to be
+    // marshalled back. Without InvokeAsync this throws the moment a toast expires.
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    private static string CssFor(ToastKind kind) => kind switch
+    {
+        ToastKind.Ok => "ok",
+        ToastKind.Error => "error",
+        _ => "info",
+    };
+
+    // An error interrupts a screen reader; a confirmation waits its turn. Getting this the
+    // other way round makes the app shout about things that went right.
+    private static string RoleFor(ToastKind kind) => kind == ToastKind.Error ? "alert" : "status";
+
+    private static string GlyphFor(ToastKind kind) => kind switch
+    {
+        ToastKind.Ok => "\U0001F418",
+        ToastKind.Error => "⚠",
+        _ => "ℹ",
+    };
+}

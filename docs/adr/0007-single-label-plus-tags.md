@@ -1,8 +1,15 @@
 ---
-status: accepted
+status: superseded
+superseded-by: 0013
 ---
 
 # Exactly one Label per transaction, plus unlimited Tags
+
+> **Superseded by [0013](0013-multiple-flat-labels.md).** A transaction now carries any
+> number of flat labels and there is no Tag entity. The double-counting this ADR set out to
+> avoid is real, and 0013 handles it by computing the total separately from the buckets
+> rather than by forbidding overlap. Kept in full and unedited: the reasoning below is why
+> the reversal had to solve the arithmetic problem instead of ignoring it.
 
 A transaction carries exactly one Label (from a two-level hierarchy) and any number of
 Tags. All money arithmetic uses the Label; **no total is ever computed from a Tag**. We

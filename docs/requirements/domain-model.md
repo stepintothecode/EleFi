@@ -206,8 +206,8 @@ Transaction
   destination_currency      TEXT NOT NULL
 
   occurred_on               TEXT NOT NULL     YYYY-MM-DD
+  occurred_at_time          TEXT              HH:mm, optional
   description               TEXT
-  label_id                  TEXT   FK -> Label.id
   marketplace_app_id        TEXT   FK -> App.id
   payment_app_id            TEXT   FK -> App.id
   goal_id                   TEXT   FK -> Goal.id
@@ -218,6 +218,8 @@ Transaction
 
   created_at, updated_at, deleted_at
 ```
+
+Labels hang off a transaction through `TransactionLabel`, not through a column. See §6.
 
 ### Derived: Transaction Kind
 
@@ -244,9 +246,11 @@ merely discouraged - it is **unrepresentable**. That is the whole point of ADR-0
 - `T4` - `source_currency = destination_currency` ⟹ `source_amount_minor =
   destination_amount_minor`. Enforced by a CHECK constraint, so a same-currency
   transaction cannot lose or invent money.
-- `T5` - `label_id` is required when kind is Debit or Credit; optional when Self Transfer.
-- `T6` - `label.applies_to` must admit the transaction's kind (an Income label cannot be
-  used on a Debit).
+- `T5` - Labels are optional on every kind, and there may be any number of them. Requiring
+  one would mean inventing an *Uncategorised* row and attaching it to things the user never
+  categorised, which is a worse lie than an empty list (ADR-0013).
+- `T6` - A Self Transfer carries no labels. It is excluded from every spend and income
+  aggregate anyway, so a label on one could only ever mislead.
 - `T7` - `occurred_on` may be in the past freely. Future dates are rejected in v1 -
   future-dated transactions are a scheduling feature, and letting them into balances
   silently would make today's net worth wrong.
@@ -260,7 +264,7 @@ merely discouraged - it is **unrepresentable**. That is the whole point of ADR-0
 `Import` · `Restore`
 
 `Sms` means the transaction was created by the user confirming a Capture Suggestion
-(§12). It never means the app created it by itself - see `SM2`.
+(§11). It never means the app created it by itself - see `SM2`.
 
 Recorded so the audit trail can say *"created via widget"*, and so it is possible to ask
 "are widget-captured transactions more often wrong?" - the question that tells you
@@ -281,49 +285,44 @@ That split touches every query, which is precisely why it is not in v1.
 ## 6. Label
 
 ```
-Label
-  id           TEXT PK
-  user_id      TEXT NOT NULL
-  name         TEXT NOT NULL
-  parent_id    TEXT NULL  FK -> Label.id
-  applies_to   TEXT NOT NULL    'Expense' | 'Income' | 'Both'
+Label                        TransactionLabel
+  id           TEXT PK         transaction_id  FK
+  user_id      TEXT NOT NULL   label_id        FK
+  name         TEXT NOT NULL   PRIMARY KEY (transaction_id, label_id)
   icon, colour TEXT
   sort_order   INTEGER
   created_at, updated_at, deleted_at
 ```
 
-- `L1` - Maximum depth 2. A label with a `parent_id` may not itself be a parent.
-  Deeper hierarchies are a navigation cost users pay on every single capture, for
-  structure they use once a year.
-- `L2` - Name unique per user per parent.
-- `L3` - A parent label selected in a filter or report **includes its children**.
-- `L4` - Deleting a label in use reassigns its transactions to a designated replacement,
-  or to the seeded `Uncategorised`. A transaction is never orphaned.
-- `L5` - `Uncategorised` is seeded, `applies_to='Both'`, and cannot be deleted. Quick
-  Capture depends on it existing.
+One flat list. No parent, no side, no system-owned rows. A transaction carries **zero or
+more** labels, the way an issue carries tags. See
+[ADR-0013](../adr/0013-multiple-flat-labels.md), which reverses ADR-0007.
 
-**Exactly one label per transaction** is what makes spend-by-label reconcile exactly to
-total spend. See [ADR-0007](../adr/0007-single-label-plus-tags.md).
+- `L1` - Flat. There is no `parent_id`, so no capture screen asks the user a question about
+  structure they have not decided on yet.
+- `L2` - Name unique per user, case-insensitive and trimmed, over live rows only. With no
+  parent to disambiguate them, two labels called *Travel* are indistinguishable in every
+  picker, chip, and export row.
+- `L3` - A transaction may carry any number of labels, including none. **Unlabelled is a
+  state, not a label**: there is no seeded `Uncategorised` row to delete by accident, and
+  Quick Capture invents nothing.
+- `L4` - Deleting a label detaches it from its transactions, which become unlabelled. No
+  replacement is asked for, and nothing is orphaned.
+- `L5` - Selecting several labels in a filter means **any of them**, not all.
+- `L6` - Self Transfers carry no label, which keeps transfers out of every spending chart.
+- `L7` - Attaching or removing a label is an edit to the **transaction**, and appears in its
+  audit timeline by label name rather than by id, so the entry still reads correctly after
+  that label is renamed or deleted.
 
----
-
-## 7. Tag
-
-```
-Tag                  TransactionTag
-  id        TEXT PK    transaction_id  FK
-  user_id   TEXT       tag_id          FK
-  name      TEXT       PRIMARY KEY (transaction_id, tag_id)
-  colour    TEXT
-```
-
-- `G1` - Name unique per user, case-insensitive, trimmed.
-- `G2` - **No total is ever computed by tag.** Tags filter and group; they never sum.
-  This is the rule that lets a transaction carry many tags without breaking arithmetic.
+**Overlap is expected, and is handled rather than forbidden.** A 2,000 shop labelled both
+*Food* and *Household* counts 2,000 under each, so the per-label figures sum to more than
+real spend. The breakdown therefore reports its total separately, computed once per
+transaction rather than by summing the buckets, and the chart says so on screen. See
+`spend_by_label` in section 13.
 
 ---
 
-## 8. App
+## 7. App
 
 ```
 App
@@ -347,7 +346,7 @@ App
 
 ---
 
-## 9. Goal
+## 8. Goal
 
 ```
 Goal
@@ -409,7 +408,7 @@ required_monthly = (target_amount - progress) / months_remaining
 
 ---
 
-## 10. FxRate
+## 9. FxRate
 
 ```
 FxRate
@@ -442,7 +441,7 @@ FxRate
 
 ---
 
-## 11. AuditEvent
+## 10. AuditEvent
 
 ```
 AuditEvent
@@ -474,7 +473,7 @@ complete. See [ADR-0008](../adr/0008-audit-via-sqlite-triggers.md).
 
 ---
 
-## 12. CaptureSuggestion and ParseRule
+## 11. CaptureSuggestion and ParseRule
 
 The SMS-assisted capture path. Vocabulary in
 [CONTEXT.md](../CONTEXT.md#alerts-and-suggestions); the decision and its risks in
@@ -491,8 +490,11 @@ Ships as bundled data, editable by the user. Not code.
 ParseRule
   id                     TEXT PK
   user_id                TEXT NOT NULL
-  name                   TEXT NOT NULL        "HDFC card debit"
+  name                   TEXT NOT NULL        "HDFC card debit"  (unique among builtins)
+  channel                INTEGER NOT NULL     0 = Sms, 1 = PaymentApp  (ADR-0014)
+  app_name               TEXT NULL            "GPay"  -- PaymentApp rules only
   sender_pattern         TEXT NOT NULL        '^[A-Z]{2}-HDFCBK$'  (regex, anchored)
+                                              or an app's package, for PaymentApp rules
   body_pattern           TEXT NOT NULL        regex with named groups
   direction              TEXT NOT NULL        'Debit' | 'Credit'
   is_enabled             INTEGER NOT NULL DEFAULT 1
@@ -510,9 +512,14 @@ ParseRule
 | `last4` | Last four digits of the account or card | no |
 | `counterparty` | Merchant or payer text | no |
 | `occurred_on` | Date as written | no |
+| `note` | A note the payer attached, as a Payment App shows it | no |
 
 Anything a rule does not capture is left empty on the suggestion. **A rule never
 substitutes a guess for a missing capture.**
+
+Builtin rules are defined in code-as-data (`BuiltInParseRules`) beside their corpus tests,
+and seeded **additively by name**: a rule shipped in a later release reaches an existing
+install, and a builtin the user disabled stays disabled.
 
 ### CaptureSuggestion
 
@@ -529,6 +536,11 @@ CaptureSuggestion
   container_id           TEXT NULL  FK -> Container.id   -- matched via last4
   counterparty_text      TEXT NULL                       -- raw, unresolved
   occurred_on            TEXT NULL         YYYY-MM-DD
+
+  evidence               INTEGER NOT NULL  flags: 1 = Sms, 2 = PaymentApp  (ADR-0014)
+  payment_app_name       TEXT NULL         "GPay", when an app reported it
+  note                   TEXT NULL         the payer's note, when an app reported one
+  corroborating_fingerprint TEXT NULL      fingerprint of the second alert merged in (SM6)
 
   state                  TEXT NOT NULL     'Pending'|'Confirmed'|'Dismissed'|'Expired'
   transaction_id         TEXT NULL  FK -> Transaction.id  -- iff state='Confirmed'
@@ -585,6 +597,24 @@ and the sender is folded into it rather than stored beside it.
 - `SM11` - `container_id` is populated only by an exact `last4` match against a
   non-archived container. An ambiguous or absent match leaves it null and the user is
   asked. It is never inferred from the counterparty, the amount, or history.
+- `SM12` - A Payment App notification is read only when its posting package is on the
+  `PaymentApps` allow-list, checked **before** its title or text is touched. Every other
+  notification on the device is dropped unread. `SM1`, `SM2`, `SM4` and `SM5` apply to
+  notification text exactly as to an SMS body. (ADR-0014)
+- `SM13` - A rule reads only alerts from its own `channel`. An SMS is never matched by a
+  PaymentApp rule, nor the reverse.
+- `SM14` - Two alerts are merged into one suggestion only when the amount, currency and
+  direction are identical, they come from **different** channels, and they arrived within
+  15 minutes of each other. A suggestion holds at most one alert per channel. On a merge the
+  container comes only from the bank's `last4` (`SM11`), an app's payee name replaces an
+  SMS's, and the bank's date replaces the default. A new alert that pairs with an already
+  **confirmed** suggestion is absorbed and not offered again.
+- `SM16` - A credit-card bill paid through a Payment App is a **Self Transfer** suggestion,
+  never a Debit (`D1`). It pairs with the bank's Debit SMS for the same payment, turning the
+  merged suggestion into a Self Transfer, and confirming it asks which card was paid.
+- `SM15` - A confirmed suggestion records `capture_source = 'Sms'` when an SMS described it,
+  and `'PaymentApp'` when only an app did. Its Payment App becomes the transaction's
+  *Paid with*, and its note the transaction's description.
 
 ### Why suggestions are not just `needs_review` transactions
 
@@ -600,7 +630,7 @@ failure entirely rather than mitigating it.
 
 ---
 
-## 13. Supporting entities
+## 12. Supporting entities
 
 ```
 UserSettings
@@ -621,7 +651,7 @@ and a cycle that silently shifts in short months is worse than one that starts o
 
 ---
 
-## 14. Derived calculations
+## 13. Derived calculations
 
 ```
 balance(container) =
@@ -638,12 +668,16 @@ liquid = Σ balance(c) for asset c where is_liquid(c.kind)
 locked = Σ balance(c) for asset c where NOT is_liquid(c.kind)
 owed   = Σ balance(c) for liability c
 
-spend_by_label(cycle) =
-    Σ source_amount → home_currency
-    GROUP BY label
-    WHERE kind = 'Debit'                    -- Self Transfers excluded, always
-      AND occurred_on within cycle
-      AND deleted_at IS NULL
+spend_by_label(cycle) = (by_label, total)
+
+  by_label = Σ source_amount → home_currency
+             per (transaction, label) pair, plus one bucket for label IS NULL
+             WHERE kind = 'Debit'           -- Self Transfers excluded, always
+               AND occurred_on within cycle
+               AND deleted_at IS NULL
+
+  total    = Σ source_amount → home_currency
+             over the same transactions, each counted ONCE
 ```
 
 - `D1` - **Self Transfers never appear in spend or income figures.** Moving your own money
@@ -651,7 +685,12 @@ spend_by_label(cycle) =
   double-counting.
 - `D2` - Balances are always computed, never stored. See
   [ADR-0003](../adr/0003-derived-balances.md).
-- `D3` - Every aggregate is expressed in the home currency, converted per §10.
+- `D3` - Every aggregate is expressed in the home currency, converted per §9.
+- `D4` - **`total` is never computed by summing `by_label`.** A transaction with two labels
+  appears in full under each, so the buckets overlap by design (ADR-0013). The two figures
+  are returned together, from one query, so no caller can add up the buckets by mistake.
+  What still holds: no single bucket ever exceeds `total`, and every unlabelled rupee has
+  its own bucket rather than disappearing.
 
 ### Export as a derived view
 
@@ -674,7 +713,7 @@ export(filter, columns) = serialise(list(filter), columns)
 
 ---
 
-## 15. Entity relationships
+## 14. Entity relationships
 
 ```
 UserSettings 1 ─── 1 User
@@ -686,10 +725,7 @@ Container * ─── * Goal            (via GoalContainer)
 Party 1 ─── * Transaction         (as source)
 Party 1 ─── * Transaction         (as destination)
 
-Label 1 ─── * Label               (parent → children, depth ≤ 2)
-Label 1 ─── * Transaction
-
-Tag * ─── * Transaction           (via TransactionTag)
+Label * ─── * Transaction         (via TransactionLabel; flat, any number, ADR-0013)
 
 App 1 ─── * Transaction           (as marketplace)
 App 1 ─── * Transaction           (as payment)
@@ -705,13 +741,15 @@ Container 1 ─── * CaptureSuggestion      (matched by last4; nullable, SM11
 
 ---
 
-## 16. Deliberately absent
+## 15. Deliberately absent
 
 Named here so their absence is a decision on record rather than an oversight:
 
 | Not modelled | Why | Revisit |
 |---|---|---|
-| Split transactions | One label per transaction keeps totals exact (ADR-0007) | If real usage demands it |
+| Split transactions | Several labels on one transaction covers the common case without split machinery in the capture flow (ADR-0013) | If per-label amounts are genuinely needed |
+| Label hierarchy | Removed in ADR-0013. It asked every new user about structure before they had any | Only with evidence people build one |
+| Tags, separate from labels | Removed in ADR-0013. One concept implemented twice | Never |
 | Double-entry postings | Overkill for one person; ADR-0002 gives correctness more cheaply | Never expected |
 | Budgets per label | Not in the brief; a substantial feature (limits, rollover, alerts) | v3 |
 | Recurring transactions | Needs `status='Scheduled'` and projected balances | v2 |
@@ -719,5 +757,5 @@ Named here so their absence is a decision on record rather than an oversight:
 | Attachments / receipts | Storage, sync size, and thumbnailing; blows up backup size | v2 |
 | Shared / household accounts | Q1 chose single-user | If ever multi-user |
 | Bank statement import | Per-bank formats; a maintenance treadmill | v3 |
-| **Automatic** SMS transaction *booking* | An SMS is evidence, not authority. Parsing is in scope (§12); creating a transaction without confirmation is not, and `SM2` forbids it | Never |
+| **Automatic** SMS transaction *booking* | An SMS is evidence, not authority. Parsing is in scope (§11); creating a transaction without confirmation is not, and `SM2` forbids it | Never |
 | Reading SMS for anything but Parse Rules | OTPs, personal messages, and marketing are dropped at the receiver. There is no code path that stores them (`SM3`) | Never |

@@ -36,6 +36,22 @@ public class RepositoryLayoutTests
         ["EleFi.Properties"] = "Universal properties spanning Domain, Application and Infrastructure.",
     };
 
+    /// <summary>
+    /// Test files that deliberately have no single source file behind them, with the reason.
+    /// </summary>
+    /// <remarks>
+    /// Keep this short. A test that mirrors nothing is a test nobody will find when they
+    /// change the thing it covers, so each entry has to be genuinely cross-cutting rather
+    /// than merely awkward to name.
+    /// </remarks>
+    private static readonly Dictionary<string, string> CrossCuttingTestFiles = new()
+    {
+        ["EleFi.Infrastructure.Tests/Persistence/MigrationSafetyTests.cs"] =
+            "Covers the migration set as a whole. Migration files carry generated timestamp "
+            + "prefixes, so no test filename could mirror one without being renamed every time "
+            + "a migration is added.",
+    };
+
     private static readonly string[] IgnoredDirectories = ["bin", "obj", "Platforms", "Resources", "wwwroot", "Properties"];
 
     [Fact]
@@ -93,6 +109,12 @@ public class RepositoryLayoutTests
             foreach (var testFile in EnumerateCode(testProject).Where(f => f.Name.EndsWith("Tests.cs", StringComparison.Ordinal)))
             {
                 var relative = Path.GetRelativePath(testProject.FullName, testFile.FullName);
+
+                var key = $"{testProject.Name}/{relative.Replace(Path.DirectorySeparatorChar, '/')}";
+                if (CrossCuttingTestFiles.ContainsKey(key))
+                {
+                    continue;
+                }
 
                 // Foo/BarTests.cs covers Foo/Bar.cs (or Foo/Bar.razor).
                 var expectedStem = relative[..^"Tests.cs".Length];

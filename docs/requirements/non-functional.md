@@ -97,7 +97,7 @@ worthless.
 | NFR-3.6 | Self Transfers are excluded from every spend and income aggregate, verified by explicit test |
 | NFR-3.7 | Credit card bill payments leave net worth unchanged, verified by explicit test |
 | NFR-3.8 | Rounding uses banker's rounding, applied once at display, never during accumulation |
-| NFR-3.9 | Sum of per-label spend equals total spend for the same filter, to the paisa, verified by property test |
+| NFR-3.9 | The spend breakdown returns its total **computed once per transaction**, never by summing the per-label buckets, which overlap by design (ADR-0013). What is verified by test: no bucket exceeds the total, unlabelled spend has its own bucket, and the total matches an independent sum over transactions |
 | NFR-3.10 | A migration that could lose data is refused; migrations are forward-only and tested against real backups |
 | NFR-3.11 | An export contains exactly the rows the list shows for the same filter, in the same order (`X1`), verified by property test |
 | NFR-3.12 | No Capture Suggestion ever reaches a balance, an aggregate, a report, an export, or a backup (`SM2`), verified by explicit test |

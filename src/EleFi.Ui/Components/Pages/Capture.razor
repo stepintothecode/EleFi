@@ -1,0 +1,329 @@
+@page "/capture"
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Labels
+@using EleFi.Application.Transactions
+@using EleFi.Application.Typeahead
+@using EleFi.Domain.Containers
+@using EleFi.Domain.Labels
+@using EleFi.Domain.Money
+@using EleFi.Domain.Transactions
+@using EleFi.Ui.Services
+@inject ToastService Toasts
+@inject CaptureService Capturing
+@inject IContainerRepository Containers
+@inject LabelService LabelList
+@inject IPartyRepository Parties
+@inject IAppRepository Apps
+@inject IClock Clock
+
+@*
+    The core screen. Everything else exists to make this worth doing.
+
+    Amount first and focused, kind as three chips that pre-filter the pickers, and Save and
+    add another so a week's backlog is not painful. The kind chips never become a stored
+    field: they only decide which way round the container and counterparty go, and the real
+    kind is still derived from the two parties.
+
+    Quick capture can hand over what it has gathered through the query string, so "Add other
+    details" there lands here with the amount and the container already filled in.
+*@
+
+<PageTitle>Capture</PageTitle>
+
+<h1>Record a transaction</h1>
+
+@*
+    The blocker is stated here, before anything is typed, rather than after Save.
+    Discovering at the end of a form that the first field was impossible is the most
+    annoying way to learn it.
+*@
+@if (!_loading && _containers.Count == 0)
+{
+    <div class="notice error" role="alert">
+        <strong>No containers yet.</strong>
+        Money has to come from somewhere, so add the bank account or wallet you use most first.
+        <a class="btn btn-ghost btn-block" href="containers" style="margin-top:10px;">Add a container</a>
+    </div>
+}
+
+<div class="card">
+    <div class="field">
+        <label for="amount">Amount</label>
+        <input id="amount" class="amount-input" type="text" inputmode="decimal"
+               placeholder="0.00" autocomplete="off" @bind="_amountText" @bind:event="oninput" />
+    </div>
+
+    <div class="chips" style="margin-bottom: 14px;" role="group" aria-label="Kind">
+        @foreach (var kind in Kinds)
+        {
+            <button type="button" class="chip @(_kind == kind ? "on" : string.Empty)"
+                    @onclick="() => SetKind(kind)">@kind.DisplayName()</button>
+        }
+    </div>
+
+    @if (_kind == TransactionKind.SelfTransfer)
+    {
+        <div class="field">
+            <label for="from">Source container</label>
+            <ContainerSelect Id="from" Containers="_containers" @bind-Value="_containerId" />
+        </div>
+        <div class="field">
+            <label for="to">Destination container</label>
+            <ContainerSelect Id="to" Containers="_containers" @bind-Value="_destinationContainerId" />
+        </div>
+    }
+    else
+    {
+        <div class="field">
+            <label for="container">@(_kind == TransactionKind.Debit ? "Paid from" : "Received into")</label>
+            @if (_containers.Count == 0)
+            {
+                <div class="empty-field">
+                    Nothing to pick yet.
+                    <a href="containers">Add a container</a> and this fills in.
+                </div>
+            }
+            else
+            {
+                <ContainerSelect Id="container" Containers="_containers" @bind-Value="_containerId" />
+            }
+        </div>
+
+        <div class="field">
+            <label for="party">@(_kind == TransactionKind.Debit ? "Paid to" : "Received from")</label>
+            <TypeaheadInput Id="party"
+                            @bind-Value="_partyName"
+                            Candidates="_partyCandidates"
+                            PanelLabel="@(_kind == TransactionKind.Debit ? "People and places you pay" : "People who pay you")"
+                            Placeholder="Zomato, Rahul, landlord..." />
+        </div>
+
+        <div class="field">
+            <label>Labels <span class="muted small">(optional, pick any)</span></label>
+            <LabelPicker Labels="_labels" Selected="_labelIds" SelectedChanged="ids => _labelIds = ids" />
+        </div>
+    }
+
+    @* Both default to the device clock, because the overwhelmingly common case is
+       recording something that just happened. *@
+    <div class="row">
+        <div class="field grow">
+            <label for="date">Date</label>
+            <input id="date" type="date" max="@Clock.Today.ToString("yyyy-MM-dd")" @bind="_date" />
+        </div>
+        <div class="field grow">
+            <label for="time">Time</label>
+            <input id="time" type="time" @bind="_time" />
+        </div>
+    </div>
+
+    <div class="field">
+        <div class="field-head">
+            <label for="marketplace">Bought through <span class="muted small">(optional)</span></label>
+            <AppRoleInfo />
+        </div>
+        <TypeaheadInput Id="marketplace" @bind-Value="_marketplaceAppName" Candidates="_appCandidates"
+                        IdleCount="0" PanelLabel="Apps" Placeholder="Zomato, Amazon, Uber" />
+    </div>
+
+    <div class="field">
+        <div class="field-head">
+            <label for="payment">Paid with <span class="muted small">(optional)</span></label>
+            <AppRoleInfo Payment="true" />
+        </div>
+        <TypeaheadInput Id="payment" @bind-Value="_paymentAppName" Candidates="_appCandidates"
+                        IdleCount="0" PanelLabel="Apps" Placeholder="GPay, Cash, Net Banking" />
+    </div>
+
+    <div class="field">
+        <label for="note">Note <span class="muted small">(optional)</span></label>
+        <input id="note" @bind="_description" placeholder="What was it for?" autocomplete="off" />
+    </div>
+
+    <div class="stack">
+        <button class="primary btn-block" disabled="@_busy" @onclick="() => SaveAsync(false)">Save</button>
+        <button class="btn-ghost btn-block" disabled="@_busy" @onclick="() => SaveAsync(true)">Save and add another</button>
+    </div>
+</div>
+
+@code {
+    private static readonly TransactionKind[] Kinds =
+        [TransactionKind.Debit, TransactionKind.Credit, TransactionKind.SelfTransfer];
+
+    /// <summary>An amount handed over by quick capture, as typed there.</summary>
+    [SupplyParameterFromQuery(Name = "amount")]
+    public string? AmountQuery { get; set; }
+
+    /// <summary>A container handed over by quick capture.</summary>
+    [SupplyParameterFromQuery(Name = "container")]
+    public Guid? ContainerQuery { get; set; }
+
+
+    private IReadOnlyList<Container> _containers = [];
+    private IReadOnlyList<Label> _labels = [];
+    private IReadOnlyList<TypeaheadCandidate> _partyCandidates = [];
+    private IReadOnlyList<TypeaheadCandidate> _appCandidates = [];
+
+    private TransactionKind _kind = TransactionKind.Debit;
+    private string _amountText = string.Empty;
+    private Guid _containerId;
+    private Guid _destinationContainerId;
+    private IReadOnlyList<Guid> _labelIds = [];
+    private string _partyName = string.Empty;
+    private string _paymentAppName = string.Empty;
+    private string _marketplaceAppName = string.Empty;
+    private string? _description;
+    private DateTime _date = DateTime.Today;
+
+    // TimeOnly, not a string: Blazor binds <input type="time"> to it directly, and a
+    // string round-trip would reintroduce the parsing this type exists to avoid.
+    private TimeOnly? _time;
+
+    private bool _busy;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // In picker order, so the pre-selected container is the first one drawn.
+        _containers = ContainerGrouping.InPickerOrder(await Containers.ListSelectableAsync());
+        _labels = await LabelList.ListByUsageAsync();
+        await LoadCandidatesAsync();
+
+        _containerId = _containers.FirstOrDefault()?.Id ?? Guid.Empty;
+        _destinationContainerId = _containers.Skip(1).FirstOrDefault()?.Id ?? _containerId;
+
+        // Whatever quick capture had, it hands over rather than making the user type it twice.
+        _amountText = AmountQuery ?? string.Empty;
+        if (ContainerQuery is { } handed && _containers.Any(c => c.Id == handed))
+        {
+            _containerId = handed;
+        }
+
+        // Now, from the device, because that is what someone recording a purchase means.
+        _date = Clock.Today.ToDateTime(TimeOnly.MinValue);
+        _time = Clock.TimeOfDay;
+
+        _loading = false;
+    }
+
+    // The whole history, loaded once. Typing then ranks it in memory, so the field never
+    // waits on the database between keystrokes.
+    private async Task LoadCandidatesAsync()
+    {
+        _partyCandidates = TypeaheadCandidates.From(await Parties.ListExternalAsync());
+        _appCandidates = TypeaheadCandidates.From(await Apps.ListAsync());
+    }
+
+    // Labels no longer restrict which kind they suit, so switching kind leaves them alone.
+    private void SetKind(TransactionKind kind) => _kind = kind;
+
+    private async Task SaveAsync(bool addAnother)
+    {
+        if (_containers.Count == 0)
+        {
+            Toasts.Error("Add a container first. EleFi needs somewhere for the money to come from or go to.");
+            return;
+        }
+
+        if (!MoneyText.TryParse(_amountText, Currency.Inr, out var amount) || amount.Minor <= 0)
+        {
+            Toasts.Error("Enter an amount greater than zero.");
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var containerParty = await Containers.PartyForAsync(_containerId);
+            if (containerParty is null)
+            {
+                Toasts.Error("That container no longer exists.");
+                return;
+            }
+
+            Guid sourceId;
+            Guid destinationId;
+
+            if (_kind == TransactionKind.SelfTransfer)
+            {
+                var destinationParty = await Containers.PartyForAsync(_destinationContainerId);
+                if (destinationParty is null)
+                {
+                    Toasts.Error("That destination container no longer exists.");
+                    return;
+                }
+
+                (sourceId, destinationId) = (containerParty.Id, destinationParty.Id);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(_partyName))
+                {
+                    Toasts.Error(_kind == TransactionKind.Debit
+                        ? "Who was it paid to?"
+                        : "Who was it received from?");
+                    return;
+                }
+
+                // Auto-created on first use, so capture never stalls to "create the party
+                // first" - one of the interactions the three-second budget cannot afford.
+                var external = await Parties.GetOrCreateExternalAsync(_partyName);
+
+                (sourceId, destinationId) = _kind == TransactionKind.Debit
+                    ? (containerParty.Id, external.Id)
+                    : (external.Id, containerParty.Id);
+            }
+
+            Guid? paymentAppId = null;
+            if (!string.IsNullOrWhiteSpace(_paymentAppName))
+            {
+                paymentAppId = (await Apps.GetOrCreateAsync(_paymentAppName)).Id;
+            }
+
+            // One shared pool feeds both roles, so a name typed in either box is suggested
+            // in the other afterwards.
+            Guid? marketplaceAppId = null;
+            if (!string.IsNullOrWhiteSpace(_marketplaceAppName))
+            {
+                marketplaceAppId = (await Apps.GetOrCreateAsync(_marketplaceAppName)).Id;
+            }
+
+            var result = await Capturing.CaptureAsync(new CaptureRequest(
+                sourceId,
+                destinationId,
+                amount.Minor,
+                Currency.Inr.Code,
+                amount.Minor,
+                Currency.Inr.Code,
+                DateOnly.FromDateTime(_date),
+                _time,
+                _labelIds,
+                _description,
+                MarketplaceAppId: marketplaceAppId,
+                PaymentAppId: paymentAppId));
+
+            if (!result.Succeeded)
+            {
+                Toasts.Error(result.Error!);
+                return;
+            }
+
+            Toasts.Ok($"Saved {MoneyText.ToDisplayString(amount)}.");
+            _amountText = string.Empty;
+            _description = null;
+
+            if (!addAnother)
+            {
+                _partyName = string.Empty;
+            }
+
+            // Usage changed, so the ranking did too.
+            await LoadCandidatesAsync();
+            _labels = await LabelList.ListByUsageAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

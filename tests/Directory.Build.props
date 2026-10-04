@@ -12,8 +12,16 @@
     -->
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
 
-    <!-- CA1707: underscores in test names are deliberate. See .editorconfig. -->
-    <NoWarn>$(NoWarn);CA1707;CA2007;CS1591</NoWarn>
+    <!--
+      CA1707: underscores in test names are deliberate - the name states the invariant.
+      CA2007: ConfigureAwait is pointless in a test runner with no synchronisation context.
+      CS1591: tests do not carry XML docs.
+      xUnit1051: these tests run in milliseconds against a local file. Threading a
+      cancellation token through every assertion would add noise without adding safety.
+      CA2000: fakes handed to a DI container are owned and disposed by the container. The
+      analyser cannot see that, and disposing them by hand would be wrong.
+    -->
+    <NoWarn>$(NoWarn);CA1707;CA2007;CS1591;xUnit1051;CA2000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label="Shared by every test project">

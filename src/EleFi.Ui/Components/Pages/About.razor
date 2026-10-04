@@ -1,0 +1,75 @@
+@page "/about"
+@using EleFi.Application.Abstractions
+@inject ILinkOpener Links
+
+@*
+    About, and the support link.
+
+    Three rules govern that link, and each exists because breaking it turns a gift into a
+    sale: it gives nothing back, it never nags, and it opens the system browser rather than
+    this WebView (FR-12.4, FR-12.6, FR-12.7).
+*@
+
+<PageTitle>About EleFi</PageTitle>
+
+<div class="about-hero">
+    <MascotViewer Mood="MascotMood.Happy" />
+    <div>
+        <h1 style="margin:0;">EleFi</h1>
+        <p class="muted small" style="margin:2px 0 0;">
+            A local-first money tracker. Version @Version
+        </p>
+    </div>
+</div>
+
+<div class="card">
+    <h2 style="margin-top:0;">Where your data lives</h2>
+    <p class="small">
+        On this phone, in an encrypted database. There is no server, no account, and no bank
+        connection. Nothing is sent anywhere.
+    </p>
+    <p class="small muted" style="margin-bottom:0;">
+        SMS reading is not built yet. When it arrives, messages are matched on the device, no
+        message is ever stored, and one-time passcodes are never read at all.
+    </p>
+</div>
+
+<div class="card">
+    <h2 style="margin-top:0;">Free, permanently</h2>
+    <p class="small">
+        Every feature, including filtered export. There is no paid tier, no unlock, and no
+        supporter build. Paywalling the exit from a money app is corrosive, so it will not
+        happen here.
+    </p>
+
+    <button class="btn-ghost btn-block" @onclick="OpenSupportAsync">Chip in, if you want to</button>
+
+    <p class="small muted" style="margin-bottom:0;">
+        A voluntary tip, not a purchase. It buys no features, no priority support, and no say
+        over the app. Opens in your browser.
+    </p>
+</div>
+
+<div class="card">
+    <h2 style="margin-top:0;">Open source</h2>
+    <p class="small">
+        EleFi is MIT licensed, which is the part that lets you check the claims above rather
+        than take them on trust: read the code, see that nothing is transmitted, fork it if
+        you ever disagree with where it goes.
+    </p>
+    <button class="btn-ghost btn-block" @onclick="OpenSourceAsync">View the source</button>
+</div>
+
+@code {
+    private const string Version = "0.3.0";
+
+    // One `from` per surface, so it stays visible which link people actually press.
+    private const string SupportUrl = "https://stepintothecode.github.io/support/?from=elefi-app";
+    private const string SourceUrl = "https://github.com/menonkartikeya/EleFi";
+
+    // Never an <a href>: under Blazor Hybrid that navigates this WebView and strands the
+    // user inside the app with no browser chrome and no way back.
+    private Task OpenSupportAsync() => Links.OpenAsync(SupportUrl);
+
+    private Task OpenSourceAsync() => Links.OpenAsync(SourceUrl);
+}

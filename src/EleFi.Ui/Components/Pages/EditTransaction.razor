@@ -1,0 +1,429 @@
+@page "/transactions/{Id:guid}"
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Labels
+@using EleFi.Application.Transactions
+@using EleFi.Application.Typeahead
+@using EleFi.Domain.Audit
+@using EleFi.Domain.Containers
+@using EleFi.Domain.Labels
+@using EleFi.Domain.Money
+@using EleFi.Domain.Parties
+@using EleFi.Domain.Transactions
+@using EleFi.Ui.Services
+@inject EditTransactionService Editing
+@inject IContainerRepository Containers
+@inject LabelService LabelList
+@inject IPartyRepository Parties
+@inject IAppRepository Apps
+@inject IClock Clock
+@inject ToastService Toasts
+@inject NavigationManager Nav
+
+@*
+    Edit one transaction, and see everything that has ever happened to it.
+
+    The review flag only means something if it can be acted on: a quick capture guesses, and
+    this is where the guess gets corrected or confirmed. Without this screen the flag was
+    just a permanent mark on a row nobody could fix.
+
+    Delete lives at the bottom, in red, behind a confirmation. It is a soft delete: the row
+    leaves every balance and export immediately, and stays restorable.
+*@
+
+<PageTitle>Edit transaction</PageTitle>
+
+@if (_loading)
+{
+    <div class="card"><div class="skeleton" style="width:70%;"></div></div>
+}
+else if (_transaction is null)
+{
+    <h1>Not found</h1>
+    <p class="muted">That transaction is gone.</p>
+    <a class="btn btn-ghost btn-block" href="transactions">Back to the list</a>
+}
+else
+{
+    <div class="section-head">
+        <h1>Edit</h1>
+        <button type="button" class="btn-ghost" @onclick="CloseAsync">Close</button>
+    </div>
+
+    @if (_transaction.NeedsReview)
+    {
+        <div class="notice info">
+            <strong>Flagged for review.</strong>
+            This was captured quickly, so the label and the details were guessed. Correct
+            anything that is wrong, or confirm it as it stands.
+            <button class="btn-ghost btn-block" style="margin-top:10px;" @onclick="MarkReviewedAsync">
+                Looks right, clear the flag
+            </button>
+        </div>
+    }
+
+    <div class="card">
+        <div class="field">
+            <label for="amount">Amount</label>
+            <input id="amount" class="amount-input" type="text" inputmode="decimal"
+                   @bind="_amountText" autocomplete="off" />
+        </div>
+
+        <div class="chips" style="margin-bottom:14px;" role="group" aria-label="Kind">
+            @foreach (var kind in new[] { TransactionKind.Debit, TransactionKind.Credit, TransactionKind.SelfTransfer })
+            {
+                <button type="button" class="chip @(_kind == kind ? "on" : string.Empty)"
+                        @onclick="() => SetKind(kind)">@kind.DisplayName()</button>
+            }
+        </div>
+
+        @if (_kind == TransactionKind.SelfTransfer)
+        {
+            <div class="field">
+                <label for="from">Source container</label>
+                <ContainerSelect Id="from" Containers="_containers" @bind-Value="_containerId" />
+            </div>
+            <div class="field">
+                <label for="to">Destination container</label>
+                <ContainerSelect Id="to" Containers="_containers" @bind-Value="_destinationContainerId" />
+            </div>
+        }
+        else
+        {
+            <div class="field">
+                <label for="container">@(_kind == TransactionKind.Debit ? "Paid from" : "Received into")</label>
+                <ContainerSelect Id="container" Containers="_containers" @bind-Value="_containerId" />
+            </div>
+
+            <div class="field">
+                <label for="party">@(_kind == TransactionKind.Debit ? "Paid to" : "Received from")</label>
+                <TypeaheadInput Id="party" @bind-Value="_partyName" Candidates="_partyCandidates" />
+            </div>
+
+            <div class="field">
+                <label>Labels <span class="muted small">(optional, pick any)</span></label>
+                <LabelPicker Labels="_labels" Selected="_labelIds" SelectedChanged="ids => _labelIds = ids" />
+            </div>
+        }
+
+        <div class="row">
+            <div class="field grow">
+                <label for="date">Date</label>
+                <input id="date" type="date" max="@Clock.Today.ToString("yyyy-MM-dd")" @bind="_date" />
+            </div>
+            <div class="field grow">
+                <label for="time">Time</label>
+                <input id="time" type="time" @bind="_time" />
+            </div>
+        </div>
+
+        <div class="field">
+            <div class="field-head">
+                <label for="marketplace">Bought through <span class="muted small">(optional)</span></label>
+                <AppRoleInfo />
+            </div>
+            <TypeaheadInput Id="marketplace" @bind-Value="_marketplaceAppName" Candidates="_appCandidates"
+                            IdleCount="0" PanelLabel="Apps" />
+        </div>
+
+        <div class="field">
+            <div class="field-head">
+                <label for="payment">Paid with <span class="muted small">(optional)</span></label>
+                <AppRoleInfo Payment="true" />
+            </div>
+            <TypeaheadInput Id="payment" @bind-Value="_paymentAppName" Candidates="_appCandidates"
+                            IdleCount="0" PanelLabel="Apps" />
+        </div>
+
+        <div class="field">
+            <label for="note">Note <span class="muted small">(optional)</span></label>
+            <input id="note" @bind="_description" autocomplete="off" />
+        </div>
+
+        <button class="primary btn-block" disabled="@_busy" @onclick="SaveAsync">Save changes</button>
+    </div>
+
+    <h2>History</h2>
+    <div class="card">
+        @if (_timeline.Count == 0)
+        {
+            <p class="muted small" style="margin:0;">Nothing recorded yet.</p>
+        }
+        else
+        {
+            @foreach (var entry in _timeline)
+            {
+                <div class="timeline-entry">
+                    <div class="row between">
+                        <strong>@ActionLabel(entry.Action)</strong>
+                        <span class="meta">@entry.OccurredAt.ToLocalTime().ToString("d MMM yyyy, HH:mm")</span>
+                    </div>
+
+                    @{
+                        var changes = entry.ParsedChanges();
+                    }
+                    @if (changes.Count > 0)
+                    {
+                        <ul class="timeline-changes">
+                            @foreach (var change in changes)
+                            {
+                                <li>
+                                    <span class="meta">@EditTransactionService.FieldLabel(change.Field)</span>
+                                    <span class="was">@Value(change.Field, change.FromText)</span>
+                                    <span aria-hidden="true">&rarr;</span>
+                                    <span class="now">@Value(change.Field, change.ToText)</span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else if (entry.CaptureSource is { } source)
+                    {
+                        <div class="meta">via @source</div>
+                    }
+                </div>
+            }
+        }
+    </div>
+
+    <h2>Danger</h2>
+    <div class="card">
+        <p class="small muted">
+            Deleting removes this from every balance, report, and export immediately. It stays
+            recoverable, and the deletion is recorded above.
+        </p>
+
+        @if (!_deleteArmed)
+        {
+            <button class="btn-ghost btn-block danger" @onclick="() => _deleteArmed = true">Delete this transaction</button>
+        }
+        else
+        {
+            <div class="row">
+                <button class="btn-ghost grow" @onclick="() => _deleteArmed = false">Keep it</button>
+                <button class="primary danger grow" @onclick="DeleteAsync">Delete</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>The transaction being edited.</summary>
+    [Parameter]
+    public Guid Id { get; set; }
+
+    /// <summary>The app's back handling, cascaded from the router.</summary>
+    [CascadingParameter]
+    public BackNavigator? Back { get; set; }
+
+    private Transaction? _transaction;
+    private IReadOnlyList<Container> _containers = [];
+    private IReadOnlyList<Label> _labels = [];
+    private IReadOnlyList<TypeaheadCandidate> _partyCandidates = [];
+    private IReadOnlyList<TypeaheadCandidate> _appCandidates = [];
+    private IReadOnlyList<AuditEvent> _timeline = [];
+
+    private TransactionKind _kind = TransactionKind.Debit;
+    private string _amountText = string.Empty;
+    private Guid _containerId;
+    private Guid _destinationContainerId;
+    private IReadOnlyList<Guid> _labelIds = [];
+    private string _partyName = string.Empty;
+    private string _paymentAppName = string.Empty;
+    private string _marketplaceAppName = string.Empty;
+    private string? _description;
+    private DateTime _date = DateTime.Today;
+    private TimeOnly? _time;
+
+    private bool _loading = true;
+    private bool _busy;
+    private bool _deleteArmed;
+
+    private Currency Currency => _transaction?.SourceCurrency ?? Currency.Inr;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        _transaction = await Editing.FindAsync(Id);
+        _containers = ContainerGrouping.InPickerOrder(await Containers.ListSelectableAsync());
+        _labels = await LabelList.ListByUsageAsync();
+        _partyCandidates = TypeaheadCandidates.From(await Parties.ListExternalAsync());
+        _appCandidates = TypeaheadCandidates.From(await Apps.ListAsync());
+
+        if (_transaction is not null)
+        {
+            _timeline = await Editing.TimelineAsync(Id);
+            Populate(_transaction);
+        }
+
+        _loading = false;
+    }
+
+    private void Populate(Transaction t)
+    {
+        _kind = t.Kind;
+        _amountText = MoneyText.ToBareDecimal(t.SourceAmount);
+        _date = t.OccurredOn.ToDateTime(TimeOnly.MinValue);
+        _time = t.OccurredAtTime;
+        _description = t.Description;
+        _labelIds = [.. t.Labels.Select(l => l.LabelId)];
+        _marketplaceAppName = t.MarketplaceApp?.Name ?? string.Empty;
+        _paymentAppName = t.PaymentApp?.Name ?? string.Empty;
+
+        // The form thinks in "my container" plus "the other end", while the record holds two
+        // parties. Which is which depends on the kind.
+        switch (_kind)
+        {
+            case TransactionKind.Debit:
+                _containerId = t.SourceParty?.ContainerId ?? Guid.Empty;
+                _partyName = t.DestinationParty?.Name ?? string.Empty;
+                break;
+
+            case TransactionKind.Credit:
+                _containerId = t.DestinationParty?.ContainerId ?? Guid.Empty;
+                _partyName = t.SourceParty?.Name ?? string.Empty;
+                break;
+
+            default:
+                _containerId = t.SourceParty?.ContainerId ?? Guid.Empty;
+                _destinationContainerId = t.DestinationParty?.ContainerId ?? Guid.Empty;
+                break;
+        }
+    }
+
+    // Labels no longer restrict which kind they suit, so switching kind leaves them alone.
+    private void SetKind(TransactionKind kind) => _kind = kind;
+
+    // Back to wherever the editor was opened from: the list, the dashboard, or quick capture
+    // after "Add other details". Straight to the list when there is nothing behind it.
+    private async Task CloseAsync()
+    {
+        if (Back?.CanStepBack == true)
+        {
+            await Back.GoBackAsync();
+            return;
+        }
+
+        Nav.NavigateTo("transactions");
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!MoneyText.TryParse(_amountText, Currency, out var amount) || amount.Minor <= 0)
+        {
+            Toasts.Error("Enter an amount greater than zero.");
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var containerParty = await Containers.PartyForAsync(_containerId);
+            if (containerParty is null)
+            {
+                Toasts.Error("That container no longer exists.");
+                return;
+            }
+
+            Guid sourceId;
+            Guid destinationId;
+
+            if (_kind == TransactionKind.SelfTransfer)
+            {
+                var destinationParty = await Containers.PartyForAsync(_destinationContainerId);
+                if (destinationParty is null)
+                {
+                    Toasts.Error("That destination container no longer exists.");
+                    return;
+                }
+
+                (sourceId, destinationId) = (containerParty.Id, destinationParty.Id);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(_partyName))
+                {
+                    Toasts.Error(_kind == TransactionKind.Debit ? "Who was it paid to?" : "Who was it received from?");
+                    return;
+                }
+
+                var external = await Parties.GetOrCreateExternalAsync(_partyName);
+
+                (sourceId, destinationId) = _kind == TransactionKind.Debit
+                    ? (containerParty.Id, external.Id)
+                    : (external.Id, containerParty.Id);
+            }
+
+            Guid? marketplaceAppId = string.IsNullOrWhiteSpace(_marketplaceAppName)
+                ? null
+                : (await Apps.GetOrCreateAsync(_marketplaceAppName)).Id;
+
+            Guid? paymentAppId = string.IsNullOrWhiteSpace(_paymentAppName)
+                ? null
+                : (await Apps.GetOrCreateAsync(_paymentAppName)).Id;
+
+            var result = await Editing.EditAsync(new EditRequest(
+                Id,
+                sourceId,
+                destinationId,
+                amount.Minor,
+                DateOnly.FromDateTime(_date),
+                _time,
+                _labelIds,
+                _description,
+                marketplaceAppId,
+                paymentAppId,
+                // Editing a flagged transaction is the review. Leaving the flag set after
+                // someone has been through every field would make it meaningless.
+                NeedsReview: false));
+
+            if (!result.Succeeded)
+            {
+                Toasts.Error(result.Error!);
+                return;
+            }
+
+            Toasts.Ok("Saved.");
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task MarkReviewedAsync()
+    {
+        var result = await Editing.MarkReviewedAsync(Id);
+
+        if (!result.Succeeded)
+        {
+            Toasts.Error(result.Error!);
+            return;
+        }
+
+        Toasts.Ok("Confirmed.");
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        await Editing.DeleteAsync(Id);
+
+        Toasts.Ok("Deleted. It has left every balance, and the deletion is in its history.");
+        Nav.NavigateTo("transactions");
+    }
+
+    private string Value(string field, string raw) =>
+        EditTransactionService.FieldValue(field, raw, Currency);
+
+    private static string ActionLabel(AuditAction action) => action switch
+    {
+        AuditAction.Created => "Recorded",
+        AuditAction.Updated => "Edited",
+        AuditAction.Deleted => "Deleted",
+        AuditAction.Restored => "Restored",
+        _ => action.ToString(),
+    };
+}
