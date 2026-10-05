@@ -102,21 +102,27 @@ function draw(state, now) {
 
   const headR = 30 * u;
 
-  // Ears behind the head, so the head's edge cuts them cleanly.
-  for (const side of [-1, 1]) {
-    const ex = cx + side * headR * 1.02;
-    ctx.save();
-    ctx.translate(ex, cy - headR * 0.1);
-    ctx.rotate(side * 0.22);
-    ctx.fillStyle = c.hideDark;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, headR * 0.66 * state.ear, headR * 0.86, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = c.ear;
-    ctx.beginPath();
-    ctx.ellipse(side * headR * 0.06, headR * 0.04, headR * 0.4 * state.ear, headR * 0.56, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+  // Ears behind the head, so the head's edge cuts them cleanly. While hiding, these are the
+  // same ears that fold over the eyes below, so they swing in behind the head and fade as
+  // the front ones arrive: an elephant has two ears, not four.
+  const stay = 1 - state.cover;
+  if (stay > 0.02) {
+    for (const side of [-1, 1]) {
+      const ex = cx + side * headR * (0.55 + 0.47 * stay);
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, stay * 1.4);
+      ctx.translate(ex, cy - headR * 0.1);
+      ctx.rotate(side * 0.22);
+      ctx.fillStyle = c.hideDark;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, headR * 0.66 * state.ear * stay, headR * 0.86 * (0.6 + 0.4 * stay), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = c.ear;
+      ctx.beginPath();
+      ctx.ellipse(side * headR * 0.06, headR * 0.04, headR * 0.4 * state.ear * stay, headR * 0.56 * (0.6 + 0.4 * stay), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   // Trunk, drawn before the head so it tucks under the chin.
