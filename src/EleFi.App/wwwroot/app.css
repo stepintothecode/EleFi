@@ -441,6 +441,9 @@ label { display: block; font-size: 0.85rem; color: var(--ele-text-dim); margin-b
   border-bottom: 1px solid var(--ele-line);
 }
 .txn:last-child { border-bottom: none; }
+/* A title and the quiet line under it, wherever they appear: list rows, switch rows, cards. */
+.who { font-weight: 500; }
+.meta { font-size: 0.8rem; color: var(--ele-text-dim); line-height: 1.4; margin-top: 2px; }
 .txn .who { font-weight: 500; }
 .txn .meta { font-size: 0.8rem; color: var(--ele-text-dim); }
 
