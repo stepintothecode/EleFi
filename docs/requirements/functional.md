@@ -38,8 +38,8 @@ own Google Drive.
 Two things narrow the gap between "money moved" and "money recorded":
 
 - **The bank already told you.** EleFi reads its own alert SMS on the device, parses it
-  with a bundled rule, and offers the transaction back as a one-tap suggestion. It never
-  records one by itself (FR-11, `SM2`).
+  with a bundled rule, and records the transaction at once, flagged Needs Review, with a
+  notification to check or delete it (FR-11, ADR-0015).
 - **What you filtered is what you get.** The transaction list's filters *are* the export
   configuration, so getting a year of one account to an accountant is the same six taps
   you already do to look at it (FR-7).
@@ -378,7 +378,10 @@ Vocabulary in [CONTEXT.md](../CONTEXT.md#alerts-and-suggestions). Data model in
 force the fallback path to become the only path, are in
 [ADR-0010](../adr/0010-on-device-sms-assisted-capture.md).
 
-**The governing rule is `SM2`: a parsed message never becomes a transaction on its own.**
+**The governing rule was `SM2`: a parsed message never becomes a transaction on its own.**
+**Superseded on 2026-10-05 by ADR-0015:** a parsed message is recorded straight away, flagged
+Needs Review. Rows below that describe confirming a suggestion are kept for the record and
+read as describing the recorded transaction instead.
 Every requirement below is downstream of it.
 
 | ID | Requirement | Release |
@@ -410,7 +413,10 @@ Every requirement below is downstream of it.
 | FR-11.25 | Notification-listener ingest for an allow-list of Payment Apps (GPay, PhonePe, Paytm, Amazon Pay, CRED), producing suggestions under the same rules as SMS (ADR-0014, `SM12`) | 1.2 |
 | FR-11.27 | When a bank SMS and a Payment App notification describe the same payment, merge them into one suggestion: the bank's container, the app's payee name, note, and Payment App (`SM14`) | 1.2 |
 | FR-11.28 | A separate in-app switch for Payment App notifications, off by default, which opens the system notification-access screen when turned on | 1.2 |
-| FR-11.29 | The dashboard shows how many payments are waiting to be confirmed, and says they are not yet counted | 1.2 |
+| FR-11.29 | ~~The dashboard shows how many payments are waiting to be confirmed~~ Superseded by ADR-0015: the dashboard shows how many transactions need review, linking to the list filtered to them | 1.2 |
+| FR-11.30 | Parsed alerts are recorded straight away as transactions flagged Needs Review, with a prompt to open or delete each (ADR-0015) | 1.2 |
+| FR-11.31 | Teach EleFi a message: paste a message, see what is read, record it, or mark its values so EleFi learns a rule from one example; taught rules can be switched off or forgotten | 1.2 |
+| FR-11.32 | Deleted transactions are listed in Settings with Restore and Restore all; restored ones are flagged for review | 1.2 |
 | FR-11.26 | Parse Rules are bundled with the app. No rule is ever fetched from a network | 1.2 |
 
 **FR-11.22 and FR-11.23 are not consolation prizes.** They are the requirements that keep

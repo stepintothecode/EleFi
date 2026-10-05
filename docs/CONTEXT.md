@@ -140,10 +140,10 @@ flagged **Needs Review**.
 There is no "draft transaction" concept in EleFi, and there should never be one. A
 guessed transaction that counts is better than a perfect one that doesn't exist.
 
-A [Capture Suggestion](#capture-suggestion) is not a counter-example. The difference is
-who acted: a Quick Capture is the user recording money through a smaller surface, so it
-counts immediately. A suggestion is the app reading a bank's SMS with no user involved,
-so it counts only once a human says yes.
+An alert the app reads by itself is recorded the same way: a complete Transaction flagged
+Needs Review, counted at once ([ADR-0015](adr/0015-record-alerts-as-needs-review.md)). Until
+2026-10-05 it waited for confirmation instead; the user found that a second place to look,
+and chose to fix the occasional wrong one rather than confirm every right one.
 
 ### Capture Source
 Where a transaction came from: the app itself, a widget, a notification, the bubble, the
@@ -155,6 +155,9 @@ and shown in its audit trail.
 A flag meaning "this transaction was created with guessed values and you haven't
 confirmed them". It is a nudge, never a restriction - a Needs Review transaction is a
 full transaction in every way, and counts toward every balance and every report.
+
+Set by a Quick Capture, by an alert recorded from an SMS or a Payment App, and by restoring
+a deleted transaction. Cleared by editing the transaction or by "Looks right".
 
 ---
 
@@ -194,44 +197,35 @@ the note, and the Payment App. Same amount, same direction, different channels, 
 apart. Never two alerts from the same channel.
 
 ### Parse Rule
-A named pattern that turns a Transaction Alert from a given Sender ID into a Capture
-Suggestion. Rules are data, not code, and ship with the app so a new bank format is a
-data change rather than a release.
+A named pattern that turns a Transaction Alert from a given Sender ID into a transaction.
+Rules are data, not code, and ship with the app so a new bank format is a data change
+rather than a release.
 
 A rule that does not match produces **nothing**. It never guesses a partial transaction:
-a plausible wrong amount in a money app is worse than no suggestion at all.
+a plausible wrong amount in a money app is worse than nothing at all.
+
+### Taught Rule
+A Parse Rule the user made by teaching: they pasted a message EleFi could not read and
+copied out its amount, payee, account and date. EleFi learns the message's shape from that
+one example and checks it reads the example back before keeping it. Runs ahead of the
+built-in rules, can be switched off, and can be forgotten.
 
 ### Capture Suggestion
-A parsed, unconfirmed proposal derived from a Transaction Alert: an amount, a direction, a
-likely Container, a likely counterparty, a date.
+What a Parse Rule read from one or two alerts about the same payment: an amount, a
+direction, the Container if the last four digits named one, a counterparty, a note, the
+Payment App.
 
-**A Capture Suggestion is not a Transaction.** It holds no balance, appears in no report,
-is in no export, and is not backed up. It becomes a Transaction only when the user
-confirms it, and confirming is what makes it real.
+**Internal since ADR-0015.** It is recorded at once as a Transaction flagged Needs Review,
+and the suggestion stays behind only as the link between the alerts and that transaction:
+it is how the bank's SMS and the app's notification for one payment become one
+transaction, and how a repeated alert is recognised. It expires after a week. The user
+never sees one.
 
-This is the distinction that keeps [Quick Capture](#quick-capture) honest. Quick Capture
-is *the user acting* through a smaller surface, so it produces a complete Transaction
-flagged Needs Review. A Capture Suggestion is *the app guessing* with no user action at
-all, so it produces nothing until a human agrees. The app never books money on the
-strength of a text message.
-
-### Suggestion Prompt
-The local notification raised for a Capture Suggestion - "₹450 to Zomato?" with Review and
-Dismiss. The only way a suggestion is surfaced outside the app. Review opens the Suggestion
-Inbox; there is no one-tap Add on the notification, because the Container and labels are
-checked there first.
-
-Dismissing destroys the suggestion. Unactioned suggestions expire and are destroyed too.
-Nothing accumulates.
-
-### Suggestion Inbox
-The screen listing every pending Capture Suggestion, titled **To confirm** in the app, where
-each one is checked, corrected, and added or dismissed. The dashboard shows how many are
-waiting.
-
-Deliberately not called "to review", which would blur it with
-[Needs Review](#needs-review): a Needs Review item is a real transaction you recorded and
-should check; an item in the inbox is not a transaction at all yet.
+### Alert Prompt
+The notification raised when an alert has been recorded - "₹450 to Zomato. From HDFC Card
+via GPay. Recorded, needs review." Tapping opens the transaction. Its Delete button
+soft-deletes it, for a message that was not really a payment. When a second alert completes
+the same payment, the prompt already showing is updated rather than joined by another.
 
 ---
 
@@ -346,6 +340,9 @@ transaction.
 Deleting a transaction hides it from every view, every balance, and every export, but
 retains it so the deletion is visible in the timeline and can be undone. Nothing the
 user deletes is destroyed.
+
+Deleted transactions are listed in Settings, with Restore and Restore all. A restored
+transaction returns everywhere at once, flagged Needs Review.
 
 ---
 

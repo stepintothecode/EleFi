@@ -205,7 +205,13 @@ public class CsvExporterTests
             Task.FromResult<IReadOnlyList<ContainerBalance>>([]);
 
         public Task<SpendBreakdown> SpendByLabelAsync(
-            DateOnly fromDate, DateOnly toDate, CancellationToken cancellationToken = default) =>
+            TransactionFilter filter, CancellationToken cancellationToken = default) =>
             Task.FromResult(new SpendBreakdown([], 0));
+
+        public Task<FlowTotals> TotalsAsync(TransactionFilter filter, CancellationToken cancellationToken = default) =>
+            Task.FromResult(default(FlowTotals));
+
+        public Task<IReadOnlyList<Transaction>> ListDeletedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Transaction>>([]);
     }
 }

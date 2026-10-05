@@ -1,7 +1,11 @@
 ---
-status: accepted
+status: accepted, SM2 superseded by ADR-0015 (2026-10-05)
 date: 2026-08-29
 ---
+
+> **Superseded in part.** `SM2`, the rule that a parsed SMS never becomes a transaction without
+> confirmation, was reversed by [ADR-0015](0015-record-alerts-as-needs-review.md): parsed alerts are
+> now recorded straight away, flagged Needs Review. The rest of this ADR stands.
 
 # SMS-assisted capture: parse on device, suggest, never book
 

@@ -270,7 +270,7 @@ Reserved for the properties that must hold universally:
 ∀ money:         parse(format(m)) == m                           -- round-trip
 ∀ backups:       decrypt(encrypt(db, k), k) == db                -- FR-9.3
 ∀ filters:       rows(export(f)) == rows(list(f)), in order      -- X1, NFR-3.11
-∀ suggestions:   no unconfirmed suggestion moves any balance     -- SM2, NFR-3.12
+∀ alerts:        a recorded alert is always flagged Needs Review -- ADR-0015, NFR-3.12
 ```
 
 These are the tests most likely to catch the bug that matters - the one nobody thought to
@@ -521,7 +521,7 @@ database on the broadcast thread is an ANR waiting for a slow morning.
 | **Play refuses the `RECEIVE_SMS` declaration** | Low today, High if the app ever goes to Play | Not a risk under the current sideload-via-GitHub-Releases plan - the policy governs Play distribution, not the app. Kept mitigated regardless: the paste and share-sheet fallbacks (FR-11.22-11.23) are built **first** and ship independently, and a Play build would compile SMS out until approved (NFR-11.2a). ADR-0010 |
 | **MAUI cold start misses NFR-1.1** | High | Measured on a real device in S1, before any screen is built. A miss reopens the Blazor-vs-XAML decision, not the budget |
 | **Motion quality below the Reanimated baseline** | High, product-level | NFR-2 rebaselined honestly; NFR-2.4a cuts an interaction rather than shipping it laggy; ADR-0009 records the trade |
-| **A Parse Rule produces a wrong transaction** | Fatal to trust | `SM2` - nothing is booked without confirmation. A bad parse costs a dismissed notification, not a wrong balance |
+| **A Parse Rule produces a wrong transaction** | High: since ADR-0015 it moves a balance until fixed | Recorded flagged Needs Review with a prompt carrying Delete; the dashboard counts what needs review; rules refuse failed, pending, reversed and requested wording; the delete is restorable |
 | Bank message formats change | Medium, ongoing | Rules are data (NFR-8.11); users can add their own (FR-11.17); a miss costs one manual entry |
 | Silent balance corruption | Fatal to trust | Derived balances, DB-level invariants, property tests, audit trail |
 | Backup unrecoverable (lost passphrase) | Severe, user-facing | Recovery code at setup, blunt warnings, key cached in keystore |

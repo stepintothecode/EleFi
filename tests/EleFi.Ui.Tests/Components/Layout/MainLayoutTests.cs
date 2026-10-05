@@ -23,8 +23,31 @@ namespace EleFi.Ui.Tests.Components.Layout;
 /// </remarks>
 public class MainLayoutTests : Bunit.TestContext
 {
-    /// <summary>The shell hosts the toast list, so it needs the service that feeds it.</summary>
-    public MainLayoutTests() => Services.AddSingleton<EleFi.Ui.Services.ToastService>();
+    private readonly EleFi.Ui.Services.PrivacyMode _privacy = new(new EleFi.Ui.Tests.Support.Fakes.MemorySettings());
+
+    /// <summary>The shell hosts the toast list and the privacy switch, so it needs both.</summary>
+    public MainLayoutTests()
+    {
+        Services.AddSingleton<EleFi.Ui.Services.ToastService>();
+        Services.AddSingleton(_privacy);
+    }
+
+    [Fact]
+    public void Hiding_amounts_marks_the_whole_shell_and_showing_them_unmarks_it()
+    {
+        var component = RenderComponent<MainLayout>(p =>
+            p.Add(x => x.Body, (RenderFragment)(b => b.AddMarkupContent(0, "<p class=\"amount\">₹450</p>"))));
+
+        Assert.DoesNotContain("amounts-hidden", component.Find(".shell").ClassName, StringComparison.Ordinal);
+
+        _privacy.Toggle();
+        component.WaitForAssertion(() =>
+            Assert.Contains("amounts-hidden", component.Find(".shell").ClassName, StringComparison.Ordinal));
+
+        _privacy.Toggle();
+        component.WaitForAssertion(() =>
+            Assert.DoesNotContain("amounts-hidden", component.Find(".shell").ClassName, StringComparison.Ordinal));
+    }
 
     [Fact]
     public void The_shell_renders_its_body()

@@ -100,7 +100,7 @@ worthless.
 | NFR-3.9 | The spend breakdown returns its total **computed once per transaction**, never by summing the per-label buckets, which overlap by design (ADR-0013). What is verified by test: no bucket exceeds the total, unlabelled spend has its own bucket, and the total matches an independent sum over transactions |
 | NFR-3.10 | A migration that could lose data is refused; migrations are forward-only and tested against real backups |
 | NFR-3.11 | An export contains exactly the rows the list shows for the same filter, in the same order (`X1`), verified by property test |
-| NFR-3.12 | No Capture Suggestion ever reaches a balance, an aggregate, a report, an export, or a backup (`SM2`), verified by explicit test |
+| NFR-3.12 | Every transaction recorded from an alert is flagged Needs Review and announced by a prompt, verified by explicit test (ADR-0015, superseding `SM2`'s rule that none reached a balance) |
 
 ---
 

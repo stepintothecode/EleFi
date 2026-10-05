@@ -153,7 +153,8 @@ public class RoutesTests : Bunit.TestContext
         Services.AddSingleton(sp => new BackNavigator(sp.GetRequiredService<NavigationManager>(), systemBack));
         Services.AddSingleton<ToastService>();
         Services.AddSingleton<ILinkOpener>(new NoLinks());
-        Services.AddSingleton(NSubstitute.Substitute.For<ISuggestionRepository>());
+        Services.AddSingleton(new PrivacyMode(new Fakes.MemorySettings()));
+        Services.AddSingleton(new TransactionListState());
     }
 
     private sealed class NoLinks : ILinkOpener

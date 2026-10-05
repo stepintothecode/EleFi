@@ -49,15 +49,25 @@ else
         <button type="button" class="btn-ghost" @onclick="CloseAsync">Close</button>
     </div>
 
+    @* One button and an "i". The explanation used to fill the top of the screen on every
+       flagged transaction, which is most of the ones anyone opens from a message. *@
     @if (_transaction.NeedsReview)
     {
-        <div class="notice info">
-            <strong>Flagged for review.</strong>
-            This was captured quickly, so the label and the details were guessed. Correct
-            anything that is wrong, or confirm it as it stands.
-            <button class="btn-ghost btn-block" style="margin-top:10px;" @onclick="MarkReviewedAsync">
-                Looks right, clear the flag
-            </button>
+        <div class="review-bar">
+            <div class="field-head">
+                <span class="review-flag">Needs review</span>
+                <InfoButton Topic="Needs review">
+                    <p>
+                        This was recorded from a bank SMS or a payment app, or captured quickly, so
+                        some details may have been guessed: usually the container, or who was paid.
+                    </p>
+                    <p class="muted small">
+                        It already counts in every balance. Correct anything below and save, or tap
+                        "Looks right" to confirm it as it stands. Either clears the flag.
+                    </p>
+                </InfoButton>
+            </div>
+            <button class="primary btn-block" @onclick="MarkReviewedAsync">Looks right, clear the flag</button>
         </div>
     }
 

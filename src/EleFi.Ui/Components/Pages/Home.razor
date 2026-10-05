@@ -3,10 +3,14 @@
 @using EleFi.Application.Containers
 @using EleFi.Domain.Balances
 @using EleFi.Domain.Containers
+@using EleFi.Domain.Filters
 @using EleFi.Domain.Money
+@using EleFi.Ui.Services
+@implements IDisposable
 @inject ContainerService Containers
 @inject ITransactionRepository Transactions
-@inject ISuggestionRepository Suggestions
+@inject PrivacyMode Privacy
+@inject TransactionListState ListState
 @inject IClock Clock
 
 @*
@@ -15,6 +19,9 @@
     Net worth is never shown alone. Liquid, Locked, and Owed sit beside it because the
     total on its own hides the situation that matters - most of the wealth untouchable,
     or a card bill about to land.
+
+    Ele is the privacy switch. Tapping it hides every amount in the app, and Ele covers its
+    eyes with its ears for as long as they stay hidden.
 *@
 
 <PageTitle>EleFi</PageTitle>
@@ -31,22 +38,13 @@
             <div class="headline">@Format(_netWorth.Total)</div>
         }
     </div>
-    <MascotViewer Mood="@_mood" />
+    <button type="button" class="mascot-toggle"
+            aria-pressed="@(Privacy.AmountsHidden ? "true" : "false")"
+            aria-label="@(Privacy.AmountsHidden ? "Show amounts" : "Hide amounts")"
+            @onclick="Privacy.Toggle">
+        <MascotViewer Mood="@(Privacy.AmountsHidden ? MascotMood.Hiding : _mood)" />
+    </button>
 </div>
-
-@* Payments spotted but not confirmed. Shown above the figures because every one of them is
-   money those figures do not yet include (SM2). *@
-@if (_toConfirm > 0)
-{
-    <a class="inbox-banner enter" href="suggestions">
-        <span class="count">@_toConfirm</span>
-        <span>
-            <strong>@(_toConfirm == 1 ? "1 payment" : $"{_toConfirm} payments") to confirm</strong>
-            <span class="meta" style="display:block;">Spotted in your SMS and payment apps. Not counted yet.</span>
-        </span>
-        <span class="chev" aria-hidden="true">&rsaquo;</span>
-    </a>
-}
 
 @*
     Guarded on _loading like everything else. These tiles used to render on the very first
@@ -72,7 +70,35 @@
     </div>
 </div>
 
-<h2>This month</h2>
+@* Recorded from an SMS or a payment app, or captured quickly: real, counted, and worth a
+   look. One tap opens the list filtered to just those. *@
+@if (_needsReview > 0)
+{
+    <a class="inbox-banner enter" href="transactions" @onclick="ShowNeedsReview">
+        <span class="count">@_needsReview</span>
+        <span>
+            <strong>@(_needsReview == 1 ? "1 transaction needs" : $"{_needsReview} transactions need") review</strong>
+            <span class="meta" style="display:block;">Recorded from a message or captured quickly.</span>
+        </span>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
+    </a>
+}
+
+@* Tabs rather than a heading, so last month and any other stretch are one tap away. *@
+<div class="segmented" role="tablist" aria-label="Period">
+    <button type="button" role="tab" class="@(_period == DatePreset.ThisMonth ? "on" : null)"
+            aria-selected="@(_period == DatePreset.ThisMonth ? "true" : "false")"
+            @onclick="() => ShowPresetAsync(DatePreset.ThisMonth)">This month</button>
+    <button type="button" role="tab" class="@(_period == DatePreset.LastMonth ? "on" : null)"
+            aria-selected="@(_period == DatePreset.LastMonth ? "true" : "false")"
+            @onclick="() => ShowPresetAsync(DatePreset.LastMonth)">Last month</button>
+    <button type="button" role="tab" class="@(_period == DatePreset.Custom ? "on" : null)"
+            aria-selected="@(_period == DatePreset.Custom ? "true" : "false")"
+            @onclick="() => _rangeOpen = true">@(_period == DatePreset.Custom ? RangeText : "Select a range")</button>
+</div>
+
+<DateRangeSheet Open="_rangeOpen" Initial="_range" OnApply="ShowRangeAsync" OnCancel="() => _rangeOpen = false" />
+
 @if (_loading)
 {
     <div class="card"><div class="skeleton" style="width: 60%;"></div></div>
@@ -80,7 +106,7 @@
 else if (_spend.ByLabel.Count == 0)
 {
     <div class="card muted">
-        Nothing recorded this month yet.
+        Nothing spent in this period.
         <a class="btn btn-ghost" href="capture" style="margin-top: 10px;">Record something</a>
     </div>
 }
@@ -138,6 +164,10 @@ else
             <div class="txn">
                 <div class="grow">
                     <div class="who">@balance.Name</div>
+                    @if (balance.Detail is { } detail)
+                    {
+                        <div class="detail">@detail</div>
+                    }
                     <div class="meta">@balance.Kind.DisplayName()@(balance.IsLiability ? " - owed" : string.Empty)</div>
                 </div>
                 <div class="amount @(balance.IsLiability ? "owed" : string.Empty)">
@@ -157,23 +187,27 @@ else
     private bool _labelsOverlap;
     private Currency _home = Currency.Inr;
     private MascotMood _mood = MascotMood.Idle;
-    private int _toConfirm;
+    private int _needsReview;
+
+    private DatePreset _period = DatePreset.ThisMonth;
+    private TransactionFilter _range = TransactionFilter.Empty;
+    private bool _rangeOpen;
+
+    private string RangeText =>
+        $"{_range.From:d MMM}{(_range.FromTime is { } a ? $" {a:HH\\:mm}" : string.Empty)} to "
+        + $"{_range.To:d MMM}{(_range.ToTime is { } b ? $" {b:HH\\:mm}" : string.Empty)}";
 
     protected override async Task OnInitializedAsync()
     {
-        _toConfirm = await Suggestions.CountPendingAsync();
+        Privacy.Changed += OnPrivacyChanged;
 
+        // Already in picker order: cards, banks, cash and wallets, the rest.
         _balances = await Containers.BalancesAsync();
         _netWorth = await Containers.NetWorthAsync(_home);
+        _needsReview = await Transactions.CountAsync(new TransactionFilter { NeedsReview = true });
 
-        var today = Clock.Today;
-        var monthStart = new DateOnly(today.Year, today.Month, 1);
-        _spend = await Transactions.SpendByLabelAsync(monthStart, today);
-        _largestLabel = _spend.ByLabel.Count == 0 ? 0 : _spend.ByLabel.Max(s => s.AmountMinor);
-
-        // Computed once, not per bar. The buckets exceed the total exactly when some
-        // transaction carries more than one label, which is the only case worth a note.
-        _labelsOverlap = _spend.ByLabel.Sum(s => s.AmountMinor) > _spend.TotalMinor;
+        _range = TransactionFilter.Empty.WithPreset(_period, Clock.Today);
+        await LoadSpendAsync();
 
         // The mascot reacts, but nothing waits on it (NFR-2.7).
         _mood = _netWorth.Owed.Minor > _netWorth.Liquid.Minor ? MascotMood.Concerned : MascotMood.Idle;
@@ -181,5 +215,44 @@ else
         _loading = false;
     }
 
-    private string Format(Money amount) => MoneyText.ToDisplayString(amount);
+    public void Dispose() => Privacy.Changed -= OnPrivacyChanged;
+
+    private void OnPrivacyChanged() => InvokeAsync(StateHasChanged);
+
+    // Set on the list's state rather than passed as a query string. A query in the URL is
+    // replayed whenever back returns to it, which would wipe any filtering done since.
+    private void ShowNeedsReview()
+    {
+        ListState.Filter = TransactionFilter.Empty with { NeedsReview = true };
+        ListState.Preset = DatePreset.AllTime;
+        ListState.Loaded = 0;
+        ListState.ReturnTo = null;
+    }
+
+    private async Task ShowPresetAsync(DatePreset preset)
+    {
+        _period = preset;
+        _range = TransactionFilter.Empty.WithPreset(preset, Clock.Today);
+        await LoadSpendAsync();
+    }
+
+    private async Task ShowRangeAsync(TransactionFilter range)
+    {
+        _rangeOpen = false;
+        _period = DatePreset.Custom;
+        _range = range;
+        await LoadSpendAsync();
+    }
+
+    private async Task LoadSpendAsync()
+    {
+        _spend = await Transactions.SpendByLabelAsync(_range);
+        _largestLabel = _spend.ByLabel.Count == 0 ? 0 : _spend.ByLabel.Max(s => s.AmountMinor);
+
+        // Computed once, not per bar. The buckets exceed the total exactly when some
+        // transaction carries more than one label, which is the only case worth a note.
+        _labelsOverlap = _spend.ByLabel.Sum(s => s.AmountMinor) > _spend.TotalMinor;
+    }
+
+    private static string Format(Money amount) => MoneyText.ToDisplayString(amount);
 }

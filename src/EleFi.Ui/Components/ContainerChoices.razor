@@ -17,9 +17,15 @@
                 {
                     var on = container.Id == Selected;
                     <button type="button"
-                            class="chip @(on ? "on" : string.Empty)"
+                            class="chip chip-stacked @(on ? "on" : string.Empty)"
                             aria-pressed="@(on ? "true" : "false")"
-                            @onclick="() => OnChosen.InvokeAsync(container.Id)">@container.Name</button>
+                            @onclick="() => OnChosen.InvokeAsync(container.Id)">
+                        <span>@container.Name</span>
+                        @if (container.Describe() is { } detail)
+                        {
+                            <small class="detail">@detail</small>
+                        }
+                    </button>
                 }
             </div>
         </section>

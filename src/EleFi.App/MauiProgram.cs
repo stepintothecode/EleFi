@@ -52,7 +52,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ILaunchIntent, AndroidLaunchIntent>();
         builder.Services.AddSingleton<IFilePick, FilePick>();
         builder.Services.AddSingleton<ISystemBack, MauiSystemBack>();
-        builder.Services.AddSingleton<ISuggestionPromptSurface, AndroidSuggestionPrompts>();
+        builder.Services.AddSingleton<IAlertPromptSurface, AndroidAlertPrompts>();
         builder.Services.AddSingleton<IAlertAccess, AndroidAlertAccess>();
 
         // Scoped, matching the WebView's lifetime, so a message raised on one page is still
@@ -61,6 +61,10 @@ public static class MauiProgram
 
         // Scoped for the same reason: one history per WebView, kept across page changes.
         builder.Services.AddScoped<EleFi.Ui.Services.BackNavigator>();
+        builder.Services.AddScoped<EleFi.Ui.Services.TransactionListState>();
+
+        // Scoped too: the layout and the dashboard must see the same switch.
+        builder.Services.AddScoped<EleFi.Ui.Services.PrivacyMode>();
 
         // Transient, not scoped. MascotViewer owns a canvas and disposes its service when it
         // unmounts, so each viewer needs its own instance. Sharing one meant navigating away

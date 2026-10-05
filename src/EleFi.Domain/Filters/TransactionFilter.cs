@@ -32,6 +32,19 @@ public sealed record TransactionFilter
     /// <summary>Latest date to include, inclusive.</summary>
     public DateOnly? To { get; init; }
 
+    /// <summary>
+    /// On the <see cref="From"/> day, the earliest time to include. Ignored without a date.
+    /// </summary>
+    /// <remarks>
+    /// Only the boundary day is cut by time; every day strictly inside the range is whole.
+    /// A transaction recorded without a time is never cut, because hiding it for a time it
+    /// does not have would make it vanish from a range it plainly belongs to.
+    /// </remarks>
+    public TimeOnly? FromTime { get; init; }
+
+    /// <summary>On the <see cref="To"/> day, the latest time to include. Ignored without a date.</summary>
+    public TimeOnly? ToTime { get; init; }
+
     /// <summary>Kinds to include. Empty means all.</summary>
     public IReadOnlyList<TransactionKind> Kinds { get; init; } = [];
 
@@ -85,12 +98,40 @@ public sealed record TransactionFilter
 
     /// <summary>True when nothing is restricted and this selects every transaction.</summary>
     public bool IsEmpty =>
-        From is null && To is null
+        From is null && To is null && FromTime is null && ToTime is null
         && Kinds.Count == 0 && ContainerIds.Count == 0 && LabelIds.Count == 0
         && !UnlabelledOnly && PartyIds.Count == 0 && AppIds.Count == 0
         && MinAmountMinor is null && MaxAmountMinor is null
         && CurrencyCode is null && NeedsReview is null
         && string.IsNullOrWhiteSpace(Search);
+
+    /// <summary>
+    /// The same filter restricted to a preset's dates, with any times cleared.
+    /// </summary>
+    /// <param name="preset">The preset.</param>
+    /// <param name="today">Today, from the device clock.</param>
+    public TransactionFilter WithPreset(DatePreset preset, DateOnly today)
+    {
+        var (from, to) = preset.Range(today);
+        return this with { From = from, To = to, FromTime = null, ToTime = null };
+    }
+
+    /// <summary>True when a transaction on this day at this time falls inside the date range.</summary>
+    /// <remarks>
+    /// The rule the query applies, written once in plain code so it can be tested without a
+    /// database. Only date and time are considered here.
+    /// </remarks>
+    /// <param name="date">The transaction's day.</param>
+    /// <param name="time">Its time of day, if recorded.</param>
+    public bool CoversMoment(DateOnly date, TimeOnly? time)
+    {
+        if (From is { } from && (date < from || (date == from && time is { } t1 && FromTime is { } ft && t1 < ft)))
+        {
+            return false;
+        }
+
+        return To is not { } to || (date <= to && !(date == to && time is { } t2 && ToTime is { } tt && t2 > tt));
+    }
 
     /// <summary>
     /// A short slug describing the filter, for the export filename (FR-7.11, FR-7.22).

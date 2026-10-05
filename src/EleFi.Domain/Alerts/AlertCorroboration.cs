@@ -6,8 +6,8 @@ namespace EleFi.Domain.Alerts;
 /// <remarks>
 /// <para>
 /// One UPI payment usually produces two alerts within seconds: the Payment App's "Paid ₹450
-/// to Zomato" and the bank's "Rs.450.00 debited from a/c XX4417". Offering both would ask
-/// the user to confirm the same money twice, and confirming both would record it twice.
+/// to Zomato" and the bank's "Rs.450.00 debited from a/c XX4417". Recording both would
+/// count the same money twice.
 /// </para>
 /// <para>
 /// The match is deliberately strict: the same amount to the paisa, the same currency, the

@@ -1,0 +1,242 @@
+@page "/settings/teach"
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Suggestions
+@using EleFi.Domain.Alerts
+@using EleFi.Domain.Money
+@using EleFi.Domain.Transactions
+@using EleFi.Ui.Services
+@inject AlertCaptureService Alerts
+@inject ParseRuleService Rules
+@inject ToastService Toasts
+@inject NavigationManager Nav
+@inject IClock Clock
+
+@*
+    Teach EleFi a message.
+
+    Paste a bank message, and EleFi shows what it reads from it. If it reads nothing, or
+    reads it wrong, the user copies the amount, the payee and so on out of the message, and
+    EleFi builds a rule from that one example (RuleInducer). The rule is checked against the
+    example before it is saved, and from then on every message of that shape is recorded
+    automatically.
+
+    Works with no permission at all, which is why it is the version of SMS capture that
+    exists on every platform.
+*@
+
+<PageTitle>Teach EleFi a message</PageTitle>
+
+<div class="field-head" style="margin: 4px 0 16px;">
+    <h1 style="margin:0;">Teach EleFi a message</h1>
+    <InfoButton Topic="Teaching EleFi">
+        <p>Paste a bank message EleFi missed or misread. If it can read it, you can record it straight away.</p>
+        <p class="muted small">
+            If it cannot, copy each value out of the message exactly as it appears: the amount,
+            who was paid, the account's last four digits, the date. EleFi learns the message's
+            shape from that one example and reads every later message like it automatically.
+        </p>
+        <p class="muted small">
+            The message itself is never stored. Only the pattern is kept, and you can switch it
+            off or forget it below. One-time passcodes are never read or learned.
+        </p>
+    </InfoButton>
+</div>
+
+<div class="card">
+    <div class="field">
+        <label for="sender">Sender</label>
+        <input id="sender" @bind="_sender" placeholder="VM-HDFCBK" autocomplete="off" autocapitalize="characters" />
+    </div>
+    <div class="field">
+        <label for="message">Message</label>
+        <textarea id="message" rows="4" @bind="_message"
+                  placeholder="Rs.450.00 debited from a/c XX4417 on 30-08-26 to ZOMATO"></textarea>
+    </div>
+    <button class="primary btn-block" disabled="@_busy" @onclick="ReadAsync">Read it</button>
+</div>
+
+@if (_read is { } read)
+{
+    <div class="card enter">
+        <h2 class="sheet-heading">EleFi reads</h2>
+        <dl class="facts">
+            <dt>Amount</dt><dd class="amount">@MoneyText.ToDisplayString(Money.FromMinor(read.AmountMinor, Currency.Of(read.CurrencyCode)))</dd>
+            <dt>Money</dt><dd>@(read.Direction == TransactionKind.Credit ? "arrived" : "left")</dd>
+            <dt>@(read.Direction == TransactionKind.Credit ? "From" : "To")</dt><dd>@(read.Counterparty ?? "not in the message")</dd>
+            <dt>Account</dt><dd>@(read.Last4 is { } l ? $"••{l}" : "not in the message")</dd>
+            <dt>Date</dt><dd>@(read.OccurredOn?.ToString("d MMM yyyy") ?? "today")</dd>
+        </dl>
+        <div class="row">
+            <button class="primary grow" disabled="@_busy" @onclick="RecordAsync">Record it</button>
+            <button class="btn-ghost" @onclick="() => _teaching = true">That's wrong</button>
+        </div>
+    </div>
+}
+else if (_couldNotRead)
+{
+    <p class="notice error small" role="status">EleFi could not read that message. Teach it below.</p>
+}
+
+@if (_teaching)
+{
+    <div class="card enter">
+        <h2 class="sheet-heading">Show EleFi what it says</h2>
+        <p class="muted small">Copy each value from the message exactly as written. Only the amount is required.</p>
+
+        <div class="chips" role="group" aria-label="Direction" style="margin-bottom:12px;">
+            <button type="button" class="chip @(_direction == TransactionKind.Debit ? "on" : null)" @onclick="() => _direction = TransactionKind.Debit">Money left</button>
+            <button type="button" class="chip @(_direction == TransactionKind.Credit ? "on" : null)" @onclick="() => _direction = TransactionKind.Credit">Money arrived</button>
+        </div>
+
+        <div class="field">
+            <label for="t-amount">Amount</label>
+            <input id="t-amount" @bind="_amount" placeholder="450.00" inputmode="decimal" autocomplete="off" />
+        </div>
+        <div class="field">
+            <label for="t-who">@(_direction == TransactionKind.Credit ? "Received from" : "Paid to") <span class="muted small">(optional)</span></label>
+            <input id="t-who" @bind="_who" placeholder="ZOMATO" autocomplete="off" />
+        </div>
+        <div class="row">
+            <div class="field grow">
+                <label for="t-last4">Account last 4 <span class="muted small">(optional)</span></label>
+                <input id="t-last4" @bind="_last4" placeholder="4417" inputmode="numeric" maxlength="4" autocomplete="off" />
+            </div>
+            <div class="field grow">
+                <label for="t-date">Date <span class="muted small">(optional)</span></label>
+                <input id="t-date" @bind="_date" placeholder="30-08-26" autocomplete="off" />
+            </div>
+        </div>
+        <div class="field">
+            <label for="t-note">Note <span class="muted small">(optional)</span></label>
+            <input id="t-note" @bind="_note" autocomplete="off" />
+        </div>
+
+        @if (_teachError is not null)
+        {
+            <p class="notice error small" role="alert">@_teachError</p>
+        }
+
+        <button class="primary btn-block" disabled="@_busy" @onclick="TeachAsync">Teach EleFi</button>
+    </div>
+}
+
+@if (_taught.Count > 0)
+{
+    <h2>What you've taught</h2>
+    <div class="card">
+        @foreach (var rule in _taught)
+        {
+            <div class="txn">
+                <div class="grow">
+                    <div class="who">@rule.Name</div>
+                    <div class="meta">@(rule.Direction == TransactionKind.Credit ? "Money arriving" : "Money leaving")</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" aria-label="Use @rule.Name" checked="@rule.IsEnabled"
+                           @onchange="e => SetEnabledAsync(rule, e.Value is true)" />
+                    <span class="track"></span>
+                </label>
+                <button class="btn-ghost btn-icon danger" aria-label="Forget @rule.Name" @onclick="() => ForgetAsync(rule)">Forget</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private string _sender = string.Empty;
+    private string _message = string.Empty;
+    private ParsedAlert? _read;
+    private bool _couldNotRead;
+    private bool _teaching;
+    private bool _busy;
+
+    private TransactionKind _direction = TransactionKind.Debit;
+    private string _amount = string.Empty;
+    private string? _who;
+    private string? _last4;
+    private string? _date;
+    private string? _note;
+    private string? _teachError;
+
+    private IReadOnlyList<ParseRule> _taught = [];
+
+    protected override async Task OnInitializedAsync() => _taught = await Rules.TaughtAsync();
+
+    private async Task ReadAsync()
+    {
+        _busy = true;
+        try
+        {
+            _read = await Alerts.ParseAsync(AlertChannel.Sms, _sender.Trim(), _message, Currency.Inr);
+            _couldNotRead = _read is null;
+            _teaching = _read is null;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RecordAsync()
+    {
+        _busy = true;
+        try
+        {
+            var result = await Alerts.IngestAsync(AlertChannel.Sms, _sender.Trim(), _message, Clock.UtcNow, Currency.Inr);
+            if (result.Transaction is not { } transaction)
+            {
+                Toasts.Error(result.Reason ?? "Nothing was recorded.");
+                return;
+            }
+
+            Toasts.Ok("Recorded, flagged for review.");
+            Nav.NavigateTo($"transactions/{transaction.Id}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task TeachAsync()
+    {
+        _busy = true;
+        _teachError = null;
+        try
+        {
+            var taught = await Rules.TeachAsync(new TeachingExample(
+                _sender, _message, _direction, _amount, _who, _last4, _date, _note));
+
+            if (!taught.Succeeded)
+            {
+                _teachError = taught.Error;
+                return;
+            }
+
+            Toasts.Ok("Learned. Messages like this one are now read automatically.");
+            _teaching = false;
+            _taught = await Rules.TaughtAsync();
+
+            // Read it again with the new rule, so the user sees it work and can record it.
+            _read = await Alerts.ParseAsync(AlertChannel.Sms, _sender.Trim(), _message, Currency.Inr);
+            _couldNotRead = _read is null;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SetEnabledAsync(ParseRule rule, bool enabled)
+    {
+        await Rules.SetEnabledAsync(rule.Id, enabled);
+        _taught = await Rules.TaughtAsync();
+    }
+
+    private async Task ForgetAsync(ParseRule rule)
+    {
+        await Rules.ForgetAsync(rule.Id);
+        Toasts.Ok($"Forgot {rule.Name}.");
+        _taught = await Rules.TaughtAsync();
+    }
+}

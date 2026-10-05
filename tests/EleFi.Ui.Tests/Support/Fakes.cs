@@ -28,6 +28,16 @@ internal static class Fakes
         public TimeOnly TimeOfDay { get; } = new(9, 0);
     }
 
+    /// <summary>Small settings in a dictionary.</summary>
+    public sealed class MemorySettings : ISettingsStore
+    {
+        private readonly Dictionary<string, string> _values = [];
+
+        public string Read(string key, string fallback) => _values.GetValueOrDefault(key, fallback);
+
+        public void Write(string key, string value) => _values[key] = value;
+    }
+
     /// <summary>A mascot that does nothing, quietly.</summary>
     public sealed class SilentMascot : IMascotService
     {
@@ -127,8 +137,14 @@ internal static class Fakes
             TransactionFilter filter, int skip = 0, int? take = null, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Transaction>>([]);
 
+        /// <summary>What <see cref="CountAsync"/> returns for a needs-review filter.</summary>
+        public int NeedsReviewCount { get; set; }
+
+        /// <summary>What <see cref="BalancesAsync"/> returns.</summary>
+        public IReadOnlyList<ContainerBalance> Balances { get; set; } = [];
+
         public Task<int> CountAsync(TransactionFilter filter, CancellationToken cancellationToken = default) =>
-            Task.FromResult(0);
+            Task.FromResult(filter.NeedsReview == true ? NeedsReviewCount : 0);
 
         public Task<Transaction?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult<Transaction?>(null);
@@ -144,11 +160,26 @@ internal static class Fakes
         public Task RestoreAsync(Guid id, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<IReadOnlyList<ContainerBalance>> BalancesAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<ContainerBalance>>([]);
+            Task.FromResult(Balances);
+
+        /// <summary>The filter the dashboard last asked about, so a test can check its range.</summary>
+        public TransactionFilter? LastSpendFilter { get; private set; }
+
+        /// <summary>What <see cref="TotalsAsync"/> returns.</summary>
+        public FlowTotals Totals { get; set; }
 
         public Task<SpendBreakdown> SpendByLabelAsync(
-            DateOnly fromDate, DateOnly toDate, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Spend);
+            TransactionFilter filter, CancellationToken cancellationToken = default)
+        {
+            LastSpendFilter = filter;
+            return Task.FromResult(Spend);
+        }
+
+        public Task<FlowTotals> TotalsAsync(TransactionFilter filter, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Totals);
+
+        public Task<IReadOnlyList<Transaction>> ListDeletedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Transaction>>([]);
     }
 
     /// <summary>A small starter label set.</summary>

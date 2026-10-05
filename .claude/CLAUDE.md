@@ -34,8 +34,10 @@ BankAccount kind. Saying it for the general concept is how this model gets muddl
 **Say Source and Destination, never To and From.** To/From were the ambiguous sketch terms
 that this model exists to replace.
 
-**Say Capture Suggestion, not draft.** A parsed SMS is a suggestion, and it is not a
-transaction until a human confirms it. There are no drafts in this app.
+**Say Needs Review, not draft.** There are no drafts in this app. A Quick Capture and a
+parsed SMS or payment-app alert are both real transactions flagged Needs Review
+(`ADR-0015`). A Capture Suggestion is now only the internal link between alerts and the
+transaction they recorded.
 
 **Say Label, never tag or category.** There is one concept, and it behaves like a tag: flat,
 optional, many per transaction. A Tag entity existed and was removed in `ADR-0013`.
@@ -53,9 +55,12 @@ These are invariants, not preferences. Breaking one is a bug even if tests pass.
 - Transaction kind is **derived** from its two parties. It is never a stored field.
 - **Self Transfers are excluded from every spend and income aggregate.** This is what stops
   credit-card bill payments double-counting.
-- Deletes are **soft**. The single exception is a dismissed or expired Capture Suggestion,
-  which is machine output the user rejected, not user-entered data.
-- **A parsed SMS never becomes a transaction without explicit user confirmation** (`SM2`).
+- Deletes are **soft**, and restorable from Settings > Deleted, coming back flagged for
+  review. The single exception is an expired Capture Suggestion link, which is machine
+  bookkeeping, not user-entered data.
+- **A parsed alert is recorded as Needs Review, never silently** (`ADR-0015`, superseding
+  `SM2`). It goes through `CaptureService` like any capture, raises a prompt saying it was
+  recorded, and a message no rule reads produces nothing at all.
 - **An SMS body is never persisted, logged, audited, backed up, or exported** (`SM1`). It
   is a `ref struct` and cannot escape the receiver.
 - **The export is the filtered list, serialised** (`X1`). Same rows, same order, no separate

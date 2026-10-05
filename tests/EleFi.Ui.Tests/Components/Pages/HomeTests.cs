@@ -4,7 +4,9 @@ using EleFi.Application.Containers;
 using EleFi.Ui.Components.Pages;
 using EleFi.Ui.Tests.Support;
 using Microsoft.Extensions.DependencyInjection;
-using NSubstitute;
+using EleFi.Domain.Balances;
+using EleFi.Domain.Containers;
+using EleFi.Domain.Money;
 
 namespace EleFi.Ui.Tests.Components.Pages;
 
@@ -82,22 +84,22 @@ public class HomeTests : Bunit.TestContext
     }
 
     [Fact]
-    public void Payments_waiting_to_be_confirmed_are_announced_and_link_to_the_inbox()
+    public void Transactions_needing_review_are_announced_and_link_to_just_those()
     {
-        Register(toConfirm: 2);
+        Register(needsReview: 2);
 
         var component = RenderComponent<Home>();
 
         var banner = component.Find("a.inbox-banner");
-        Assert.Equal("suggestions", banner.GetAttribute("href"));
-        Assert.Contains("2 payments to confirm", banner.TextContent, StringComparison.Ordinal);
+        Assert.Equal("transactions", banner.GetAttribute("href"));
+        Assert.Contains("2 transactions need review", banner.TextContent, StringComparison.Ordinal);
 
-        // SM2: the dashboard says plainly that these are not in the figures beside them.
-        Assert.Contains("Not counted yet", banner.TextContent, StringComparison.Ordinal);
+        banner.Click();
+        Assert.True(Services.GetRequiredService<EleFi.Ui.Services.TransactionListState>().Filter.NeedsReview);
     }
 
     [Fact]
-    public void With_nothing_waiting_there_is_no_banner()
+    public void With_nothing_to_review_there_is_no_banner()
     {
         Register();
 
@@ -106,20 +108,94 @@ public class HomeTests : Bunit.TestContext
         Assert.Empty(component.FindAll("a.inbox-banner"));
     }
 
-    private void Register(SpendBreakdown? spend = null, int toConfirm = 0)
+    [Fact]
+    public void This_month_is_the_tab_shown_first()
+    {
+        Register();
+
+        var component = RenderComponent<Home>();
+
+        Assert.Equal("This month", component.Find(".segmented [aria-selected=true]").TextContent);
+        Assert.Equal(new DateOnly(2026, 8, 1), _transactions.LastSpendFilter!.From);
+        Assert.Equal(new DateOnly(2026, 8, 30), _transactions.LastSpendFilter.To);
+    }
+
+    [Fact]
+    public void Last_month_is_one_tap_away()
+    {
+        Register();
+        var component = RenderComponent<Home>();
+
+        component.FindAll(".segmented button")[1].Click();
+
+        Assert.Equal("Last month", component.Find(".segmented [aria-selected=true]").TextContent);
+        Assert.Equal(new DateOnly(2026, 7, 1), _transactions.LastSpendFilter!.From);
+        Assert.Equal(new DateOnly(2026, 7, 31), _transactions.LastSpendFilter.To);
+    }
+
+    [Fact]
+    public void Select_a_range_asks_for_dates_and_times_and_then_shows_that_range()
+    {
+        Register();
+        var component = RenderComponent<Home>();
+
+        component.FindAll(".segmented button")[2].Click();
+        Assert.Equal("Select a range", component.Find("[role=dialog]").GetAttribute("aria-label"));
+
+        component.Find("#range-from").Change("2026-08-10");
+        component.Find("#range-from-time").Change("18:00:00");
+        component.Find("#range-to").Change("2026-08-12");
+        component.Find("[role=dialog] button.primary").Click();
+
+        Assert.Equal(new DateOnly(2026, 8, 10), _transactions.LastSpendFilter!.From);
+        Assert.Equal(new TimeOnly(18, 0), _transactions.LastSpendFilter.FromTime);
+        Assert.Equal(new DateOnly(2026, 8, 12), _transactions.LastSpendFilter.To);
+        Assert.Contains("10 Aug 18:00 to 12 Aug", component.Find(".segmented [aria-selected=true]").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tapping_ele_hides_every_amount_and_ele_covers_its_eyes()
+    {
+        Register();
+        var component = RenderComponent<Home>();
+
+        component.Find(".mascot-toggle").Click();
+
+        Assert.True(_privacy.AmountsHidden);
+        Assert.Equal("Mascot, covering its eyes", component.Find("canvas").GetAttribute("aria-label"));
+        Assert.Equal("Show amounts", component.Find(".mascot-toggle").GetAttribute("aria-label"));
+    }
+
+    [Fact]
+    public void A_containers_bank_and_last_four_sit_under_its_name()
+    {
+        Register(balances: [new ContainerBalance(Guid.NewGuid(), "Savings", ContainerKind.BankAccount, Money.FromMinor(100, Currency.Inr), "HDFC Bank ••4417")]);
+
+        var component = RenderComponent<Home>();
+
+        Assert.Equal("HDFC Bank ••4417", component.Find(".txn .detail").TextContent);
+    }
+
+    private readonly EleFi.Ui.Services.PrivacyMode _privacy = new(new Fakes.MemorySettings());
+    private Fakes.EmptyTransactions _transactions = new();
+
+    private void Register(SpendBreakdown? spend = null, int needsReview = 0, IReadOnlyList<ContainerBalance>? balances = null)
     {
         var clock = new Fakes.StoppedClock();
         var containers = new Fakes.EmptyContainers();
-        var transactions = new Fakes.EmptyTransactions { Spend = spend ?? new SpendBreakdown([], 0) };
+        _transactions = new Fakes.EmptyTransactions
+        {
+            Spend = spend ?? new SpendBreakdown([], 0),
+            NeedsReviewCount = needsReview,
+            Balances = balances ?? [],
+        };
 
-        var suggestions = Substitute.For<ISuggestionRepository>();
-        suggestions.CountPendingAsync(Arg.Any<CancellationToken>()).Returns(toConfirm);
-        Services.AddSingleton(suggestions);
-
+        Services.AddSingleton(_privacy);
+        Services.AddSingleton(new EleFi.Ui.Services.TransactionListState());
         Services.AddSingleton<IClock>(clock);
-        Services.AddSingleton<ITransactionRepository>(transactions);
+        Services.AddSingleton<ITransactionRepository>(_transactions);
         Services.AddSingleton<IContainerRepository>(containers);
-        Services.AddSingleton(new ContainerService(containers, transactions, clock));
+        Services.AddSingleton(new ContainerService(containers, _transactions, clock));
         Services.AddSingleton<IMascotService>(new Fakes.SilentMascot());
     }
 }

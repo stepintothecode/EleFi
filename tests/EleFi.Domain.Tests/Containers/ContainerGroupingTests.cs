@@ -86,5 +86,16 @@ public class ContainerGroupingTests
         Assert.Equal(["Amex", "SBI"], ordered.Select(c => c.Name));
     }
 
+    [Fact]
+    public void Any_list_describing_containers_can_be_put_in_picker_order()
+    {
+        var balances = new[] { ("SBI", ContainerKind.BankAccount), ("FD", ContainerKind.FixedDeposit), ("Amex", ContainerKind.CreditCard), ("Axis", ContainerKind.BankAccount) };
+
+        var ordered = ContainerGrouping.InPickerOrder(balances, b => b.Item2);
+
+        // Sections in order, and the incoming order kept inside each one.
+        Assert.Equal(["Amex", "SBI", "Axis", "FD"], ordered.Select(b => b.Item1));
+    }
+
     private static Container Make(string name, ContainerKind kind) => new() { Name = name, Kind = kind };
 }

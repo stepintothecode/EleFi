@@ -20,7 +20,9 @@
         <optgroup label="@group.Heading">
             @foreach (var container in group.Containers)
             {
-                <option value="@container.Id">@container.Name</option>
+                @* A select option has room for one line, so the bank and last four digits ride
+                   along after the name rather than under it. *@
+                <option value="@container.Id">@container.Name@(container.Describe() is { } detail ? $" · {detail}" : string.Empty)</option>
             }
         </optgroup>
     }

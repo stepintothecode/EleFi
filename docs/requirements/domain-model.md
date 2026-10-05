@@ -479,8 +479,12 @@ The SMS-assisted capture path. Vocabulary in
 [CONTEXT.md](../CONTEXT.md#alerts-and-suggestions); the decision and its risks in
 [ADR-0010](../adr/0010-on-device-sms-assisted-capture.md).
 
-**Read `SM2` before reading anything else in this section.** Everything here is shaped by
-it.
+> **`SM2` was superseded on 2026-10-05 by [ADR-0015](../adr/0015-record-alerts-as-needs-review.md).**
+> A parsed alert is now recorded straight away as a Transaction flagged Needs Review. A
+> CaptureSuggestion is created already `Confirmed`, as the link between the alerts and that
+> transaction (`SM6`, `SM14`), and expires after a week. The invariants below are kept as
+> written, with the superseded ones marked, because the reasoning is still the best record
+> of what the change gave up.
 
 ### ParseRule
 
@@ -570,8 +574,8 @@ and the sender is folded into it rather than stored beside it.
   and never exported.** It exists as a string in memory inside the receiver and is
   unreachable after the suggestion is built. This is the strictest rule in the document
   and it has no exceptions.
-- `SM2` - **A CaptureSuggestion is not a Transaction and never becomes one without an
-  explicit user confirmation.** It contributes to no balance, no aggregate, no report, no
+- `SM2` - **Superseded by ADR-0015.** Was: *A CaptureSuggestion is not a Transaction and never becomes one without an
+  explicit user confirmation.* It contributes to no balance, no aggregate, no report, no
   export, and no backup. The app does not book money because a bank sent a text message.
 - `SM3` - Only messages whose sender matches an **enabled** rule's `sender_pattern` are
   parsed. Every other message is discarded inside the receiver, before the body is
@@ -579,7 +583,8 @@ and the sender is folded into it rather than stored beside it.
 - `SM4` - OTP, verification, and one-time-passcode messages are never parsed, never
   stored, and never surfaced, including when they arrive from a matching sender. Builtin
   rules must not match them, and this is covered by a test with real OTP formats.
-- `SM5` - Suggestions are **hard-deleted** on dismiss and on expiry. This is a deliberate
+- `SM5` - *(Since ADR-0015: links are hard-deleted on expiry, in every state; there is no
+  dismiss. The transaction they recorded is soft-deleted like any other.)* Suggestions are **hard-deleted** on dismiss and on expiry. This is a deliberate
   exception to soft delete: soft delete protects *user-entered* data, and a suggestion is
   machine-derived data the user has actively rejected. Keeping it would be retaining
   message-derived content the user said no to.
@@ -590,10 +595,11 @@ and the sender is folded into it rather than stored beside it.
   transaction for one real payment.
 - `SM8` - Confirmation runs through the **same** transaction creation path as manual
   capture, so `T1`-`T9` apply unchanged. There is no privileged write.
-- `SM9` - A confirmed transaction records `capture_source = 'Sms'` and the audit trail
-  says the suggestion was confirmed, never that the SMS created it.
+- `SM9` - A recorded transaction carries `capture_source = 'Sms'` (or `'PaymentApp'`, `SM15`)
+  and `needs_review = 1`, and the audit trail shows it was created from an alert.
 - `SM10` - With the SMS permission absent or revoked, **no functionality is lost** beyond
-  suggestions themselves. Every affected screen degrades to manual capture.
+  automatic recording itself. Every affected screen degrades to manual capture, and
+  Teach EleFi a message still works without any permission.
 - `SM11` - `container_id` is populated only by an exact `last4` match against a
   non-archived container. An ambiguous or absent match leaves it null and the user is
   asked. It is never inferred from the counterparty, the amount, or history.
@@ -609,6 +615,10 @@ and the sender is folded into it rather than stored beside it.
   container comes only from the bank's `last4` (`SM11`), an app's payee name replaces an
   SMS's, and the bank's date replaces the default. A new alert that pairs with an already
   **confirmed** suggestion is absorbed and not offered again.
+- `SM17` - With no matched container, an alert is recorded against a guess (the app's
+  default container, then the one last used with that app, then the first in picker order,
+  skipping cards for a card bill), and only a still-flagged transaction is ever changed by a
+  later alert (ADR-0015).
 - `SM16` - A credit-card bill paid through a Payment App is a **Self Transfer** suggestion,
   never a Debit (`D1`). It pairs with the bank's Debit SMS for the same payment, turning the
   merged suggestion into a Self Transfer, and confirming it asks which card was paid.

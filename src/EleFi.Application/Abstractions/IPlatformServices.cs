@@ -58,6 +58,9 @@ public enum MascotMood
 
     /// <summary>Something failed.</summary>
     Sad = 4,
+
+    /// <summary>Ears folded over its eyes: amounts are hidden.</summary>
+    Hiding = 5,
 }
 
 /// <summary>
@@ -126,29 +129,29 @@ public interface ILaunchIntent
     event Action? RouteRequested;
 }
 
-/// <summary>What a Suggestion Prompt says.</summary>
-/// <param name="SuggestionId">The suggestion it is about. Also its notification identity.</param>
-/// <param name="Title">The headline: "₹450 to Zomato?".</param>
-/// <param name="Body">The detail: which container, which app, and what to do.</param>
-public sealed record SuggestionPrompt(Guid SuggestionId, string Title, string Body);
+/// <summary>What an Alert Prompt says.</summary>
+/// <param name="TransactionId">The transaction it recorded. Also its notification identity.</param>
+/// <param name="Title">The headline: "₹450 to Zomato".</param>
+/// <param name="Body">The detail: which container, which app, and that it needs review.</param>
+public sealed record AlertPrompt(Guid TransactionId, string Title, string Body);
 
 /// <summary>
-/// Raises and withdraws Suggestion Prompts: the local notification that is the only way a
-/// Capture Suggestion is ever surfaced outside the app.
+/// Raises and withdraws Alert Prompts: the notification that says a payment was just
+/// recorded from an SMS or a Payment App, flagged for review.
 /// </summary>
 /// <remarks>
-/// Tapping a prompt opens the suggestion inbox; nothing about a prompt records money by
-/// itself (SM2).
+/// Tapping one opens the transaction. Its Delete button soft-deletes it, restorable from
+/// Settings, for the alert that was not really a payment.
 /// </remarks>
-public interface ISuggestionPromptSurface
+public interface IAlertPromptSurface
 {
-    /// <summary>Shows a prompt, or replaces the one already showing for that suggestion.</summary>
+    /// <summary>Shows a prompt, or replaces the one already showing for that transaction.</summary>
     /// <param name="prompt">What it says.</param>
-    void Show(SuggestionPrompt prompt);
+    void Show(AlertPrompt prompt);
 
-    /// <summary>Removes a suggestion's prompt, once it has been confirmed or dismissed.</summary>
-    /// <param name="suggestionId">The suggestion.</param>
-    void Withdraw(Guid suggestionId);
+    /// <summary>Removes a transaction's prompt.</summary>
+    /// <param name="transactionId">The transaction.</param>
+    void Withdraw(Guid transactionId);
 }
 
 /// <summary>

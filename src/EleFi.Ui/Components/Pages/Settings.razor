@@ -3,12 +3,10 @@
 @using System.Text.Json
 @using EleFi.Application.Abstractions
 @using EleFi.Application.Backup
-@using EleFi.Application.Labels
 @using EleFi.Application.Suggestions
 @using EleFi.Domain.Alerts
-@using EleFi.Domain.Labels
 @using EleFi.Ui.Services
-@inject LabelService LabelsService
+@inject PrivacyMode Privacy
 @inject AlertCaptureSettings Capture
 @inject IAlertAccess Access
 @inject IDataWipe Wipe
@@ -21,7 +19,8 @@
 @inject NavigationManager Nav
 
 @*
-    Settings, and the honest list of what is not built yet.
+    Settings, and the honest list of what is not built yet. Each card is its buttons and an
+    "i"; the explanations live behind the i, so the page reads as a list of things to do.
 
     A backup section that says "not built" is more useful than no section at all, because it
     tells you your data is currently on exactly one device. Until the encrypted Drive path
@@ -32,75 +31,61 @@
 
 <h1>Settings</h1>
 
-<div class="section-head">
-    <h2 style="margin:0;">Labels</h2>
-    <button class="btn-ghost" @onclick="StartCreate">Add</button>
+<div class="card">
+    <div class="row between">
+        <div class="grow">
+            <div class="who">Hide amounts</div>
+            <div class="meta">Blurs every amount in the app. Tapping Ele on Home does the same.</div>
+        </div>
+        <label class="switch">
+            <input type="checkbox" aria-label="Hide amounts" checked="@Privacy.AmountsHidden"
+                   @onchange="e => Privacy.Set(e.Value is true)" />
+            <span class="track"></span>
+        </label>
+    </div>
 </div>
 
-<div class="card">
-    @if (_labels.Count == 0)
-    {
-        <p class="muted small" style="margin:0;">No labels yet.</p>
-    }
-    else
-    {
-        @foreach (var label in _labels)
-        {
-            <div class="txn">
-                <span class="swatch" style="background: @(label.Colour ?? "var(--ele-accent)")"></span>
-                <div class="grow">
-                    <div class="who">@label.Name</div>
-                </div>
-                <button class="btn-ghost btn-icon" aria-label="Rename @label.Name"
-                        @onclick="() => StartEdit(label)">Edit</button>
-                <button class="btn-ghost btn-icon danger" aria-label="Delete @label.Name"
-                        @onclick="() => ConfirmDeleteLabelAsync(label)">Delete</button>
-            </div>
-        }
-    }
+<div class="field-head section-gap">
+    <h2 style="margin:0;">Your data</h2>
+    <InfoButton Topic="Your data">
+        <p><strong>Labels</strong> are the words you tag transactions with. Edit them on their own page.</p>
+        <p class="muted small">
+            <strong>Export</strong> writes one JSON file with every container, label and
+            transaction. Keep it somewhere safe and you can put it all back.
+            <strong>The file is not encrypted.</strong> It is your whole financial history in
+            readable text, so where you put it matters.
+        </p>
+        <p class="muted small">
+            <strong>Restore</strong> replaces everything on this device with the contents of a
+            backup. Merging is not offered: it would produce a third state matching neither.
+        </p>
+        <p class="muted small">
+            <strong>Deleted transactions</strong> are kept, out of every balance and list, until
+            you restore them. A restored one comes back flagged for review.
+        </p>
+    </InfoButton>
 </div>
-
-<p class="muted small">
-    A transaction can carry as many labels as you like, or none at all.
-</p>
-
-<h2>Your data</h2>
-<div class="card">
-    <div class="who">Export everything</div>
-    <p class="small muted">
-        One JSON file with every container, label and transaction. Keep it somewhere safe and
-        you can put it all back.
-    </p>
-    <p class="small notice error">
-        <strong>The file is not encrypted.</strong> It is your whole financial history in
-        readable text, so where you put it matters.
-    </p>
+<div class="card stack">
+    <a class="btn btn-ghost btn-block" href="settings/labels">Edit labels</a>
+    <a class="btn btn-ghost btn-block" href="settings/deleted">Deleted transactions</a>
     <button class="btn-ghost btn-block" disabled="@_busy" @onclick="ExportAsync">Export to a file</button>
+    <button class="btn-ghost btn-block" disabled="@_busy" @onclick="StartRestore">Restore from a file</button>
 </div>
 
-<div class="card">
-    <div class="who">Restore from a file</div>
-    <p class="small muted">
-        Replaces everything on this device with the contents of a backup. Merging is not
-        offered: it would produce a third state matching neither, which is the last thing you
-        want from a restore.
-    </p>
-    <button class="btn-ghost btn-block" disabled="@_busy" @onclick="StartRestore">Choose a backup file</button>
-</div>
-
-@* NFR-10.7: on a platform that cannot read alerts, no switch is shown at all. The paste
-   path works everywhere, so that is what remains. *@
-<div class="field-head" style="margin: 20px 0 10px;">
+@* NFR-10.7: on a platform that cannot read alerts, no switch is shown at all. Teaching
+   EleFi a message works everywhere, so that is what remains. *@
+<div class="field-head section-gap">
     <h2 style="margin:0;">Automatic capture</h2>
     <InfoButton Topic="Automatic capture">
         <p>
             EleFi reads payment alerts on this phone: bank SMS, and notifications from GPay,
-            PhonePe, Paytm, Amazon Pay and CRED. Each one becomes a payment <strong>to
-            confirm</strong>, never a transaction by itself.
+            PhonePe, Paytm, Amazon Pay and CRED. Each one is recorded straight away as a
+            transaction flagged <strong>needs review</strong>, so check it when you can.
         </p>
         <p class="muted small">
-            When the bank and the app both report the same payment, they are merged: the bank
-            says which card, the app says who you paid and your note.
+            When the bank and the app both report the same payment, they become one
+            transaction: the bank says which card, the app says who you paid and your note. A
+            credit-card bill is recorded as a transfer to the card, never as spending.
         </p>
         <p class="muted small">
             Nothing leaves the phone. The message text is never stored, and one-time passcodes
@@ -148,25 +133,25 @@
         }
     }
 
-    <a class="btn btn-ghost btn-block" style="margin-top:12px;" href="suggestions">
-        @(Access.IsSupported ? "Payments to confirm" : "Paste a bank message")
-    </a>
+    <a class="btn btn-ghost btn-block" style="margin-top:12px;" href="settings/teach">Teach EleFi a message</a>
 </div>
 
-<h2>Google Drive backup</h2>
+<div class="field-head section-gap">
+    <h2 style="margin:0;">Google Drive backup</h2>
+    <InfoButton Topic="Google Drive backup">
+        <p>
+            There is no EleFi account and never will be. It will use <em>your</em> Google account
+            and a private app folder, encrypted on this device before it leaves, so Google holds
+            something it cannot read.
+        </p>
+        <p class="muted small">Until it exists, use Export to a file above.</p>
+    </InfoButton>
+</div>
 <div class="card">
     <div class="row between">
-        <div class="grow">
-            <div class="who">Encrypted backup to your own Drive</div>
-            <div class="meta">Not built yet</div>
-        </div>
-        <button class="btn-ghost" disabled>Set up</button>
+        <div class="who grow">Encrypted backup to your own Drive</div>
+        <button class="btn-ghost" disabled>Not built yet</button>
     </div>
-    <p class="small muted" style="margin-bottom:0;">
-        There is no EleFi account and never will be. It will use <em>your</em> Google account
-        and a private app folder, encrypted on this device before it leaves, so Google holds
-        something it cannot read. Until then, use the export above.
-    </p>
 </div>
 
 <h2>About</h2>
@@ -225,50 +210,6 @@
     <button class="btn-ghost btn-block danger" @onclick="() => _wipeArmed = true">Wipe all data</button>
 </div>
 
-@* Labels, in a sheet. Appending a form below a long list meant scrolling past everything to
-   find it, and nothing about it said a new thing had appeared. *@
-<Modal Open="_editing is not null" Title="@(_editingId is null ? "New label" : "Rename label")"
-       OnCancel="CancelEdit">
-    <div class="field">
-        <label for="label-name">Name</label>
-        <input id="label-name" @bind="_editing" placeholder="Groceries" autocomplete="off" />
-    </div>
-
-    <div class="field">
-        <label>Colour</label>
-        <div class="chips">
-            @foreach (var colour in Palette)
-            {
-                <button type="button"
-                        class="swatch-btn @(_colour == colour ? "on" : string.Empty)"
-                        style="background: @colour"
-                        aria-label="@colour"
-                        @onclick="() => _colour = colour"></button>
-            }
-        </div>
-    </div>
-
-    <button class="primary btn-block" @onclick="SaveLabelAsync">Save</button>
-</Modal>
-
-<Modal Open="_deletingLabel is not null" Title="Delete this label?" OnCancel="() => _deletingLabel = null">
-    @if (_deletingLabel is { } label)
-    {
-        <p class="small">
-            <strong>@label.Name</strong> is on @_deletingUsage
-            @(_deletingUsage == 1 ? "transaction" : "transactions").
-        </p>
-        <p class="small muted">
-            Those transactions stay exactly as they are and their amounts do not change. They
-            simply stop carrying this label.
-        </p>
-        <div class="row">
-            <button class="btn-ghost grow" @onclick="() => _deletingLabel = null">Keep it</button>
-            <button class="primary danger grow" @onclick="DeleteLabelAsync">Delete</button>
-        </div>
-    }
-</Modal>
-
 <Modal Open="_wipeArmed" Title="Wipe everything?" OnCancel="CancelWipe">
     <p class="small">
         This deletes every container, transaction and label on this device. There is no cloud
@@ -310,18 +251,6 @@
     private const string GitHubUrl = "https://github.com/menonkartikeya/EleFi";
     private const string YouTubeUrl = "https://www.youtube.com/@StepIntoTheCode";
 
-    private static readonly string[] Palette =
-        ["#f97316", "#0ea5e9", "#a855f7", "#ef4444", "#f43f5e", "#10b981", "#22c55e", "#6366f1", "#94a3b8"];
-
-    private IReadOnlyList<Label> _labels = [];
-
-    private string? _editing;
-    private Guid? _editingId;
-    private string? _colour;
-
-    private Label? _deletingLabel;
-    private int _deletingUsage;
-
     private bool _wipeArmed;
     private string _wipeConfirm = string.Empty;
 
@@ -336,7 +265,7 @@
     // actually letting it happen. Showing only one of the two is how a dead feature looks alive.
     private string SmsStatus => !_smsOn
         ? "Off. No messages are read."
-        : Access.CanReadSms ? "On. Bank messages become payments to confirm." : "On, but the SMS permission is missing.";
+        : Access.CanReadSms ? "On. Bank messages are recorded, flagged for review." : "On, but the SMS permission is missing.";
 
     private string AppsStatus => !_appsOn
         ? $"Off. {string.Join(", ", PaymentApps.All.Select(a => a.Name))}."
@@ -344,14 +273,11 @@
             ? "On. Fills in who you paid, and your note."
             : "On, but notification access is not allowed yet.";
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         _smsOn = Capture.SmsEnabled;
         _appsOn = Capture.PaymentAppsEnabled;
-        await ReloadAsync();
     }
-
-    private async Task ReloadAsync() => _labels = await LabelsService.ListAsync();
 
     private async Task ToggleSmsAsync(ChangeEventArgs e)
     {
@@ -401,73 +327,6 @@
             Toasts.Info("Turn on EleFi in the list that opens, then come back.");
             Access.OpenNotificationAccessSettings();
         }
-    }
-
-    private void StartCreate()
-    {
-        _editing = string.Empty;
-        _editingId = null;
-        _colour = Palette[0];
-    }
-
-    private void StartEdit(Label label)
-    {
-        _editing = label.Name;
-        _editingId = label.Id;
-        _colour = label.Colour ?? Palette[0];
-    }
-
-    private void CancelEdit()
-    {
-        _editing = null;
-        _editingId = null;
-    }
-
-    private async Task SaveLabelAsync()
-    {
-        var name = _editing ?? string.Empty;
-
-        var result = _editingId is { } id
-            ? await LabelsService.UpdateAsync(id, name, _colour)
-            : await LabelsService.CreateAsync(name, _colour);
-
-        if (!result.Succeeded)
-        {
-            Toasts.Error(result.Error!);
-            return;
-        }
-
-        Toasts.Ok(_editingId is null ? $"Added {result.Label!.Name}." : $"Renamed to {result.Label!.Name}.");
-        CancelEdit();
-        await ReloadAsync();
-    }
-
-    private async Task ConfirmDeleteLabelAsync(Label label)
-    {
-        // Count first, so the confirmation can say what it will actually affect rather than
-        // asking the user to guess.
-        _deletingUsage = await LabelsService.UsageAsync(label.Id);
-        _deletingLabel = label;
-    }
-
-    private async Task DeleteLabelAsync()
-    {
-        if (_deletingLabel is not { } label)
-        {
-            return;
-        }
-
-        var result = await LabelsService.DeleteAsync(label.Id);
-        _deletingLabel = null;
-
-        if (!result.Succeeded)
-        {
-            Toasts.Error(result.Error!);
-            return;
-        }
-
-        Toasts.Ok($"Deleted {label.Name}.");
-        await ReloadAsync();
     }
 
     private void CancelWipe()
@@ -557,7 +416,6 @@
             var count = await Backup.RestoreAsync(file);
 
             Toasts.Ok($"Restored {count} transactions.");
-            await ReloadAsync();
             Nav.NavigateTo("/", forceLoad: false);
         }
         catch (Exception ex)

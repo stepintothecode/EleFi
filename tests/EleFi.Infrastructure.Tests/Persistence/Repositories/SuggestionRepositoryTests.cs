@@ -16,14 +16,14 @@ public class SuggestionRepositoryTests
     private static readonly DateOnly Today = new(2026, 9, 1);
 
     [Fact]
-    public async Task A_merged_suggestion_keeps_both_channels_the_app_and_the_note()
+    public async Task A_merged_link_keeps_both_channels_the_app_and_the_note_and_points_at_one_transaction()
     {
         await using var f = await TestDatabase.CreateAsync(Today);
         await AddCardAsync(f);
 
-        await f.Suggestions.IngestAsync(
-            "VM-HDFCBK", "Rs.450.00 debited from a/c XX4417 on 01-09-26 to ZOMATO", f.Clock.UtcNow, Currency.Inr);
-        await f.Suggestions.IngestAsync(
+        await f.Alerts.IngestAsync(
+            AlertChannel.Sms, "VM-HDFCBK", "Rs.450.00 debited from a/c XX4417 on 01-09-26 to ZOMATO", f.Clock.UtcNow, Currency.Inr);
+        await f.Alerts.IngestAsync(
             AlertChannel.PaymentApp, PaymentApps.GPay.Package, "Paid ₹450 to Zomato for Lunch", f.Clock.UtcNow, Currency.Inr);
 
         f.Db.ChangeTracker.Clear();
@@ -34,6 +34,11 @@ public class SuggestionRepositoryTests
         Assert.Equal("Lunch", stored.Note);
         Assert.Equal("Zomato", stored.CounterpartyText);
         Assert.NotNull(stored.ContainerId);
+
+        // ADR-0015: recorded straight away, once, and flagged.
+        var recorded = await f.Db.Transactions.SingleAsync();
+        Assert.Equal(recorded.Id, stored.TransactionId);
+        Assert.True(recorded.NeedsReview);
     }
 
     [Fact]

@@ -109,8 +109,11 @@ public sealed class SuggestionRepository(EleFiDbContext db) : ISuggestionReposit
     public async Task<int> PurgeExpiredAsync(
         DateTimeOffset asOf,
         CancellationToken cancellationToken = default) =>
+        // Every state, now that a suggestion is recorded straight away (ADR-0015). Once its
+        // window for pairing and duplicate suppression has passed, the record of which alerts
+        // made a transaction has done its job; the transaction and its audit trail remain.
         await db.CaptureSuggestions
-            .Where(s => s.State == SuggestionState.Pending && s.ExpiresAt <= asOf)
+            .Where(s => s.ExpiresAt <= asOf)
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
 }

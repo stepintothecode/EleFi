@@ -1,0 +1,103 @@
+@using EleFi.Application.Abstractions
+@using EleFi.Domain.Filters
+@inject IClock Clock
+
+@*
+    A sheet asking for a start and an end: dates, and optionally times.
+
+    Shared by the list's filters and the dashboard's "Select a range", so a range means the
+    same thing on both: the times cut only the first and last day, and a transaction recorded
+    without a time is never cut out by one.
+*@
+
+<Modal Open="Open" Title="@Title" OnCancel="OnCancel">
+    <div class="row">
+        <div class="field grow">
+            <label for="range-from">From</label>
+            <input id="range-from" type="date" max="@Clock.Today.ToString("yyyy-MM-dd")" @bind="_fromDate" />
+        </div>
+        <div class="field grow">
+            <label for="range-from-time">Time <span class="muted small">(optional)</span></label>
+            <input id="range-from-time" type="time" @bind="_fromTime" />
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="field grow">
+            <label for="range-to">To</label>
+            <input id="range-to" type="date" max="@Clock.Today.ToString("yyyy-MM-dd")" @bind="_toDate" />
+        </div>
+        <div class="field grow">
+            <label for="range-to-time">Time <span class="muted small">(optional)</span></label>
+            <input id="range-to-time" type="time" @bind="_toTime" />
+        </div>
+    </div>
+
+    @if (_problem is not null)
+    {
+        <p class="notice error small" role="alert">@_problem</p>
+    }
+
+    <button type="button" class="primary btn-block" @onclick="ApplyAsync">Show this range</button>
+</Modal>
+
+@code {
+    private DateTime _fromDate;
+    private DateTime _toDate;
+    private TimeOnly? _fromTime;
+    private TimeOnly? _toTime;
+    private string? _problem;
+    private bool _wasOpen;
+
+    /// <summary>Whether the sheet is showing.</summary>
+    [Parameter]
+    public bool Open { get; set; }
+
+    /// <summary>The sheet's title.</summary>
+    [Parameter]
+    public string Title { get; set; } = "Select a range";
+
+    /// <summary>The range to start from, usually the one already applied. Empty dates mean this month.</summary>
+    [Parameter]
+    public TransactionFilter Initial { get; set; } = TransactionFilter.Empty;
+
+    /// <summary>Raised with a filter carrying only the chosen dates and times.</summary>
+    [Parameter]
+    public EventCallback<TransactionFilter> OnApply { get; set; }
+
+    /// <summary>Raised when the sheet is closed without choosing.</summary>
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        // Seeded each time it opens, so it starts from what is applied rather than from
+        // whatever was half-typed the last time it was dismissed.
+        if (Open && !_wasOpen)
+        {
+            var today = Clock.Today;
+            _fromDate = (Initial.From ?? new DateOnly(today.Year, today.Month, 1)).ToDateTime(TimeOnly.MinValue);
+            _toDate = (Initial.To ?? today).ToDateTime(TimeOnly.MinValue);
+            _fromTime = Initial.FromTime;
+            _toTime = Initial.ToTime;
+            _problem = null;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private Task ApplyAsync()
+    {
+        var from = DateOnly.FromDateTime(_fromDate);
+        var to = DateOnly.FromDateTime(_toDate);
+
+        if (from > to || (from == to && _fromTime is { } a && _toTime is { } b && a > b))
+        {
+            _problem = "The start is after the end. Swap them round.";
+            return Task.CompletedTask;
+        }
+
+        return OnApply.InvokeAsync(new TransactionFilter { From = from, FromTime = _fromTime, To = to, ToTime = _toTime });
+    }
+}

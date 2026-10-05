@@ -155,7 +155,13 @@ public class QuickCaptureTests : Bunit.TestContext
             _empty.BalancesAsync(cancellationToken);
 
         public Task<SpendBreakdown> SpendByLabelAsync(
-            DateOnly fromDate, DateOnly toDate, CancellationToken cancellationToken = default) =>
-            _empty.SpendByLabelAsync(fromDate, toDate, cancellationToken);
+            Domain.Filters.TransactionFilter filter, CancellationToken cancellationToken = default) =>
+            _empty.SpendByLabelAsync(filter, cancellationToken);
+
+        public Task<FlowTotals> TotalsAsync(Domain.Filters.TransactionFilter filter, CancellationToken cancellationToken = default) =>
+            _empty.TotalsAsync(filter, cancellationToken);
+
+        public Task<IReadOnlyList<Transaction>> ListDeletedAsync(CancellationToken cancellationToken = default) =>
+            _empty.ListDeletedAsync(cancellationToken);
     }
 }

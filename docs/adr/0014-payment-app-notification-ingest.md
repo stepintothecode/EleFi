@@ -1,7 +1,11 @@
 ---
-status: accepted
+status: accepted, suggestion-only parts superseded by ADR-0015 (2026-10-05)
 date: 2026-10-04
 ---
+
+> **Superseded in part.** Alerts are now recorded straight away as Needs Review transactions
+> ([ADR-0015](0015-record-alerts-as-needs-review.md)), so the inbox described here is gone. The
+> allow-list, channel separation, merging, and card-bill handling all stand.
 
 # Payment App notifications as a second alert channel, merged with SMS
 

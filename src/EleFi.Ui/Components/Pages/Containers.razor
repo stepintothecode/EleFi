@@ -105,6 +105,10 @@
         <div class="txn">
             <div class="grow">
                 <div class="who">@balance.Name</div>
+                @if (balance.Detail is { } detail)
+                {
+                    <div class="detail">@detail</div>
+                }
                 <div class="meta">
                     @balance.Kind.DisplayName()
                     @if (!balance.Kind.IsLiquid())
@@ -159,7 +163,7 @@
     {
         <p class="small">
             <strong>@target.Name</strong> holds
-            @MoneyText.ToDisplayString(target.IsLiability ? target.AmountOwed.Abs() : target.Balance).
+            <span class="amount">@MoneyText.ToDisplayString(target.IsLiability ? target.AmountOwed.Abs() : target.Balance)</span>.
         </p>
 
         @if (_deletingUsage > 0)

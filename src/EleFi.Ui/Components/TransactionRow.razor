@@ -1,0 +1,92 @@
+@using EleFi.Domain.Money
+@using EleFi.Domain.Transactions
+
+@*
+    One row of the transaction list. The whole row opens the editor.
+
+    A component of its own so a row can scroll itself back into view: when the user returns
+    from the editor, the row they opened takes focus, which brings it on screen, and is
+    marked briefly so the eye lands on it.
+*@
+
+<a @ref="_element"
+   class="txn txn-link @(Highlight ? "returned" : string.Empty)"
+   href="transactions/@Row.Id"
+   @onclick="() => OnOpen.InvokeAsync(Row.Id)">
+    <div class="grow">
+        <div class="who">@Counterparty</div>
+        <div class="meta">
+            @Row.Kind.DisplayName()
+            @foreach (var label in Row.Labels.Where(l => l.Label is not null))
+            {
+                <span> &middot; @label.Label!.Name</span>
+            }
+            @if (Row.OccurredAtTime is { } at)
+            {
+                <span> &middot; @at.ToString("HH\\:mm")</span>
+            }
+            @if (Row.NeedsReview)
+            {
+                <span class="review-flag"> &middot; needs review</span>
+            }
+        </div>
+    </div>
+    <div class="amount @Css">@Sign@MoneyText.ToDisplayString(Row.SourceAmount)</div>
+    <span class="chev" aria-hidden="true">&rsaquo;</span>
+</a>
+
+@code {
+    private ElementReference _element;
+
+    /// <summary>The transaction, with its parties and labels loaded.</summary>
+    [Parameter, EditorRequired]
+    public Transaction Row { get; set; } = default!;
+
+    /// <summary>True for the row the user has just come back from.</summary>
+    [Parameter]
+    public bool Highlight { get; set; }
+
+    /// <summary>Raised as the row is opened, before navigation.</summary>
+    [Parameter]
+    public EventCallback<Guid> OnOpen { get; set; }
+
+    // The interesting end is whichever one is not a container.
+    private string Counterparty => Row.Kind switch
+    {
+        TransactionKind.Debit => Row.DestinationParty?.Name ?? "Unknown",
+        TransactionKind.Credit => Row.SourceParty?.Name ?? "Unknown",
+        _ => "Transfer between containers",
+    };
+
+    private string Css => Row.Kind switch
+    {
+        TransactionKind.Debit => "out",
+        TransactionKind.Credit => "in",
+        _ => "transfer",
+    };
+
+    // Colour is never the only carrier of meaning (NFR-6.3), so the sign says it too.
+    private string Sign => Row.Kind switch
+    {
+        TransactionKind.Debit => "-",
+        TransactionKind.Credit => "+",
+        _ => string.Empty,
+    };
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Highlight)
+        {
+            try
+            {
+                // Focusing scrolls the row into view without this component touching JS.
+                await _element.FocusAsync();
+            }
+            catch (Exception)
+            {
+                // Scrolling back is a courtesy. The list is right either way.
+            }
+        }
+    }
+}

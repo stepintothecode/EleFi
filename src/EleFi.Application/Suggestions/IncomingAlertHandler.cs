@@ -1,29 +1,23 @@
-using EleFi.Application.Abstractions;
+using EleFi.Application.Transactions;
 using EleFi.Domain.Alerts;
 using EleFi.Domain.Money;
 
 namespace EleFi.Application.Suggestions;
 
 /// <summary>
-/// What happens when an SMS or a Payment App notification arrives: check it is wanted, parse
-/// it, and raise or update the prompt.
+/// What happens when an SMS or a Payment App notification arrives: check it is wanted,
+/// record what it describes, and say so.
 /// </summary>
 /// <remarks>
-/// <para>
 /// The single entry point for both platform receivers, so the gates are written once: the
 /// in-app switch for the channel, the Payment App allow-list, and then the parser's own
 /// sender and OTP gates. A receiver hands over the text and forgets it.
-/// </para>
-/// <para>
-/// Never records money (SM2). The furthest this goes is a suggestion and a notification
-/// asking the user whether it is right.
-/// </para>
 /// </remarks>
 public sealed class IncomingAlertHandler(
-    SuggestionService suggestions,
+    AlertCaptureService capture,
     AlertCaptureSettings settings,
-    IContainerRepository containers,
-    ISuggestionPromptSurface prompts)
+    EditTransactionService editing,
+    Abstractions.IAlertPromptSurface prompts)
 {
     /// <summary>Handles one incoming alert.</summary>
     /// <param name="channel">Where it arrived from.</param>
@@ -32,7 +26,7 @@ public sealed class IncomingAlertHandler(
     /// <param name="receivedAt">When it arrived.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>What came of it.</returns>
-    public async Task<IngestResult> HandleAsync(
+    public async Task<AlertCaptureResult> HandleAsync(
         AlertChannel channel,
         string sender,
         string text,
@@ -43,40 +37,41 @@ public sealed class IncomingAlertHandler(
         // though the system would still deliver it.
         if (!settings.IsEnabled(channel))
         {
-            return new IngestResult(null, "Reading this kind of alert is switched off.");
+            return AlertCaptureResult.Nothing("Reading this kind of alert is switched off.");
         }
 
         // The receiver already checks this before touching a notification's text. Checked
         // again here so no future caller can skip it.
         if (channel == AlertChannel.PaymentApp && !PaymentApps.IsAllowListed(sender))
         {
-            return new IngestResult(null, "That app is not one EleFi reads.");
+            return AlertCaptureResult.Nothing("That app is not one EleFi reads.");
         }
 
-        var result = await suggestions
+        var result = await capture
             .IngestAsync(channel, sender, text, receivedAt, Currency.Inr, cancellationToken)
             .ConfigureAwait(false);
 
-        if (result.Suggestion is { } suggestion)
+        if (result.Transaction is { } transaction)
         {
-            var container = suggestion.ContainerId is { } id
-                ? await containers.FindAsync(id, cancellationToken).ConfigureAwait(false)
-                : null;
-
-            // Same identity as before when this completed an existing suggestion, so the
+            // Same identity when this completed an earlier alert's transaction, so the
             // prompt already on screen is updated in place rather than joined by a second.
-            prompts.Show(SuggestionPromptText.For(suggestion, container?.Name));
+            var app = transaction.PaymentApp?.Name ?? PaymentApps.Find(sender)?.Name;
+            prompts.Show(AlertPromptText.For(transaction, result.ContainerName, app));
         }
 
         return result;
     }
 
-    /// <summary>Dismisses a suggestion from its prompt, and takes the prompt away.</summary>
-    /// <param name="suggestionId">The suggestion.</param>
+    /// <summary>
+    /// Deletes a recorded transaction from its prompt, for an alert that was not really a
+    /// payment, and takes the prompt away.
+    /// </summary>
+    /// <remarks>A soft delete: it can be restored from Settings, flagged for review.</remarks>
+    /// <param name="transactionId">The transaction.</param>
     /// <param name="cancellationToken">Cancellation.</param>
-    public async Task DismissFromPromptAsync(Guid suggestionId, CancellationToken cancellationToken = default)
+    public async Task DeleteFromPromptAsync(Guid transactionId, CancellationToken cancellationToken = default)
     {
-        await suggestions.DismissAsync(suggestionId, cancellationToken).ConfigureAwait(false);
-        prompts.Withdraw(suggestionId);
+        await editing.DeleteAsync(transactionId, cancellationToken).ConfigureAwait(false);
+        prompts.Withdraw(transactionId);
     }
 }

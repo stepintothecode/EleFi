@@ -1,0 +1,104 @@
+@page "/settings/deleted"
+@using EleFi.Application.Transactions
+@using EleFi.Domain.Money
+@using EleFi.Domain.Transactions
+@using EleFi.Ui.Services
+@inject EditTransactionService Editing
+@inject ToastService Toasts
+
+@*
+    Deleted transactions, and the way back.
+
+    Deleting is soft: the row leaves every balance, list and export at once but is kept, and
+    its history records the deletion. This is the only place those rows appear. Restoring
+    one puts it back everywhere, flagged for review, because it was deleted for a reason.
+*@
+
+<PageTitle>Deleted transactions</PageTitle>
+
+<div class="section-head">
+    <h1>Deleted</h1>
+    @if (_deleted.Count > 0)
+    {
+        <button class="btn-ghost" disabled="@_busy" @onclick="RestoreAllAsync">Restore all</button>
+    }
+</div>
+
+@if (_loading)
+{
+    <div class="card"><div class="skeleton" style="width:60%;"></div></div>
+}
+else if (_deleted.Count == 0)
+{
+    <div class="card muted small">Nothing deleted. A transaction you delete waits here until you restore it.</div>
+}
+else
+{
+    <div class="card">
+        @foreach (var row in _deleted)
+        {
+            <div class="txn" @key="row.Id">
+                <div class="grow">
+                    <div class="who">@Counterparty(row)</div>
+                    <div class="meta">@row.OccurredOn.ToString("d MMM yyyy") &middot; deleted @row.DeletedAt?.ToLocalTime().ToString("d MMM")</div>
+                </div>
+                <div class="amount">@MoneyText.ToDisplayString(row.SourceAmount)</div>
+                <button class="btn-ghost btn-icon" disabled="@_busy" aria-label="Restore @Counterparty(row)"
+                        @onclick="() => RestoreAsync(row.Id)">Restore</button>
+            </div>
+        }
+    </div>
+    <p class="muted small">A restored transaction comes back flagged for review.</p>
+}
+
+@code {
+    private IReadOnlyList<Transaction> _deleted = [];
+    private bool _loading = true;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _deleted = await Editing.DeletedAsync();
+        _loading = false;
+    }
+
+    private async Task RestoreAsync(Guid id)
+    {
+        _busy = true;
+        try
+        {
+            await Editing.RestoreAsync(id);
+            Toasts.Ok("Restored, flagged for review.");
+            _deleted = await Editing.DeletedAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RestoreAllAsync()
+    {
+        _busy = true;
+        try
+        {
+            var count = await Editing.RestoreAllAsync();
+            Toasts.Ok($"Restored {count} transactions, each flagged for review.");
+            _deleted = await Editing.DeletedAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string Counterparty(Transaction row) =>
+        row.SourceParty is null || row.DestinationParty is null
+            ? "Transaction"
+            : row.Kind switch
+            {
+                TransactionKind.Debit => row.DestinationParty.Name ?? "Unknown",
+                TransactionKind.Credit => row.SourceParty.Name ?? "Unknown",
+                _ => "Transfer between containers",
+            };
+}

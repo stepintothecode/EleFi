@@ -26,6 +26,8 @@ const MOODS = {
   Concerned: { ear: 0.72, brow: 0.55, curl: -0.35, blink: 0.7, bounce: 0.7 },
   Thinking: { ear: 0.9, brow: 0.2, curl: 0.1, blink: 1.6, bounce: 1.1 },
   Sad: { ear: 0.55, brow: 0.75, curl: -0.7, blink: 0.5, bounce: 0.5 },
+  // Amounts are hidden: the ears fold forward over the eyes, peekaboo style.
+  Hiding: { ear: 1.0, brow: 0.2, curl: 0.35, blink: 1.0, bounce: 0.6, cover: 1 },
 };
 
 const reduceMotion = () =>
@@ -79,6 +81,7 @@ function draw(state, now) {
   state.ear = ease(state.ear, target.ear, k);
   state.brow = ease(state.brow, target.brow, k);
   state.curl = ease(state.curl, target.curl, k);
+  state.cover = ease(state.cover, target.cover || 0, k);
 
   const w = state.cssWidth;
   const h = state.cssHeight;
@@ -181,6 +184,32 @@ function draw(state, now) {
     ctx.stroke();
   }
 
+  // Hiding: each ear swings in from the side of the head and folds over its eye. Drawn
+  // after the eyes so it covers them, and blended by `cover` so it animates both ways.
+  if (state.cover > 0.01) {
+    const p = state.cover;
+    for (const side of [-1, 1]) {
+      const fromX = cx + side * headR * 1.02;
+      const toX = cx + side * headR * 0.36;
+      const x = fromX + (toX - fromX) * p;
+      const y = (cy - headR * 0.1) + ((eyeY + 1 * u) - (cy - headR * 0.1)) * p;
+      const scale = 1 - 0.32 * p;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(side * (0.22 - 0.9 * p));
+      ctx.fillStyle = c.hideDark;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, headR * 0.66 * scale, headR * 0.86 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = c.ear;
+      ctx.beginPath();
+      ctx.ellipse(side * headR * 0.05, headR * 0.03, headR * 0.4 * scale, headR * 0.56 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
   // A smile only when there is something to smile about.
   if (state.curl > 0.5) {
     ctx.strokeStyle = c.ink;
@@ -218,6 +247,7 @@ export function initialise(canvasId) {
     ear: 1.0,
     brow: 0,
     curl: 0.25,
+    cover: 0,
     cheerUntil: 0,
     frame: 0,
     dpr: 0,

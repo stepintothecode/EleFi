@@ -9,11 +9,13 @@ namespace EleFi.Domain.Balances;
 /// <param name="Name">The container's name, for display.</param>
 /// <param name="Kind">The container's kind, which decides liability and liquidity.</param>
 /// <param name="Balance">The derived balance. Signed: a card's is what is owed.</param>
+/// <param name="Detail">The bank and last four digits, for the line under the name. See <see cref="ContainerDetail"/>.</param>
 public readonly record struct ContainerBalance(
     Guid ContainerId,
     string Name,
     ContainerKind Kind,
-    Money.Money Balance)
+    Money.Money Balance,
+    string? Detail = null)
 {
     /// <summary>True when this balance is money owed rather than money held.</summary>
     public bool IsLiability => Kind.IsLiability();

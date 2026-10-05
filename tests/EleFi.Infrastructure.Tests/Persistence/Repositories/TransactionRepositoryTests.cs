@@ -119,7 +119,7 @@ public class TransactionRepositoryTests
         // The bill payment. If this leaked into spend, card spending would be counted twice.
         await TransferAsync(f, bankParty, cardParty, 500_00);
 
-        var spend = await f.Transactions.SpendByLabelAsync(Today.AddDays(-30), Today);
+        var spend = await f.Transactions.SpendByLabelAsync(new TransactionFilter { From = Today.AddDays(-30), To = Today });
 
         Assert.Equal(500_00, spend.TotalMinor);
     }
@@ -139,7 +139,7 @@ public class TransactionRepositoryTests
             bankParty, shop.Id, 2_000_00, "INR", 2_000_00, "INR", Today,
             LabelIds: [food.Id, shopping.Id]));
 
-        var spend = await f.Transactions.SpendByLabelAsync(Today.AddDays(-30), Today);
+        var spend = await f.Transactions.SpendByLabelAsync(new TransactionFilter { From = Today.AddDays(-30), To = Today });
 
         // This is the deliberate consequence of ADR-0013: the per-label figures overlap.
         Assert.Equal(2_000_00, spend.ByLabel.Single(s => s.LabelId == food.Id).AmountMinor);
@@ -173,7 +173,7 @@ public class TransactionRepositoryTests
 
         await TransferAsync(f, bankParty, cardParty, 5_000_00);
 
-        var spend = await f.Transactions.SpendByLabelAsync(Today.AddDays(-30), Today);
+        var spend = await f.Transactions.SpendByLabelAsync(new TransactionFilter { From = Today.AddDays(-30), To = Today });
 
         // Summing the buckets is meaningless now, but this still has to hold: a label is a
         // subset of the spend, so no bar can be longer than the whole.
@@ -197,7 +197,7 @@ public class TransactionRepositoryTests
 
         await SpendAsync(f, bankParty, shop, 40_00);
 
-        var spend = await f.Transactions.SpendByLabelAsync(Today.AddDays(-30), Today);
+        var spend = await f.Transactions.SpendByLabelAsync(new TransactionFilter { From = Today.AddDays(-30), To = Today });
 
         // Labels are optional, so unlabelled is common. Without a bucket the money would
         // vanish from the breakdown while still counting toward the total.
@@ -391,6 +391,93 @@ public class TransactionRepositoryTests
         var second = await f.Parties.GetOrCreateExternalAsync("  rahul ");
 
         Assert.Equal(first.Id, second.Id);
+    }
+
+    [Fact]
+    public async Task The_total_adds_credits_subtracts_debits_and_ignores_transfers_across_the_whole_filter()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var (_, bank) = await AddContainerAsync(f, "HDFC", ContainerKind.BankAccount, 10_000_00);
+        var (_, card) = await AddContainerAsync(f, "Card", ContainerKind.CreditCard, 0);
+        var shop = await f.Parties.GetOrCreateExternalAsync("Shop");
+        var employer = await f.Parties.GetOrCreateExternalAsync("Employer");
+
+        await SpendAsync(f, bank, shop, 300_00);
+        await SpendAsync(f, card, shop, 200_00);
+        await EarnAsync(f, employer, bank, 1_000_00);
+        await TransferAsync(f, bank, card, 200_00);
+
+        var totals = await f.Transactions.TotalsAsync(TransactionFilter.Empty);
+
+        // D1: the card bill moves nothing in or out.
+        Assert.Equal(1_000_00, totals.InMinor);
+        Assert.Equal(500_00, totals.OutMinor);
+        Assert.Equal(500_00, totals.NetMinor);
+
+        var shopOnly = await f.Transactions.TotalsAsync(new TransactionFilter { PartyIds = [shop.Id] });
+        Assert.Equal(-500_00, shopOnly.NetMinor);
+    }
+
+    [Fact]
+    public async Task A_time_range_cuts_only_its_boundary_days_and_keeps_untimed_transactions()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var (_, bank) = await AddContainerAsync(f, "HDFC", ContainerKind.BankAccount, 10_000_00);
+        var shop = await f.Parties.GetOrCreateExternalAsync("Shop");
+        var yesterday = Today.AddDays(-1);
+
+        await AtAsync(yesterday, new TimeOnly(8, 0), 1_00);   // before the start time
+        await AtAsync(yesterday, new TimeOnly(19, 0), 2_00);  // after the start time
+        await AtAsync(yesterday, null, 4_00);                 // no time: kept
+        await AtAsync(Today, new TimeOnly(7, 0), 8_00);       // before the end time
+        await AtAsync(Today, new TimeOnly(9, 0), 16_00);      // after the end time
+
+        var rows = await f.Transactions.QueryAsync(new TransactionFilter
+        {
+            From = yesterday,
+            FromTime = new TimeOnly(18, 0),
+            To = Today,
+            ToTime = new TimeOnly(8, 30),
+        });
+
+        Assert.Equal([2_00, 4_00, 8_00], rows.Select(r => r.SourceAmountMinor).Order());
+
+        Task AtAsync(DateOnly on, TimeOnly? at, long minor) =>
+            f.Capture.CaptureAsync(new CaptureRequest(bank, shop.Id, minor, "INR", minor, "INR", on, at));
+    }
+
+    [Fact]
+    public async Task Deleted_transactions_are_listed_for_restoring_and_nowhere_else()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var (_, bank) = await AddContainerAsync(f, "HDFC", ContainerKind.BankAccount, 10_000_00);
+        var shop = await f.Parties.GetOrCreateExternalAsync("Shop");
+        var spent = await SpendAsync(f, bank, shop, 300_00);
+
+        await f.Editing.DeleteAsync(spent.Transaction!.Id);
+
+        Assert.Empty(await f.Transactions.QueryAsync(TransactionFilter.Empty));
+        var deleted = Assert.Single(await f.Transactions.ListDeletedAsync());
+        Assert.Equal("Shop", deleted.DestinationParty!.Name);
+
+        await f.Editing.RestoreAsync(deleted.Id);
+
+        var back = Assert.Single(await f.Transactions.QueryAsync(TransactionFilter.Empty));
+        Assert.True(back.NeedsReview);
+        Assert.Empty(await f.Transactions.ListDeletedAsync());
+    }
+
+    [Fact]
+    public async Task Balances_come_back_in_picker_order_with_the_bank_and_last_four()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        await f.ContainerService.CreateAsync(new CreateContainerRequest("Savings", ContainerKind.BankAccount, "INR", 0, Today, "HDFC Bank", "4417"));
+        await f.ContainerService.CreateAsync(new CreateContainerRequest("Amex", ContainerKind.CreditCard, "INR", 0, Today));
+
+        var balances = await f.Transactions.BalancesAsync();
+
+        Assert.Equal(["Amex", "Savings"], balances.Select(b => b.Name));
+        Assert.Equal("HDFC Bank ••4417", balances[1].Detail);
     }
 
     private static async Task<(Container Container, Guid PartyId)> AddContainerAsync(

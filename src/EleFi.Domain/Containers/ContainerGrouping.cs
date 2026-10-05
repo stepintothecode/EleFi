@@ -75,5 +75,25 @@ public static class ContainerGrouping
     /// <summary>The same containers flattened in picker order, for choosing a default.</summary>
     /// <param name="containers">The containers, already in the user's preferred order.</param>
     public static IReadOnlyList<Container> InPickerOrder(IEnumerable<Container> containers) =>
-        ForPicker(containers).SelectMany(g => g.Containers).ToList();
+        InPickerOrder(containers, c => c.Kind);
+
+    /// <summary>
+    /// Anything describing a container, in picker order: cards, banks, cash and wallets, the
+    /// rest. Within a section the incoming order is kept.
+    /// </summary>
+    /// <remarks>
+    /// For lists that are not pickers, such as balances on the dashboard, so every screen
+    /// that lists containers lists them the same way.
+    /// </remarks>
+    /// <typeparam name="T">The item type.</typeparam>
+    /// <param name="items">The items, already in the user's preferred order.</param>
+    /// <param name="kindOf">The container kind each item describes.</param>
+    public static IReadOnlyList<T> InPickerOrder<T>(IEnumerable<T> items, Func<T, ContainerKind> kindOf)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(kindOf);
+
+        // OrderBy is stable, which is what keeps the incoming order within a section.
+        return items.OrderBy(i => kindOf(i).PickerGroup()).ToList();
+    }
 }

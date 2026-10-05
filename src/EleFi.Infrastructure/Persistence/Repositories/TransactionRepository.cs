@@ -1,5 +1,6 @@
 using EleFi.Application.Abstractions;
 using EleFi.Domain.Balances;
+using EleFi.Domain.Containers;
 using EleFi.Domain.Filters;
 using EleFi.Domain.Money;
 using EleFi.Domain.Parties;
@@ -147,26 +148,28 @@ public sealed class TransactionRepository(EleFiDbContext db, IClock clock) : ITr
                 container.Id,
                 container.Name,
                 container.Kind,
-                Money.SignedMinor(minor, container.Currency)));
+                Money.SignedMinor(minor, container.Currency),
+                container.Describe()));
         }
 
-        return balances;
+        // Picker order, after the user's own order and name, so every screen listing
+        // containers lists them the same way: cards, banks, cash and wallets, the rest.
+        var sortOrder = containers.ToDictionary(c => c.Id, c => c.SortOrder);
+
+        return ContainerGrouping.InPickerOrder(
+            balances.OrderBy(b => sortOrder[b.ContainerId]).ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase),
+            b => b.Kind);
     }
 
     /// <inheritdoc />
     public async Task<SpendBreakdown> SpendByLabelAsync(
-        DateOnly fromDate,
-        DateOnly toDate,
+        TransactionFilter filter,
         CancellationToken cancellationToken = default)
     {
         // D1: Self Transfers are excluded from every spend aggregate. A Debit is
         // Internal -> External, so requiring an internal source and an external destination
         // is the exclusion, expressed once.
-        var rows = await db.Transactions.AsNoTracking()
-            .Include(t => t.Labels).ThenInclude(tl => tl.Label)
-            .Include(t => t.SourceParty)
-            .Include(t => t.DestinationParty)
-            .Where(t => t.OccurredOn >= fromDate && t.OccurredOn <= toDate)
+        var rows = await Filtered(filter)
             .Where(t => t.SourceParty!.Kind == PartyKind.Container
                      && t.DestinationParty!.Kind == PartyKind.External)
             .ToListAsync(cancellationToken)
@@ -204,6 +207,39 @@ public sealed class TransactionRepository(EleFiDbContext db, IClock clock) : ITr
             total);
     }
 
+    /// <inheritdoc />
+    public async Task<FlowTotals> TotalsAsync(TransactionFilter filter, CancellationToken cancellationToken = default)
+    {
+        var query = Filtered(filter);
+
+        // Two sums in the database rather than loading the rows: the list may be showing
+        // fifty of fifty thousand, and the total is over all of them. A Self Transfer is
+        // Internal -> Internal, so neither shape below can match it (D1).
+        var inflow = await query
+            .Where(t => t.SourceParty!.Kind == PartyKind.External && t.DestinationParty!.Kind == PartyKind.Container)
+            .SumAsync(t => (long?)t.DestinationAmountMinor, cancellationToken)
+            .ConfigureAwait(false);
+
+        var outflow = await query
+            .Where(t => t.SourceParty!.Kind == PartyKind.Container && t.DestinationParty!.Kind == PartyKind.External)
+            .SumAsync(t => (long?)t.SourceAmountMinor, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new FlowTotals(inflow ?? 0, outflow ?? 0);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Transaction>> ListDeletedAsync(CancellationToken cancellationToken = default) =>
+        await db.Transactions
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Include(t => t.SourceParty)
+            .Include(t => t.DestinationParty)
+            .Where(t => t.DeletedAt != null)
+            .OrderByDescending(t => t.DeletedAt)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
     private IQueryable<Transaction> Included() =>
         db.Transactions
             .Include(t => t.SourceParty)
@@ -225,14 +261,26 @@ public sealed class TransactionRepository(EleFiDbContext db, IClock clock) : ITr
         ArgumentNullException.ThrowIfNull(filter);
         var query = Included().AsNoTracking();
 
+        // The same rule as TransactionFilter.CoversMoment: a time cuts only its own boundary
+        // day, and a transaction with no recorded time is never cut by one.
         if (filter.From is { } from)
         {
             query = query.Where(t => t.OccurredOn >= from);
+
+            if (filter.FromTime is { } fromTime)
+            {
+                query = query.Where(t => t.OccurredOn > from || t.OccurredAtTime == null || t.OccurredAtTime >= fromTime);
+            }
         }
 
         if (filter.To is { } to)
         {
             query = query.Where(t => t.OccurredOn <= to);
+
+            if (filter.ToTime is { } toTime)
+            {
+                query = query.Where(t => t.OccurredOn < to || t.OccurredAtTime == null || t.OccurredAtTime <= toTime);
+            }
         }
 
         if (filter.ContainerIds.Count > 0)

@@ -72,7 +72,10 @@ public static class DependencyInjection
         services.AddScoped<CaptureService>();
         services.AddScoped<EditTransactionService>();
         services.AddScoped<CsvExporter>();
-        services.AddScoped<SuggestionService>();
+        services.AddScoped<IParseRuleRepository, ParseRuleRepository>();
+        services.AddScoped<AlertPartyResolver>();
+        services.AddScoped<AlertCaptureService>();
+        services.AddScoped<ParseRuleService>();
         services.AddScoped<AlertCaptureSettings>();
         services.AddScoped<IncomingAlertHandler>();
         services.AddScoped<DatabaseInitialiser>();

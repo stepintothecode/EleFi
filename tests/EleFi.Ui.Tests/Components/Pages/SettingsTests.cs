@@ -16,49 +16,60 @@ namespace EleFi.Ui.Tests.Components.Pages;
 public class SettingsTests : Bunit.TestContext
 {
     [Fact]
-    public void Creating_and_renaming_a_label_happen_in_a_sheet_not_inline()
+    public void Labels_are_edited_on_their_own_page_reached_from_one_button()
     {
         Register();
 
         var component = RenderComponent<Settings>();
 
-        // Nothing is open to begin with. The form used to be appended below the list, so on
-        // a long list you scrolled past every label to reach it.
-        Assert.Empty(component.FindAll("[role=dialog]"));
-
-        component.Find(".section-head button").Click();
-
-        var dialog = component.Find("[role=dialog]");
-        Assert.Equal("New label", dialog.GetAttribute("aria-label"));
+        // The list used to sit in the middle of Settings, scrolled past on every visit.
+        Assert.Empty(component.FindAll("button[aria-label='Delete Food']"));
+        Assert.Equal("settings/labels", component.Find("a[href='settings/labels']").GetAttribute("href"));
+        Assert.Contains("Edit labels", component.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Deleting_a_label_asks_first_and_says_what_it_will_touch()
+    public void Deleted_transactions_are_one_tap_away()
     {
         Register();
 
         var component = RenderComponent<Settings>();
-        component.Find("button[aria-label='Delete Food']").Click();
 
-        var dialog = component.Find("[role=dialog]");
-
-        Assert.Equal("Delete this label?", dialog.GetAttribute("aria-label"));
-
-        // The transactions themselves are untouched, which is the fact that decides whether
-        // the user goes ahead.
-        Assert.Contains("stay exactly as they are", dialog.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(component.Find("a[href='settings/deleted']"));
     }
 
+    [Fact]
+    public void Hiding_amounts_is_a_switch_here_too()
+    {
+        Register();
+        var component = RenderComponent<Settings>();
+
+        component.Find("input[aria-label='Hide amounts']").Change(true);
+
+        Assert.True(Services.GetRequiredService<PrivacyMode>().AmountsHidden);
+    }
+
+    [Fact]
+    public void Teaching_eleFi_a_message_is_offered_in_place_of_the_old_inbox()
+    {
+        Register();
+
+        var component = RenderComponent<Settings>();
+
+        Assert.NotNull(component.Find("a[href='settings/teach']"));
+        Assert.Empty(component.FindAll("a[href='suggestions']"));
+    }
     [Fact]
     public void The_export_card_says_the_file_is_not_encrypted()
     {
         Register();
 
         var component = RenderComponent<Settings>();
+        component.Find(".info-btn[aria-label='What is Your data?']").Click();
 
         // FR-10.15. A plaintext financial history is fine as long as the user knows that is
-        // what they are about to put in their Downloads folder.
-        Assert.Contains("not encrypted", component.Markup, StringComparison.OrdinalIgnoreCase);
+        // what they are about to put in their Downloads folder. Behind the i now, one tap away.
+        Assert.Contains("not encrypted", component.Find("[role=dialog]").TextContent, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -67,8 +78,9 @@ public class SettingsTests : Bunit.TestContext
         Register();
 
         var component = RenderComponent<Settings>();
+        component.Find(".info-btn[aria-label='What is Your data?']").Click();
 
-        Assert.Contains("Replaces everything", component.Markup, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("replaces everything", component.Find("[role=dialog]").TextContent, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -114,7 +126,7 @@ public class SettingsTests : Bunit.TestContext
         var component = RenderComponent<Settings>();
 
         Assert.Empty(component.FindAll("input[aria-label='Read bank SMS']"));
-        Assert.Contains("Paste a bank message", component.Markup, StringComparison.Ordinal);
+        Assert.Contains("Teach EleFi a message", component.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -177,6 +189,7 @@ public class SettingsTests : Bunit.TestContext
         var labels = new Fakes.SeededLabels();
 
         Services.AddSingleton(new AlertCaptureSettings(_store));
+        Services.AddSingleton(new PrivacyMode(_store));
         Services.AddSingleton(access ?? new FakeAccess());
         Services.AddSingleton<IClock>(clock);
         Services.AddSingleton(new LabelService(labels, clock));

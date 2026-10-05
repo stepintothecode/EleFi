@@ -1,0 +1,174 @@
+@page "/settings/labels"
+@using EleFi.Application.Labels
+@using EleFi.Domain.Labels
+@using EleFi.Ui.Services
+@inject LabelService LabelsService
+@inject ToastService Toasts
+
+@*
+    Labels, on a page of their own.
+
+    They used to be a list in the middle of Settings, so every visit to Settings scrolled past
+    every label. Settings now has one "Edit labels" button, and this is where it goes. Back
+    returns to Settings.
+*@
+
+<PageTitle>Labels</PageTitle>
+
+<div class="section-head">
+    <h1>Labels</h1>
+    <button class="btn-ghost" @onclick="StartCreate">Add</button>
+</div>
+
+<div class="card">
+    @if (_labels.Count == 0)
+    {
+        <p class="muted small" style="margin:0;">No labels yet.</p>
+    }
+    else
+    {
+        @foreach (var label in _labels)
+        {
+            <div class="txn">
+                <span class="swatch" style="background: @(label.Colour ?? "var(--ele-accent)")"></span>
+                <div class="grow">
+                    <div class="who">@label.Name</div>
+                </div>
+                <button class="btn-ghost btn-icon" aria-label="Rename @label.Name"
+                        @onclick="() => StartEdit(label)">Edit</button>
+                <button class="btn-ghost btn-icon danger" aria-label="Delete @label.Name"
+                        @onclick="() => ConfirmDeleteAsync(label)">Delete</button>
+            </div>
+        }
+    }
+</div>
+
+<p class="muted small">A transaction can carry as many labels as you like, or none at all.</p>
+
+@* In a sheet. Appending a form below a long list meant scrolling past everything to find it,
+   and nothing about it said a new thing had appeared. *@
+<Modal Open="_editing is not null" Title="@(_editingId is null ? "New label" : "Rename label")" OnCancel="CancelEdit">
+    <div class="field">
+        <label for="label-name">Name</label>
+        <input id="label-name" @bind="_editing" placeholder="Groceries" autocomplete="off" />
+    </div>
+
+    <div class="field">
+        <label>Colour</label>
+        <div class="chips">
+            @foreach (var colour in Palette)
+            {
+                <button type="button"
+                        class="swatch-btn @(_colour == colour ? "on" : string.Empty)"
+                        style="background: @colour"
+                        aria-label="@colour"
+                        @onclick="() => _colour = colour"></button>
+            }
+        </div>
+    </div>
+
+    <button class="primary btn-block" @onclick="SaveAsync">Save</button>
+</Modal>
+
+<Modal Open="_deleting is not null" Title="Delete this label?" OnCancel="() => _deleting = null">
+    @if (_deleting is { } label)
+    {
+        <p class="small">
+            <strong>@label.Name</strong> is on @_deletingUsage
+            @(_deletingUsage == 1 ? "transaction" : "transactions").
+        </p>
+        <p class="small muted">
+            Those transactions stay exactly as they are and their amounts do not change. They
+            simply stop carrying this label.
+        </p>
+        <div class="row">
+            <button class="btn-ghost grow" @onclick="() => _deleting = null">Keep it</button>
+            <button class="primary danger grow" @onclick="DeleteAsync">Delete</button>
+        </div>
+    }
+</Modal>
+
+@code {
+    private static readonly string[] Palette =
+        ["#f97316", "#0ea5e9", "#a855f7", "#ef4444", "#f43f5e", "#10b981", "#22c55e", "#6366f1", "#94a3b8"];
+
+    private IReadOnlyList<Label> _labels = [];
+
+    private string? _editing;
+    private Guid? _editingId;
+    private string? _colour;
+
+    private Label? _deleting;
+    private int _deletingUsage;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _labels = await LabelsService.ListAsync();
+
+    private void StartCreate()
+    {
+        _editing = string.Empty;
+        _editingId = null;
+        _colour = Palette[0];
+    }
+
+    private void StartEdit(Label label)
+    {
+        _editing = label.Name;
+        _editingId = label.Id;
+        _colour = label.Colour ?? Palette[0];
+    }
+
+    private void CancelEdit()
+    {
+        _editing = null;
+        _editingId = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        var name = _editing ?? string.Empty;
+
+        var result = _editingId is { } id
+            ? await LabelsService.UpdateAsync(id, name, _colour)
+            : await LabelsService.CreateAsync(name, _colour);
+
+        if (!result.Succeeded)
+        {
+            Toasts.Error(result.Error!);
+            return;
+        }
+
+        Toasts.Ok(_editingId is null ? $"Added {result.Label!.Name}." : $"Renamed to {result.Label!.Name}.");
+        CancelEdit();
+        await ReloadAsync();
+    }
+
+    private async Task ConfirmDeleteAsync(Label label)
+    {
+        // Count first, so the confirmation can say what it will actually affect rather than
+        // asking the user to guess.
+        _deletingUsage = await LabelsService.UsageAsync(label.Id);
+        _deleting = label;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_deleting is not { } label)
+        {
+            return;
+        }
+
+        var result = await LabelsService.DeleteAsync(label.Id);
+        _deleting = null;
+
+        if (!result.Succeeded)
+        {
+            Toasts.Error(result.Error!);
+            return;
+        }
+
+        Toasts.Ok($"Deleted {label.Name}.");
+        await ReloadAsync();
+    }
+}

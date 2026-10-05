@@ -9,10 +9,20 @@
 :root {
   color-scheme: light dark;
 
-  /* Brand: an elephant grey-blue, warm enough not to feel clinical. */
-  --ele-accent: #4f6d8c;
-  --ele-accent-strong: #37506b;
-  --ele-accent-soft: #e8eef4;
+  /*
+    Brand: lavender, Ele's own colour, used everywhere so the app reads as one thing.
+
+    Two roles, kept apart. The accent is for text, links, borders and the active tab, so it
+    is a deeper lavender that holds contrast on white. The primary is the fill of a main
+    button: a soft lavender carrying dark ink, because white on a mid-tone blue was the
+    combination that looked wrong.
+  */
+  --ele-accent: #6a58c9;
+  --ele-accent-strong: #4e3f9e;
+  --ele-accent-soft: #efebfc;
+  --ele-primary: #c9befa;
+  --ele-primary-pressed: #b7a8f6;
+  --ele-on-primary: #241c47;
 
   /* Money reads by hue and by sign, never by hue alone (NFR-6.3). */
   --ele-out: #c2410c;
@@ -65,9 +75,12 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ele-accent: #8fb0d0;
-    --ele-accent-strong: #b3ccdf;
-    --ele-accent-soft: #1e2a36;
+    --ele-accent: #c4b5fd;
+    --ele-accent-strong: #ddd3fe;
+    --ele-accent-soft: #2a2440;
+    --ele-primary: #b9a9f5;
+    --ele-primary-pressed: #a796ef;
+    --ele-on-primary: #1e1633;
     --ele-out: #fb923c;
     --ele-in: #4ade80;
     --ele-transfer: #a5b4fc;
@@ -205,9 +218,9 @@ html, body {
 
 .quick-step.on { opacity: 1; color: var(--ele-accent-strong); }
 .quick-step.on .dot {
-  background: var(--ele-accent);
+  background: var(--ele-primary);
   border-color: var(--ele-accent);
-  color: #fff;
+  color: var(--ele-on-primary);
   transform: scale(1.22);
   box-shadow: 0 8px 22px color-mix(in srgb, var(--ele-accent) 45%, transparent);
 }
@@ -379,11 +392,13 @@ button, .btn {
 button:active, .btn:active { transform: scale(0.97); }
 
 .btn-primary, button.primary {
-  background: var(--ele-accent);
-  border-color: var(--ele-accent);
-  color: #fff;
+  background: var(--ele-primary);
+  border-color: var(--ele-primary);
+  color: var(--ele-on-primary);
   font-weight: 600;
 }
+.btn-primary:active, button.primary:active { background: var(--ele-primary-pressed); }
+button.primary:disabled, .btn-primary:disabled { opacity: 0.55; }
 .btn-ghost { background: transparent; }
 .btn-block { width: 100%; }
 
@@ -540,6 +555,7 @@ button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owe
   transition: transform var(--ele-settle);
 }
 .switch input:checked + .track { background: var(--ele-accent); }
+.switch input:checked + .track::before { background: var(--ele-primary); }
 .switch input:checked + .track::before { transform: translateX(18px); }
 .switch input:disabled + .track { opacity: 0.45; }
 
@@ -703,8 +719,8 @@ button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owe
   border-radius: 15px;
   display: grid;
   place-items: center;
-  background: var(--ele-accent);
-  color: #fff;
+  background: var(--ele-primary);
+  color: var(--ele-on-primary);
   font-weight: 700;
   font-size: 0.9rem;
 }
@@ -721,7 +737,105 @@ button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owe
   color: var(--ele-text-dim);
 }
 
-details.paste summary { cursor: pointer; color: var(--ele-accent-strong); font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+/*
+  Hide amounts. The layout puts this class on the whole shell, so every amount on every page
+  and sheet is covered at once, and no page can forget to. Blurred rather than replaced, so
+  the layout does not shift when it is switched. Toasts are left readable: they vanish in
+  seconds, and a blurred error message is worse than a briefly visible amount.
+*/
+.amounts-hidden .amount,
+.amounts-hidden .headline,
+.amounts-hidden .tile .value,
+.amounts-hidden .timeline-changes .was,
+.amounts-hidden .timeline-changes .now,
+.amounts-hidden .quick-done .small {
+  filter: blur(9px);
+  user-select: none;
+  transition: filter var(--ele-settle);
+}
+.amount, .headline, .tile .value { transition: filter var(--ele-settle); }
+
+/* Ele on the dashboard is a button: tap to hide or show amounts. */
+.mascot-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: auto;
+  border-radius: 50%;
+}
+.mascot-toggle:active { transform: scale(0.94); }
+
+/* Tabs: one is chosen, the others are a tap away. */
+.segmented {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 20px 0 12px;
+  background: var(--ele-surface-2);
+  border-radius: var(--ele-radius);
+}
+.segmented button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 40px;
+  border: none;
+  background: transparent;
+  color: var(--ele-text-dim);
+  font-weight: 600;
+  font-size: 0.86rem;
+  padding: 6px 8px;
+  border-radius: var(--ele-radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.segmented button.on {
+  background: var(--ele-primary);
+  color: var(--ele-on-primary);
+}
+
+/* The bank and last four digits under a container's name. */
+.detail { font-size: 0.74rem; color: var(--ele-text-dim); letter-spacing: 0.01em; }
+.chip-stacked { flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.25; padding-top: 6px; padding-bottom: 6px; }
+
+/* Sections inside a sheet, divided by a hairline. */
+.sheet-heading { margin: 4px 0 10px; font-size: 0.95rem; }
+hr.divider { border: none; border-top: 1px solid var(--ele-line); margin: 16px 0; }
+.section-gap { margin: 22px 0 10px; }
+
+/* The total under the transaction list, set off by a rule. */
+.list-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ele-gap);
+  border-top: 2px solid var(--ele-line);
+  margin-top: 6px;
+  padding: 14px 4px 2px;
+}
+.list-total > .amount { font-size: 1.15rem; }
+
+/* The row the user has just come back from: a lavender wash that fades. */
+.txn-link.returned { animation: returned 2.4s ease-out both; }
+.txn-link:focus { outline: none; }
+@keyframes returned {
+  from { background: color-mix(in srgb, var(--ele-primary) 55%, transparent); }
+  to { background: transparent; }
+}
+
+/* Needs review on the editor: a flag, an i, and one button. */
+.review-bar {
+  border: 1px solid color-mix(in srgb, var(--ele-out) 35%, var(--ele-line));
+  border-radius: var(--ele-radius);
+  padding: 10px 12px 12px;
+  margin-bottom: var(--ele-gap);
+}
+.review-bar .field-head { margin-bottom: 8px; }
+
+/* What EleFi read from a message. */
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 14px; }
+.facts dt { color: var(--ele-text-dim); font-size: 0.85rem; }
+.facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 
 .notice {
   border-radius: var(--ele-radius-sm);

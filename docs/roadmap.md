@@ -11,6 +11,13 @@ Vocabulary from [CONTEXT.md](CONTEXT.md). Requirement IDs from
 The largest risk to this project is not a wrong technical decision - it is the project
 stalling before it becomes a habit. Every cut below serves that.
 
+**Status 2026-10-05.** Alerts are now recorded straight away as Needs Review transactions
+([ADR-0015](adr/0015-record-alerts-as-needs-review.md)); the To confirm inbox is gone, replaced by
+Teach EleFi a message (taught Parse Rules, the first part of S39) and a Deleted screen with Restore.
+The list gained date and time ranges, a running total and return-to-where-you-were; the dashboard
+gained period tabs and a hide-amounts switch; the theme moved to lavender. See
+[the decision log](prompts/2026-10-05-ledger-ux-and-auto-recorded-alerts.md).
+
 **Status 2026-10-04.** S38 and S40 are built (SMS receiver, Payment App notifications,
 merging, the "To confirm" inbox), pending device verification, and capture had a usability
 pass: grouped container pickers, type-to-find payees over the whole history, labels in one

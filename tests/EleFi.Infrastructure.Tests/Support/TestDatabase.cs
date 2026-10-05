@@ -66,8 +66,8 @@ internal sealed class TestDatabase : IAsyncDisposable
 
     public CsvExporter Exporter => new(Transactions, Clock);
 
-    public SuggestionService Suggestions =>
-        new(new SuggestionRepository(Db), Containers, Parties, Apps, Capture, Clock);
+    public AlertCaptureService Alerts =>
+        new(new SuggestionRepository(Db), new AlertPartyResolver(Containers, Parties, Apps, Transactions), Apps, Capture, Editing, Clock);
 
     /// <summary>Creates, keys, migrates, and seeds a fresh database.</summary>
     public static async Task<TestDatabase> CreateAsync(DateOnly? today = null)

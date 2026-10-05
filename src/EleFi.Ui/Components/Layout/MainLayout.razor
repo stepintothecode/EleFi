@@ -1,4 +1,7 @@
 @inherits LayoutComponentBase
+@using EleFi.Ui.Services
+@implements IDisposable
+@inject PrivacyMode Privacy
 
 @*
     The error boundary is not decoration.
@@ -7,36 +10,47 @@
     a red bar over a blank screen with no way back. With it, the failure is contained to the
     page, the tabs still work, and the message says the thing that actually matters: the
     data on the device is untouched.
+
+    The shell carries the privacy class, so hiding amounts covers every page, every sheet and
+    every toast without any of them knowing the switch exists.
 *@
 
-<main class="page">
-    <ErrorBoundary @ref="_boundary">
-        <ChildContent>
-            @Body
-        </ChildContent>
-        <ErrorContent Context="error">
-            <h1>This screen did not load</h1>
-            <div class="notice error" role="alert">
-                @error.Message
-            </div>
-            <p class="muted small">
-                Nothing was written and nothing was lost. Your ledger is on this device and is
-                unaffected by a screen failing to draw.
-            </p>
-            <button class="primary btn-block" @onclick="Recover">Try again</button>
-        </ErrorContent>
-    </ErrorBoundary>
-</main>
+<div class="shell @Privacy.CssClass">
+    <main class="page">
+        <ErrorBoundary @ref="_boundary">
+            <ChildContent>
+                @Body
+            </ChildContent>
+            <ErrorContent Context="error">
+                <h1>This screen did not load</h1>
+                <div class="notice error" role="alert">
+                    @error.Message
+                </div>
+                <p class="muted small">
+                    Nothing was written and nothing was lost. Your ledger is on this device and is
+                    unaffected by a screen failing to draw.
+                </p>
+                <button class="primary btn-block" @onclick="Recover">Try again</button>
+            </ErrorContent>
+        </ErrorBoundary>
+    </main>
 
-<NavMenu />
-<ToastHost />
+    <NavMenu />
+    <ToastHost />
+</div>
 
 @code {
     private ErrorBoundary? _boundary;
 
+    protected override void OnInitialized() => Privacy.Changed += OnPrivacyChanged;
+
     // A boundary latches once it has caught something. Without this, navigating away and
     // back shows the same error over a page that would now render perfectly well.
     protected override void OnParametersSet() => _boundary?.Recover();
+
+    public void Dispose() => Privacy.Changed -= OnPrivacyChanged;
+
+    private void OnPrivacyChanged() => InvokeAsync(StateHasChanged);
 
     private void Recover() => _boundary?.Recover();
 }

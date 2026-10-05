@@ -18,17 +18,18 @@ ways.
 | [0007](0007-single-label-plus-tags.md) | Exactly one Label per transaction, plus unlimited Tags | **superseded by 0013** |
 | [0008](0008-audit-via-sqlite-triggers.md) | Audit trail written by SQLite triggers; soft deletes everywhere | accepted |
 | [0009](0009-dotnet-maui-over-expo-typescript.md) | C# on .NET MAUI, reversing 0005 | accepted |
-| [0010](0010-on-device-sms-assisted-capture.md) | SMS parsed on device into suggestions, never booked automatically | accepted |
+| [0010](0010-on-device-sms-assisted-capture.md) | SMS parsed on device into suggestions, never booked automatically | accepted, **SM2 superseded by 0015** |
 | [0011](0011-blazor-hybrid-over-native-xaml.md) | Blazor Hybrid rather than native XAML for the UI layer | accepted |
 | [0012](0012-free-forever-voluntary-support.md) | Free forever, MIT licensed, funded only by voluntary support | accepted |
 | [0013](0013-multiple-flat-labels.md) | Any number of flat Labels per transaction; Tags removed, reversing 0007 | accepted |
-| [0014](0014-payment-app-notification-ingest.md) | Allow-listed Payment App notifications as a second alert channel, merged with SMS | accepted |
+| [0014](0014-payment-app-notification-ingest.md) | Allow-listed Payment App notifications as a second alert channel, merged with SMS | accepted, **SM2 parts superseded by 0015** |
+| [0015](0015-record-alerts-as-needs-review.md) | Parsed alerts are recorded straight away as Needs Review transactions, reversing SM2 | accepted |
 
 ## The load-bearing ones
 
 If you only read three: **0001** (no backend) is the decision every other one sits on,
-**0003** (derived balances) is what makes the numbers trustworthy, and **0010**'s `SM2` is
-what stops a text message from silently changing a balance.
+**0003** (derived balances) is what makes the numbers trustworthy, and **0015** is what lets a
+text message change a balance, flagged for review rather than silently.
 
 ## Writing a new one
 

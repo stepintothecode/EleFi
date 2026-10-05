@@ -141,7 +141,8 @@ public interface ITransactionRepository
     Task<IReadOnlyList<ContainerBalance>> BalancesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Spending for a date range: the per-label figures and the true total, separately.
+    /// Spending among the transactions a filter selects: the per-label figures and the true
+    /// total, separately.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -150,17 +151,40 @@ public interface ITransactionRepository
     /// double-counting every rupee already recorded when it was spent.
     /// </para>
     /// <para>
-    /// The per-label figures overlap and the total is counted independently. See
-    /// <see cref="SpendBreakdown"/>.
+    /// Takes a filter rather than two dates so the dashboard's ranges, times included, mean
+    /// exactly what the list's do. The per-label figures overlap and the total is counted
+    /// independently. See <see cref="SpendBreakdown"/>.
     /// </para>
     /// </remarks>
-    /// <param name="fromDate">Start of the range, inclusive.</param>
-    /// <param name="toDate">End of the range, inclusive.</param>
+    /// <param name="filter">Which transactions to consider. Usually only a date range.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     Task<SpendBreakdown> SpendByLabelAsync(
-        DateOnly fromDate,
-        DateOnly toDate,
+        TransactionFilter filter,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Money in and money out across everything a filter selects, for the list's total.
+    /// </summary>
+    /// <remarks>
+    /// Over the whole filtered set, not the page loaded so far, so the total does not change
+    /// as more rows are scrolled into view. Self Transfers count on neither side (D1).
+    /// </remarks>
+    /// <param name="filter">The filter the list is showing.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<FlowTotals> TotalsAsync(TransactionFilter filter, CancellationToken cancellationToken = default);
+
+    /// <summary>Soft-deleted transactions, most recently deleted first.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Transaction>> ListDeletedAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>What came in and what went out, with transfers between your own containers ignored.</summary>
+/// <param name="InMinor">The sum of Credits, in home-currency minor units.</param>
+/// <param name="OutMinor">The sum of Debits, in home-currency minor units.</param>
+public readonly record struct FlowTotals(long InMinor, long OutMinor)
+{
+    /// <summary>In minus out. Negative when more left than arrived.</summary>
+    public long NetMinor => InMinor - OutMinor;
 }
 
 /// <summary>
@@ -341,6 +365,34 @@ public interface IAppRepository
     /// <param name="appIds">The apps used.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     Task TouchAsync(IEnumerable<Guid> appIds, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Reads and writes Parse Rules, built-in and taught.</summary>
+public interface IParseRuleRepository
+{
+    /// <summary>Every live rule, in priority order.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<ParseRule>> ListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>One rule, or null.</summary>
+    /// <param name="id">The rule.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<ParseRule?> FindAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a rule.</summary>
+    /// <param name="rule">The rule.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task AddAsync(ParseRule rule, CancellationToken cancellationToken = default);
+
+    /// <summary>Saves changes to a rule.</summary>
+    /// <param name="rule">The rule, as returned by this repository.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task UpdateAsync(ParseRule rule, CancellationToken cancellationToken = default);
+
+    /// <summary>Soft-deletes a rule.</summary>
+    /// <param name="id">The rule.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Reads and writes Parse Rules and Capture Suggestions.</summary>

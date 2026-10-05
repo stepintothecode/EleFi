@@ -201,11 +201,47 @@ public sealed class EditTransactionService(
     public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
         transactions.SoftDeleteAsync(id, cancellationToken);
 
-    /// <summary>Brings a deleted transaction back, with its balances.</summary>
+    /// <summary>Deleted transactions, most recently deleted first, for the Deleted screen.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    public Task<IReadOnlyList<Transaction>> DeletedAsync(CancellationToken cancellationToken = default) =>
+        transactions.ListDeletedAsync(cancellationToken);
+
+    /// <summary>
+    /// Brings a deleted transaction back into every balance, flagged for review.
+    /// </summary>
+    /// <remarks>
+    /// Flagged because it was deleted for a reason. Coming back unflagged, it would sit in
+    /// the list looking settled while the reason it was removed went unexamined. The audit
+    /// trail records the restore and the flag.
+    /// </remarks>
     /// <param name="id">The transaction.</param>
     /// <param name="cancellationToken">Cancellation.</param>
-    public Task RestoreAsync(Guid id, CancellationToken cancellationToken = default) =>
-        transactions.RestoreAsync(id, cancellationToken);
+    public async Task RestoreAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await transactions.RestoreAsync(id, cancellationToken).ConfigureAwait(false);
+
+        var restored = await transactions.FindAsync(id, cancellationToken).ConfigureAwait(false);
+        if (restored is not null && !restored.NeedsReview)
+        {
+            restored.NeedsReview = true;
+            await transactions.UpdateAsync(restored, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Restores every deleted transaction, each flagged for review.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>How many were restored.</returns>
+    public async Task<int> RestoreAllAsync(CancellationToken cancellationToken = default)
+    {
+        var deleted = await transactions.ListDeletedAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var transaction in deleted)
+        {
+            await RestoreAsync(transaction.Id, cancellationToken).ConfigureAwait(false);
+        }
+
+        return deleted.Count;
+    }
 
     /// <summary>
     /// Turns a stored field name and value into something a person can read.

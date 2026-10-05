@@ -23,22 +23,20 @@ public enum SuggestionState
 }
 
 /// <summary>
-/// A parsed, unconfirmed proposal derived from a bank's SMS, a Payment App's notification,
-/// or both describing the same payment.
+/// What a Parse Rule read from a bank's SMS, a Payment App's notification, or both describing
+/// the same payment, and the link to the transaction it recorded.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>A Capture Suggestion is not a Transaction (SM2).</b> It holds no balance, appears in
-/// no report, is in no export, and is not backed up. It becomes a transaction only when a
-/// human confirms it, and confirming is what makes it real. The app does not book money
-/// because a bank sent a text message.
+/// <b>Since ADR-0015 this is bookkeeping, not something the user sees.</b> An alert is
+/// recorded straight away as a transaction flagged Needs Review, and this row is created
+/// already <see cref="SuggestionState.Confirmed"/>, pointing at it. It exists so the second
+/// alert for a payment completes that transaction instead of recording another, and so a
+/// repeated alert is recognised (SM6). It expires after a week.
 /// </para>
 /// <para>
-/// This is deliberately not a <c>needs_review</c> transaction. That flag means "you
-/// recorded this quickly, check the details"; a suggestion means "a machine thinks this
-/// might have happened". Collapsing the two puts unverified pattern-matching output into
-/// balances, and the first time a promotional message parses as a 50,000 debit every
-/// number in the app is wrong with no visible cause.
+/// It was once a proposal awaiting confirmation (SM2, ADR-0010). The pending state and the
+/// confirming code paths are gone; the states remain so old rows still read.
 /// </para>
 /// <para>
 /// Note what is <b>not</b> here: no body column and no sender column. The message text is
