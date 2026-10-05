@@ -1437,3 +1437,44 @@ a.about-hero .chev { width: 18px; height: 18px; margin-left: auto; color: var(--
 }
 .colour-hex-field { margin: 0; }
 .colour-hex-field input { font-family: ui-monospace, monospace; }
+
+
+/* Quick capture's last question: Add other details and Done side by side, the same size. */
+.quick-actions-even > button { flex: 1 1 0; min-height: 52px; margin: 0; }
+
+/* Picking a goal's containers: a short scrolling checklist, not a wall of chips. */
+.goal-pick-list {
+  max-height: 232px;
+  overflow-y: auto;
+  border: 1px solid var(--ele-line);
+  border-radius: var(--ele-radius-sm);
+}
+.goal-pick {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 12px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--ele-line);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.goal-pick:last-child { border-bottom: 0; }
+.goal-check {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid var(--ele-text-dim);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+.goal-pick.on .goal-check { background: var(--ele-primary); border-color: var(--ele-primary); color: var(--ele-on-primary); }
+.goal-pick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mode-card { align-items: flex-start; }

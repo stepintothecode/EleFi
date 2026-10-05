@@ -132,7 +132,7 @@ public class LocalBackupTests
         Assert.True(empty.Count == 0, $"Give these tables a row in FillEveryTableAsync, so the round trip covers them: {string.Join(", ", empty)}");
 
         // Through text, as the user's file would be.
-        var json = JsonSerializer.Serialize(await f.Backup.ExportAsync());
+        var json = JsonSerializer.Serialize(await f.Backup.ExportAsync(), BackupJson.Default.BackupFile);
 
         await using var fresh = await TestDatabase.CreateAsync(Today);
         await fresh.Backup.RestoreAsync(Read(json));
@@ -150,7 +150,7 @@ public class LocalBackupTests
     {
         await using var f = await TestDatabase.CreateAsync(Today);
         await AddContainerAsync(f, "Kept", ContainerKind.Wallet, 100_00);
-        var file = Read(JsonSerializer.Serialize(await f.Backup.ExportAsync()));
+        var file = Read(JsonSerializer.Serialize(await f.Backup.ExportAsync(), BackupJson.Default.BackupFile));
         file.Tables!["Containers"][0]["AFieldFromTheFuture"] = 1;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => f.Backup.RestoreAsync(file));
@@ -267,11 +267,11 @@ public class LocalBackupTests
             bank, card, 1_000_00, "INR", 1_000_00, "INR", Today));
 
         var file = await source.Backup.ExportAsync();
-        return JsonSerializer.Serialize(file);
+        return JsonSerializer.Serialize(file, BackupJson.Default.BackupFile);
     }
 
     private static BackupFile Read(string json) =>
-        JsonSerializer.Deserialize<BackupFile>(json)!;
+        JsonSerializer.Deserialize(json, BackupJson.Default.BackupFile)!;
 
     private static async Task<Guid> AddContainerAsync(
         TestDatabase f, string name, ContainerKind kind, long openingMinor)

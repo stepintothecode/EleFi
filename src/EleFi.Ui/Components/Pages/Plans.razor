@@ -33,6 +33,10 @@
     {
         <button class="primary" @onclick="StartCreate">New plan</button>
     }
+    else
+    {
+        <button class="primary" id="new-goal" @onclick="() => _goalsPanel?.StartCreate()">New goal</button>
+    }
 </div>
 
 <div class="segmented" role="tablist" aria-label="Plans or goals" style="margin-top:0;">
@@ -44,7 +48,7 @@
 
 @if (_tab == "goals")
 {
-    <GoalsPanel />
+    <GoalsPanel @ref="_goalsPanel" />
 }
 else if (_loading)
 {
@@ -238,6 +242,7 @@ else
 
 @code {
     private string _tab = "plans";
+    private GoalsPanel? _goalsPanel;
 
     /// <summary>Which half to open on: "goals" or "plans".</summary>
     [SupplyParameterFromQuery(Name = "tab")]

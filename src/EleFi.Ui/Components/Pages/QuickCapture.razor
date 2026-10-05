@@ -67,7 +67,7 @@
         }
     </div>
 
-    <div class="quick-stage" @key="(_finishing ? 3 : _step)">
+    <div class="quick-stage" @key="(_finishing ? 3 : _step)" @ontouchstart="TouchStart" @ontouchend="TouchEnd">
         @if (_finishing)
         {
             <div class="quick-panel quick-finish">
@@ -125,7 +125,7 @@
         <p class="notice error" role="alert">@_problem</p>
     }
 
-    <div class="quick-actions">
+    <div class="quick-actions @(_finishing ? "quick-actions-even" : null)">
         @if (_finishing)
         {
             <button class="btn-ghost grow quick-more" disabled="@_busy" @onclick="AddOtherDetails">Add other details</button>
@@ -254,6 +254,45 @@
         }
 
         SetStep(System.Math.Max(0, _step - 1));
+    }
+
+    // Swiping the step sideways moves between steps: left for the next, right for the one
+    // before. Only a clearly sideways swipe counts, so scrolling a list is never taken for one.
+    private double? _touchX;
+    private double _touchY;
+
+    private void TouchStart(TouchEventArgs e)
+    {
+        if (e.Touches.Length == 1)
+        {
+            _touchX = e.Touches[0].ClientX;
+            _touchY = e.Touches[0].ClientY;
+        }
+    }
+
+    private void TouchEnd(TouchEventArgs e)
+    {
+        if (_touchX is not { } startX || e.ChangedTouches.Length == 0)
+        {
+            return;
+        }
+
+        _touchX = null;
+        var dx = e.ChangedTouches[0].ClientX - startX;
+        var dy = e.ChangedTouches[0].ClientY - _touchY;
+        if (Math.Abs(dx) < 60 || Math.Abs(dx) < Math.Abs(dy) * 1.5)
+        {
+            return;
+        }
+
+        if (dx < 0)
+        {
+            Next();
+        }
+        else if (_step > 0 || _finishing)
+        {
+            StepBack();
+        }
     }
 
     private void AmountTyped()

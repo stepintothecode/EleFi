@@ -18,10 +18,7 @@
     already in a container, never extra money (GL3), so nothing here touches net worth.
 *@
 
-<div class="row between goals-head">
-    <p class="muted small grow" style="margin:0;">Save towards something and see whether you are on track.</p>
-    <button class="primary" id="new-goal" @onclick="StartCreate">New goal</button>
-</div>
+<p class="muted small goals-head">Save towards something and see whether you are on track.</p>
 
 @foreach (var warning in _warnings)
 {
@@ -99,19 +96,20 @@ else
     </div>
 
     <div class="field">
-        <label>
-            @(_mode == FundingMode.TracksContainerBalance ? "Which containers?" : "Where the money sits")
-            @if (_mode == FundingMode.TracksContributions)
-            {
-                <span class="muted small">(optional, for a warning if goals claim more than it holds)</span>
-            }
-        </label>
-        <div class="chips" id="goal-containers" role="group" aria-label="Containers">
+        <label>@(_mode == FundingMode.TracksContainerBalance ? "Which containers?" : "Where the money sits (optional)")</label>
+        @if (_mode == FundingMode.TracksContributions)
+        {
+            <p class="muted small" style="margin:0 0 6px;">For a warning if goals claim more than it holds.</p>
+        }
+        <div class="goal-pick-list" id="goal-containers" role="group" aria-label="Containers">
             @foreach (var container in _containers)
             {
-                <button type="button" class="chip @(_picked.Contains(container.Id) ? "on" : null)"
-                        aria-pressed="@(_picked.Contains(container.Id) ? "true" : "false")"
-                        @onclick="() => Toggle(container.Id)">@container.Name</button>
+                var on = _picked.Contains(container.Id);
+                <button type="button" role="checkbox" class="goal-pick @(on ? "on" : null)"
+                        aria-checked="@(on ? "true" : "false")" @onclick="() => Toggle(container.Id)">
+                    <span class="goal-check" aria-hidden="true">@(on ? "✓" : "")</span>
+                    <span class="goal-pick-name">@container.Name</span>
+                </button>
             }
         </div>
     </div>
@@ -245,7 +243,8 @@ else
         _ => "behind",
     };
 
-    private void StartCreate()
+    /// <summary>Opens the sheet for a new goal. Called by the page's New goal button.</summary>
+    public void StartCreate()
     {
         _editingId = null;
         _editingArchived = false;
@@ -258,6 +257,7 @@ else
         _monthlyText = string.Empty;
         _error = null;
         _editing = true;
+        StateHasChanged();
     }
 
     private void StartEdit(Goal goal)

@@ -48,11 +48,11 @@ public class GoalsPanelTests : Bunit.TestContext
     {
         var panel = RenderComponent<GoalsPanel>();
 
-        panel.Find("#new-goal").Click();
+        panel.InvokeAsync(panel.Instance.StartCreate);
         panel.Find("#goal-name").Change("Ring");
         panel.Find("#goal-target").Change("300000");
         panel.Find("#mode-balance").Click();
-        panel.FindAll("#goal-containers .chip")[0].Click();
+        panel.FindAll("#goal-containers .goal-pick")[0].Click();
         panel.Find("[role=dialog] button.primary").Click();
 
         var goal = Assert.Single(_goals);
@@ -69,7 +69,7 @@ public class GoalsPanelTests : Bunit.TestContext
     {
         var panel = RenderComponent<GoalsPanel>();
 
-        panel.Find("#new-goal").Click();
+        panel.InvokeAsync(panel.Instance.StartCreate);
         panel.Find("#goal-name").Change("Ring");
         panel.Find("#goal-target").Change("300000");
         panel.Find("#mode-balance").Click();

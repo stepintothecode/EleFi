@@ -430,7 +430,7 @@
 
             // Indented, because the point of choosing JSON was that a person can open it and
             // see their own data rather than trusting the app about it.
-            var json = JsonSerializer.Serialize(file, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(file, BackupJson.Default.BackupFile);
             var name = $"elefi-backup-{Clock.Today:yyyy-MM-dd}.json";
 
             await FileShare.ShareAsync(name, Encoding.UTF8.GetBytes(json), "Save your EleFi backup");
@@ -457,7 +457,7 @@
                 return;
             }
 
-            var file = JsonSerializer.Deserialize<BackupFile>(json);
+            var file = JsonSerializer.Deserialize(json, BackupJson.Default.BackupFile);
             if (file is null || file.SchemaVersion == 0)
             {
                 Toasts.Error("That does not look like an EleFi backup.");

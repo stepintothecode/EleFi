@@ -73,7 +73,7 @@ public class AuditEvent
 
         try
         {
-            return System.Text.Json.JsonSerializer.Deserialize<List<FieldChange>>(Changes) ?? [];
+            return System.Text.Json.JsonSerializer.Deserialize(Changes, AuditJson.Default.ListFieldChange) ?? [];
         }
         catch (System.Text.Json.JsonException)
         {
@@ -111,3 +111,13 @@ public sealed record FieldChange(
         };
     }
 }
+
+/// <summary>
+/// Compile-time JSON for the audit trail's change lists.
+/// </summary>
+/// <remarks>
+/// Generated rather than reflected: a Release build trims unused code and switches off
+/// reflection-based JSON, and the timeline on every transaction reads these.
+/// </remarks>
+[System.Text.Json.Serialization.JsonSerializable(typeof(List<FieldChange>))]
+internal sealed partial class AuditJson : System.Text.Json.Serialization.JsonSerializerContext;
