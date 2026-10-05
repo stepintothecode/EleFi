@@ -328,6 +328,67 @@ Merge duplicate parties and apps with transaction reassignment; privacy mode; ma
 due-date reminders. Full JSON export moved forward into S11b and is done.
 **FR-10.10-10.11, FR-1.13-1.14**
 
+> Privacy mode is done (hide amounts, 2026-10-05). Merge and reminders are not.
+
+### S41 · Planner
+**Blocked by:** S5, S8 · *added 2026-10-05; absorbs S32 (recurring transactions)*
+
+A tab for money you expect to move: SIPs, rent, the card bill, an insurance premium, paying
+a friend back. Shaped like Microsoft To Do, but every item is a **Plan**: a title, an
+optional amount, and the transaction it should become.
+
+- **A Plan is not a Transaction.** It never touches a balance, a report or an export until
+  it is done, so `D2` and `X1` are untouched. What it adds is foresight: "₹38,500 still
+  planned this month" on the dashboard.
+- **Fields:** title, due date (optional time), amount, kind, Source and Destination (a
+  container and a payee, or two containers for a SIP into a mutual fund), labels, note,
+  and a **repeat rule**: daily, weekly on chosen days, monthly on a day or the last day,
+  yearly, every N of any of these, with an optional end date or count. Same shape as To Do.
+- **The list:** open plans grouped Overdue, Today, This week, Later, in due-date order;
+  **Completed** collapsed underneath, newest first. A circle on the left ticks a plan off.
+- **Ticking off does the bookkeeping.** EleFi first looks for a transaction that already
+  records it: same amount (within a tolerance the plan sets, default exact), same container
+  where the plan names one, within a few days of the due date, not already claimed by
+  another plan. One match is linked. Several are offered to choose from. None opens the
+  capture form pre-filled from the plan, so one more tap records it. A plan can also be
+  ticked as "done without a transaction", for the ones that are not money.
+- **Plans watch the ledger.** When an SMS or payment-app alert records a transaction that
+  matches an open plan, the plan is ticked and linked automatically and the Alert Prompt
+  says so ("SIP to Axis Bluechip, done"). The SIP whose SMS never came is the one left
+  open on the due date, which is exactly the one worth a reminder.
+- **Repeats roll forward on completion,** not on the calendar, so a missed month stays
+  overdue instead of silently being replaced by the next one. Skipping an occurrence is an
+  explicit action.
+- **Reminders:** a local notification on the due date for plans not yet done, with "Mark
+  done" (link or record) and "Snooze to tomorrow".
+- **Audited** like transactions, soft-deleted like transactions.
+
+*Demoable:* create a monthly SIP plan from SBI to the mutual fund; the SIP's SMS arrives and
+the plan ticks itself; next month the SMS does not come, the plan is overdue on the 6th, one
+tap records the transaction and rolls the plan to the following month.
+
+> Absorbs S32 rather than sitting beside it. A recurring transaction that books itself is
+> SM2's old worry in a new form: money recorded with nobody checking. A plan that ticks
+> itself only when a real transaction appears, and otherwise asks, keeps the ledger honest.
+
+### S42 · Steady ledger (consistency streak) - proposed
+**Blocked by:** S9, S41 · *proposed 2026-10-05, not yet agreed*
+
+Duolingo's habit loop without asking for a transaction a day. The unit is the **week**, and
+the habit is **keeping the ledger true**, which takes about a minute because alerts record
+most of it:
+
+- A week counts when, by Sunday night, nothing from that week still needs review and no
+  plan due that week is left open. Zero transactions is fine: there was nothing to tidy.
+- **Ele carries it.** Ele's mood follows the streak, and a fresh week starts with Ele asking
+  for the tidy. No guilt copy, no red badges.
+- **Freezes**, earned one per four clean weeks and spent automatically, so a holiday does
+  not reset a year.
+- **Milestones** at 4, 12, 26 and 52 weeks, celebrated by Ele, never by a store or a reward:
+  ADR-0012 means there is nothing to sell or unlock.
+- Optional **monthly balance check** (S20): confirm one container's balance matches the
+  bank, which is what actually keeps the numbers trustworthy.
+
 ---
 
 ## v1.2 - SMS-assisted capture, multi-currency, reporting
