@@ -11,6 +11,12 @@ Vocabulary from [CONTEXT.md](CONTEXT.md). Requirement IDs from
 The largest risk to this project is not a wrong technical decision - it is the project
 stalling before it becomes a habit. Every cut below serves that.
 
+**Status 2026-10-05, evening.** Goals (S14) are built: both funding modes, status against a
+straight line to the date, the monthly amount still needed, and contributions. The JSON
+backup now holds everything, and a Safety Copy is taken before any update changes the
+schema. Back works everywhere, the app hides from the recent-apps view (part of S11), and
+labels take any colour. See [the decision log](prompts/2026-10-05-data-safety-goals-and-polish.md).
+
 **Status 2026-10-05, later.** S41 Planner has its first cut: a Plans tab with repeats,
 completion that links or records a transaction, and alerts that tick a matching plan. Undo
 after an edit or delete closes the main gap in S8. Home has a Notifications bell and a

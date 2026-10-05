@@ -190,6 +190,7 @@ public class SettingsTests : Bunit.TestContext
 
         Services.AddSingleton(new AlertCaptureSettings(_store));
         Services.AddSingleton(new PrivacyMode(_store));
+        Services.AddSingleton(new AppSwitcherPrivacy(_store));
         Services.AddSingleton(access ?? new FakeAccess());
         Services.AddSingleton<IClock>(clock);
         Services.AddSingleton(new LabelService(labels, clock));

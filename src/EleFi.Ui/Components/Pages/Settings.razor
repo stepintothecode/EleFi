@@ -7,6 +7,7 @@
 @using EleFi.Domain.Alerts
 @using EleFi.Ui.Services
 @inject PrivacyMode Privacy
+@inject AppSwitcherPrivacy Recents
 @inject AlertCaptureSettings Capture
 @inject IAlertAccess Access
 @inject IDataWipe Wipe
@@ -43,6 +44,17 @@
             <span class="track"></span>
         </label>
     </div>
+    <div class="row between" style="margin-top: 14px;">
+        <div class="grow">
+            <div class="who">Hide in recent apps</div>
+            <div class="meta">Shows a blank card in the app switcher instead of your last screen.</div>
+        </div>
+        <label class="switch">
+            <input type="checkbox" aria-label="Hide in recent apps" checked="@Recents.Enabled"
+                   @onchange="e => Recents.Set(e.Value is true)" />
+            <span class="track"></span>
+        </label>
+    </div>
 </div>
 
 <div class="field-head section-gap">
@@ -50,8 +62,9 @@
     <InfoButton Topic="Your data">
         <p><strong>Labels</strong> are the words you tag transactions with. Edit them on their own page.</p>
         <p class="muted small">
-            <strong>Export</strong> writes one JSON file with every container, label and
-            transaction. Keep it somewhere safe and you can put it all back.
+            <strong>Export</strong> writes one JSON file with everything: containers, labels,
+            transactions (deleted ones too), plans, goals, taught messages, notifications and the
+            history of every change. Keep it somewhere safe and you can put it all back.
             <strong>The file is not encrypted.</strong> It is your whole financial history in
             readable text, so where you put it matters.
         </p>
@@ -295,8 +308,9 @@
     {
         <p class="small">
             Written @file.ExportedAt.ToLocalTime().ToString("d MMM yyyy, HH:mm").
-            It holds @file.Transactions.Count transactions, @file.Containers.Count containers
-            and @file.Labels.Count labels.
+            It holds @file.LiveCount("Transactions") transactions, @file.LiveCount("Containers") containers,
+            @file.LiveCount("Labels") labels, @file.LiveCount("Plans") plans, @file.LiveCount("Goals") goals
+            and @file.LiveCount("ParseRules") taught messages.
         </p>
         <p class="small notice error">
             Everything currently on this device will be replaced.
@@ -420,7 +434,7 @@
             var name = $"elefi-backup-{Clock.Today:yyyy-MM-dd}.json";
 
             await FileShare.ShareAsync(name, Encoding.UTF8.GetBytes(json), "Save your EleFi backup");
-            Toasts.Ok($"{file.Transactions.Count} transactions written to {name}.");
+            Toasts.Ok($"Everything, with {file.LiveCount("Transactions")} transactions, written to {name}.");
         }
         catch (Exception ex)
         {

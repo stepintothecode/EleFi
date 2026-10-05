@@ -65,6 +65,7 @@ public static class MauiProgram
 
         // Scoped too: the layout and the dashboard must see the same switch.
         builder.Services.AddScoped<EleFi.Ui.Services.PrivacyMode>();
+        builder.Services.AddScoped<EleFi.Ui.Services.AppSwitcherPrivacy>();
 
         // Transient, not scoped. MascotViewer owns a canvas and disposes its service when it
         // unmounts, so each viewer needs its own instance. Sharing one meant navigating away

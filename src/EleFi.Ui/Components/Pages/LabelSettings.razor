@@ -55,16 +55,7 @@
 
     <div class="field">
         <label>Colour</label>
-        <div class="chips">
-            @foreach (var colour in Palette)
-            {
-                <button type="button"
-                        class="swatch-btn @(_colour == colour ? "on" : string.Empty)"
-                        style="background: @colour"
-                        aria-label="@colour"
-                        @onclick="() => _colour = colour"></button>
-            }
-        </div>
+        <ColourPicker @bind-Value="_colour" SampleText="@_editing" />
     </div>
 
     <button class="primary btn-block" @onclick="SaveAsync">Save</button>
@@ -89,14 +80,12 @@
 </Modal>
 
 @code {
-    private static readonly string[] Palette =
-        ["#f97316", "#0ea5e9", "#a855f7", "#ef4444", "#f43f5e", "#10b981", "#22c55e", "#6366f1", "#94a3b8"];
 
     private IReadOnlyList<Label> _labels = [];
 
     private string? _editing;
     private Guid? _editingId;
-    private string? _colour;
+    private string _colour = ColourPicker.Presets[0];
 
     private Label? _deleting;
     private int _deletingUsage;
@@ -109,14 +98,14 @@
     {
         _editing = string.Empty;
         _editingId = null;
-        _colour = Palette[0];
+        _colour = ColourPicker.Presets[1];
     }
 
     private void StartEdit(Label label)
     {
         _editing = label.Name;
         _editingId = label.Id;
-        _colour = label.Colour ?? Palette[0];
+        _colour = ColourMath.Normalise(label.Colour) ?? ColourPicker.Presets[1];
     }
 
     private void CancelEdit()

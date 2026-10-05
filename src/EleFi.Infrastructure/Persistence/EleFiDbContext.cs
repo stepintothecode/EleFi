@@ -59,6 +59,12 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
     /// <summary>The in-app notification list.</summary>
     public DbSet<Domain.Notices.Notice> Notices => Set<Domain.Notices.Notice>();
 
+    /// <summary>Goals.</summary>
+    public DbSet<Domain.Goals.Goal> Goals => Set<Domain.Goals.Goal>();
+
+    /// <summary>The containers linked to each goal.</summary>
+    public DbSet<Domain.Goals.GoalContainer> GoalContainers => Set<Domain.Goals.GoalContainer>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -160,6 +166,11 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
             e.HasIndex(t => t.OccurredOn);
             e.HasIndex(t => t.SourcePartyId);
             e.HasIndex(t => t.DestinationPartyId);
+
+            // An index, not a foreign key. Adding a key to an existing SQLite table means
+            // rebuilding it, and that is not a risk worth taking with the ledger. GoalService
+            // keeps it honest instead (T8, GL6).
+            e.HasIndex(t => t.GoalId);
 
             e.ToTable(t =>
             {
@@ -295,6 +306,37 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
             e.HasQueryFilter(n => n.DeletedAt == null);
             e.HasIndex(n => n.Route);
             e.HasIndex(n => n.CreatedAt);
+        });
+
+        modelBuilder.Entity<Domain.Goals.Goal>(e =>
+        {
+            e.ToTable("Goals");
+            e.HasKey(g => g.Id);
+            e.Property(g => g.Name).IsRequired().HasMaxLength(120);
+            e.Property(g => g.CurrencyCode).IsRequired().HasMaxLength(3);
+            e.Property(g => g.StartDate).HasConversion(dateOnly).IsRequired();
+            e.Property(g => g.TargetDate).HasConversion(dateOnly).IsRequired();
+            e.Property(g => g.CreatedAt).HasConversion(instant);
+            e.Property(g => g.UpdatedAt).HasConversion(instant);
+            e.Property(g => g.DeletedAt).HasConversion(nullableInstant);
+            e.HasMany(g => g.Containers).WithOne().HasForeignKey(c => c.GoalId).OnDelete(DeleteBehavior.Cascade);
+
+            // GL2 and GL1 in the schema too, so no path round the service can store a goal
+            // that the progress maths would divide by.
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_Goals_TargetPositive", "TargetAmountMinor > 0");
+                t.HasCheckConstraint("CK_Goals_TargetAfterStart", "TargetDate > StartDate");
+            });
+            e.HasQueryFilter(g => g.DeletedAt == null);
+        });
+
+        modelBuilder.Entity<Domain.Goals.GoalContainer>(e =>
+        {
+            e.ToTable("GoalContainers");
+            e.HasKey(c => new { c.GoalId, c.ContainerId });
+            e.HasOne<Container>().WithMany().HasForeignKey(c => c.ContainerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(c => c.ContainerId);
         });
 
         modelBuilder.Entity<AuditEvent>(e =>

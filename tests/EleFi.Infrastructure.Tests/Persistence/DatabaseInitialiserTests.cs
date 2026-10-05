@@ -1,6 +1,10 @@
 using EleFi.Domain.Labels;
+using EleFi.Infrastructure.Persistence;
 using EleFi.Infrastructure.Tests.Support;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace EleFi.Infrastructure.Tests.Persistence;
 
@@ -96,4 +100,78 @@ public class DatabaseInitialiserTests
         var rules = await fixture.Db.ParseRules.Where(r => r.Name == "HDFC debit").ToListAsync();
         Assert.False(Assert.Single(rules).IsEnabled);
     }
+
+    [Fact]
+    public async Task An_update_that_changes_the_schema_copies_the_database_aside_first_with_the_same_key()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"elefi-safety-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, "elefi.db");
+
+        try
+        {
+            // The schema before goals, holding a container: an install about to be updated.
+            await using (var db = Open(path))
+            {
+                await db.Database.GetService<IMigrator>().MigrateAsync("20261005032427_PlansAndNotices");
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT INTO Containers (Id, Name, Kind, CurrencyCode, OpeningBalanceMinor, OpeningBalanceAsOf,
+                                            IsArchived, SortOrder, CreatedAt, UpdatedAt)
+                    VALUES ('0199a000-0000-7000-8000-000000000001', 'SBI', 0, 'INR', 100, '2026-01-01', 0, 0, 1, 1);
+                    """);
+            }
+
+            await using (var db = Open(path))
+            {
+                await new DatabaseInitialiser(db, new FixedClock(new DateOnly(2026, 10, 5))).InitialiseAsync();
+            }
+
+            var copy = Assert.Single(Directory.GetFiles(DatabaseInitialiser.SafetyFolder(path)));
+            Assert.Contains("Goals", Path.GetFileName(copy), StringComparison.Ordinal);
+
+            // Opens with the same key, and still has what the device had before the update.
+            await using (var saved = Open(copy))
+            {
+                Assert.Equal("SBI", await saved.Database.SqlQueryRaw<string>("SELECT Name AS Value FROM Containers").SingleAsync());
+            }
+
+            // An ordinary start, with nothing pending, takes no copy.
+            await using (var db = Open(path))
+            {
+                await new DatabaseInitialiser(db, new FixedClock(new DateOnly(2026, 10, 5))).InitialiseAsync();
+            }
+
+            Assert.Single(Directory.GetFiles(DatabaseInitialiser.SafetyFolder(path)));
+        }
+        finally
+        {
+            foreach (var file in Directory.GetFiles(folder, "*.db", SearchOption.AllDirectories))
+            {
+                using var pooled = new SqliteConnection(ConnectionStringFor(file));
+                SqliteConnection.ClearPool(pooled);
+            }
+
+            try
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+            catch (IOException)
+            {
+                // A file still held open by the OS; the temp folder is cleared eventually.
+            }
+        }
+    }
+
+    private static EleFiDbContext Open(string path) =>
+        new(new DbContextOptionsBuilder<EleFiDbContext>().UseSqlite(ConnectionStringFor(path)).Options);
+
+    private static string ConnectionStringFor(string path) =>
+        new SqliteConnectionStringBuilder
+        {
+            DataSource = path,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Password = "test-key-not-a-real-one",
+            ForeignKeys = true,
+        }.ToString();
 }

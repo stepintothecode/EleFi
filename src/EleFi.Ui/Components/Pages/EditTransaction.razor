@@ -11,6 +11,8 @@
 @using EleFi.Domain.Transactions
 @using EleFi.Ui.Services
 @inject EditTransactionService Editing
+@inject ITransactionRepository Transactions
+@inject EleFi.Application.Goals.GoalService Goals
 @inject IContainerRepository Containers
 @inject LabelService LabelList
 @inject IPartyRepository Parties
@@ -107,7 +109,7 @@ else
 
             <div class="field">
                 <label for="party">@(_kind == TransactionKind.Debit ? "Paid to" : "Received from")</label>
-                <TypeaheadInput Id="party" @bind-Value="_partyName" Candidates="_partyCandidates" />
+                <TypeaheadInput Id="party" Value="@_partyName" ValueChanged="PartyChangedAsync" Candidates="_partyCandidates" />
             </div>
 
             <div class="field">
@@ -147,8 +149,24 @@ else
 
         <div class="field">
             <label for="note">Note <span class="muted small">(optional)</span></label>
-            <input id="note" @bind="_description" autocomplete="off" />
+            <TypeaheadInput Id="note" Value="@(_description ?? string.Empty)" ValueChanged="v => _description = v"
+                            Candidates="_noteCandidates" IdleCount="3" OffersNew="false" Capitalize="sentences"
+                            EnterKeyHint="done" PanelLabel="Notes used before" />
         </div>
+
+        @if (_goals.Count > 0)
+        {
+            <div class="field">
+                <label for="goal">Counts toward <span class="muted small">(optional)</span></label>
+                <select id="goal" @bind="_goalId">
+                    <option value="">No goal</option>
+                    @foreach (var goal in _goals)
+                    {
+                        <option value="@goal.Id">@goal.Name</option>
+                    }
+                </select>
+            </div>
+        }
 
         <button class="primary btn-block" disabled="@_busy" @onclick="SaveAsync">Save changes</button>
     </div>
@@ -267,6 +285,16 @@ else
         {
             _timeline = await Editing.TimelineAsync(Id);
             Populate(_transaction);
+            await LoadNoteCandidatesAsync();
+
+            // Goals that take contributions, plus the one it already counts toward, so an
+            // archived goal still shows rather than silently reading "No goal".
+            var attributable = await Goals.AttributableAsync();
+            _goals = _transaction.GoalId is { } current && attributable.All(g => g.Id != current)
+                && await Goals.FindAsync(current) is { } existing
+                ? [.. attributable, existing]
+                : attributable;
+            _goalId = _transaction.GoalId;
         }
 
         _loading = false;
@@ -377,6 +405,7 @@ else
 
             // Taken before saving, so Undo can put every field back through the same path.
             var before = EditRequest.Snapshot(_transaction!);
+            var goalBefore = _transaction!.GoalId;
 
             var result = await Editing.EditAsync(new EditRequest(
                 Id,
@@ -397,6 +426,15 @@ else
             {
                 Toasts.Error(result.Error!);
                 return;
+            }
+
+            if (_goalId != goalBefore)
+            {
+                if (await Goals.AttributeAsync(Id, _goalId) is { } problem)
+                {
+                    Toasts.Error(problem);
+                    return;
+                }
             }
 
             Toasts.Ok("Saved.", new ToastAction("Undo", () => UndoEditAsync(before)));
@@ -474,4 +512,23 @@ else
         AuditAction.Restored => "Restored",
         _ => action.ToString(),
     };
+
+    private IReadOnlyList<TypeaheadCandidate> _noteCandidates = [];
+
+    // The note offers what was written with this payee before ("Gift" for Mom), once "Paid
+    // to" names someone already known. Not looked up for a half-typed name.
+    private async Task PartyChangedAsync(string name)
+    {
+        _partyName = name;
+        await LoadNoteCandidatesAsync();
+    }
+
+    private async Task LoadNoteCandidatesAsync()
+    {
+        var known = _partyCandidates.Any(c => string.Equals(c.Name, _partyName.Trim(), StringComparison.OrdinalIgnoreCase));
+        _noteCandidates = known ? await Transactions.NotesForPartyAsync(_partyName) : [];
+    }
+
+    private IReadOnlyList<EleFi.Domain.Goals.Goal> _goals = [];
+    private Guid? _goalId;
 }

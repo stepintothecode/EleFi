@@ -2,6 +2,7 @@ using EleFi.Application.Abstractions;
 using EleFi.Domain.Alerts;
 using EleFi.Domain.Labels;
 using EleFi.Domain.Transactions;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace EleFi.Infrastructure.Persistence;
@@ -20,10 +21,94 @@ public sealed class DatabaseInitialiser(EleFiDbContext db, IClock clock)
     /// <param name="cancellationToken">Cancellation.</param>
     public async Task InitialiseAsync(CancellationToken cancellationToken = default)
     {
+        await CopyBeforeMigratingAsync(cancellationToken).ConfigureAwait(false);
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
         await ReapplyAuditTriggersAsync(cancellationToken).ConfigureAwait(false);
         await SeedLabelsAsync(cancellationToken).ConfigureAwait(false);
         await SeedParseRulesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Restores the parts of a fresh install a restored backup may lack: current audit
+    /// triggers and any built-in Parse Rule shipped after the backup was written.
+    /// </summary>
+    /// <remarks>Labels are not seeded: a backup with no labels is restored with none.</remarks>
+    /// <param name="cancellationToken">Cancellation.</param>
+    public async Task AfterRestoreAsync(CancellationToken cancellationToken = default)
+    {
+        await ReapplyAuditTriggersAsync(cancellationToken).ConfigureAwait(false);
+        await SeedParseRulesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The folder, beside the database file, where copies taken before a migration are kept.</summary>
+    /// <param name="databasePath">The database file.</param>
+    public static string SafetyFolder(string databasePath) =>
+        Path.Combine(Path.GetDirectoryName(databasePath) ?? ".", "safety");
+
+    /// <summary>
+    /// Copies the database aside before an update changes its schema.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A migration is the one moment an app update rewrites the user's data rather than just
+    /// reading it. If one ever went wrong, the copy taken here is the way back. It is made with
+    /// SQLite's backup API through the keyed connection, so it is consistent and encrypted with
+    /// the same key, and it never leaves the app's private storage. The newest three are kept.
+    /// </para>
+    /// <para>
+    /// Only an existing database with something pending is copied: a fresh install has nothing
+    /// to protect, and an ordinary start has nothing about to change.
+    /// </para>
+    /// </remarks>
+    private async Task CopyBeforeMigratingAsync(CancellationToken cancellationToken)
+    {
+        if (db.Database.GetDbConnection() is not SqliteConnection connection
+            || string.IsNullOrEmpty(connection.DataSource)
+            || !File.Exists(connection.DataSource))
+        {
+            return;
+        }
+
+        var applied = await db.Database.GetAppliedMigrationsAsync(cancellationToken).ConfigureAwait(false);
+        var pending = (await db.Database.GetPendingMigrationsAsync(cancellationToken).ConfigureAwait(false)).ToList();
+        if (!applied.Any() || pending.Count == 0)
+        {
+            return;
+        }
+
+        var folder = SafetyFolder(connection.DataSource);
+        Directory.CreateDirectory(folder);
+        var target = Path.Combine(folder, $"before-{pending[0]}.db");
+
+        var keyed = new SqliteConnectionStringBuilder(connection.ConnectionString)
+        {
+            DataSource = target,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = false,
+        };
+
+        await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            using var copy = new SqliteConnection(keyed.ToString());
+            copy.Open();
+            connection.BackupDatabase(copy);
+
+            // One self-contained file, not a WAL database with side files that must travel
+            // with it.
+            using var journal = copy.CreateCommand();
+            journal.CommandText = "PRAGMA journal_mode = DELETE;";
+            journal.ExecuteNonQuery();
+        }
+        finally
+        {
+            await db.Database.CloseConnectionAsync().ConfigureAwait(false);
+        }
+
+        foreach (var old in new DirectoryInfo(folder).GetFiles("before-*.db").OrderByDescending(f => f.LastWriteTimeUtc).Skip(3))
+        {
+            old.Delete();
+        }
     }
 
     /// <summary>

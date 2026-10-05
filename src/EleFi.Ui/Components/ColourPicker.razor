@@ -1,0 +1,133 @@
+@using System.Globalization
+@using EleFi.Ui.Services
+
+@*
+    A colour picker for labels: any colour, not a row of nine.
+
+    Three sliders move hue, shade and vividness, each track painted with the colours it
+    reaches so the slider explains itself. A grid of ready-made colours covers the quick tap,
+    and a hex field covers the exact one. The preview shows the label as it will look.
+*@
+
+<div class="colour-picker">
+    <div class="colour-preview" style="--picked: @Value">
+        <span class="colour-dot"></span>
+        <span class="tag">@(string.IsNullOrWhiteSpace(SampleText) ? "Label" : SampleText)</span>
+        <span class="colour-hex">@Value</span>
+    </div>
+
+    <div class="swatch-grid" role="group" aria-label="Ready-made colours">
+        @foreach (var colour in Presets)
+        {
+            <button type="button" class="swatch-btn @(string.Equals(Value, colour, StringComparison.OrdinalIgnoreCase) ? "on" : null)"
+                    style="background: @colour" aria-label="@colour" @onclick="() => SetAsync(colour)"></button>
+        }
+    </div>
+
+    <label class="colour-slider">
+        <span>Hue</span>
+        <input type="range" min="0" max="359" step="1" value="@_hsl.Hue" aria-label="Hue"
+               style="background: @HueTrack" @oninput="e => MoveAsync(h: Read(e))" />
+    </label>
+    <label class="colour-slider">
+        <span>Shade</span>
+        <input type="range" min="22" max="78" step="1" value="@_hsl.Lightness" aria-label="Shade"
+               style="background: @ShadeTrack"
+               @oninput="e => MoveAsync(l: Read(e))" />
+    </label>
+    <label class="colour-slider">
+        <span>Vividness</span>
+        <input type="range" min="10" max="100" step="1" value="@_hsl.Saturation" aria-label="Vividness"
+               style="background: @VividTrack"
+               @oninput="e => MoveAsync(s: Read(e))" />
+    </label>
+
+    <div class="field colour-hex-field">
+        <label for="colour-hex">Hex</label>
+        <input id="colour-hex" type="text" value="@Value" maxlength="7" autocomplete="off" autocapitalize="off"
+               spellcheck="false" @onchange="HexChangedAsync" />
+    </div>
+</div>
+
+@code {
+    /// <summary>Twenty-four ready-made colours: vivid ones, then softer and deeper ones.</summary>
+    public static readonly IReadOnlyList<string> Presets =
+    [
+        "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e",
+        "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1",
+        "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e", "#94a3b8",
+        "#b45309", "#be123c", "#0f766e", "#1d4ed8", "#6d28d9", "#475569",
+    ];
+
+    private Hsl _hsl = new(260, 70, 60);
+    private string? _seen;
+
+    /// <summary>The colour, as #rrggbb.</summary>
+    [Parameter]
+    public string Value { get; set; } = Presets[0];
+
+    /// <summary>Raised whenever the colour changes.</summary>
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>Text for the preview, usually the label's name.</summary>
+    [Parameter]
+    public string? SampleText { get; set; }
+
+    private string HueTrack => "linear-gradient(to right, "
+        + string.Join(", ", Enumerable.Range(0, 7).Select(i => Css(_hsl with { Hue = i * 60 })))
+        + ")";
+
+    private string ShadeTrack =>
+        $"linear-gradient(to right, {Css(_hsl with { Lightness = 22 })}, {Css(_hsl with { Lightness = 50 })}, {Css(_hsl with { Lightness = 78 })})";
+
+    private string VividTrack =>
+        $"linear-gradient(to right, {Css(_hsl with { Saturation = 10 })}, {Css(_hsl with { Saturation = 100 })})";
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        // Only a value from outside resets the sliders, so dragging one does not snap the
+        // others to whatever rounding the hex produced.
+        if (!string.Equals(Value, _seen, StringComparison.OrdinalIgnoreCase))
+        {
+            _seen = Value;
+            if (ColourMath.TryParse(Value, out var hsl))
+            {
+                _hsl = hsl;
+            }
+        }
+    }
+
+    private static string Css(Hsl c) =>
+        string.Create(CultureInfo.InvariantCulture, $"hsl({c.Hue} {c.Saturation}% {c.Lightness}%)");
+
+    private static int Read(ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : 0;
+
+    private Task MoveAsync(int? h = null, int? s = null, int? l = null)
+    {
+        _hsl = new Hsl(h ?? _hsl.Hue, s ?? _hsl.Saturation, l ?? _hsl.Lightness);
+        return EmitAsync(ColourMath.ToHex(_hsl));
+    }
+
+    private Task SetAsync(string hex)
+    {
+        if (ColourMath.TryParse(hex, out var hsl))
+        {
+            _hsl = hsl;
+        }
+
+        return EmitAsync(hex);
+    }
+
+    private Task HexChangedAsync(ChangeEventArgs e) =>
+        ColourMath.Normalise(e.Value?.ToString()) is { } hex ? SetAsync(hex) : Task.CompletedTask;
+
+    private async Task EmitAsync(string hex)
+    {
+        Value = hex;
+        _seen = hex;
+        await ValueChanged.InvokeAsync(hex);
+    }
+}

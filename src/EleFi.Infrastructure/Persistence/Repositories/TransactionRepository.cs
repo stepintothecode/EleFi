@@ -229,6 +229,36 @@ public sealed class TransactionRepository(EleFiDbContext db, IClock clock) : ITr
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Application.Typeahead.TypeaheadCandidate>> NotesForPartyAsync(
+        string partyName, CancellationToken cancellationToken = default)
+    {
+        var name = (partyName ?? string.Empty).Trim();
+        if (name.Length == 0)
+        {
+            return [];
+        }
+
+        // Either end: "Mom" is who was paid on a gift and who paid on a refund, and a note
+        // used with her is a likely note whichever way the money went.
+        var used = await db.Transactions
+            .AsNoTracking()
+            .Where(t => t.Description != null && t.Description != string.Empty)
+            .Where(t => (t.DestinationParty!.Name != null && EF.Functions.Collate(t.DestinationParty.Name, "NOCASE") == name)
+                || (t.SourceParty!.Name != null && EF.Functions.Collate(t.SourceParty.Name, "NOCASE") == name))
+            .Select(t => new { t.Description, t.CreatedAt })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return used
+            .GroupBy(u => u.Description!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => new Application.Typeahead.TypeaheadCandidate(
+                g.OrderByDescending(u => u.CreatedAt).First().Description!.Trim(),
+                g.Count(),
+                g.Max(u => u.CreatedAt)))
+            .ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<Transaction>> ListDeletedAsync(CancellationToken cancellationToken = default) =>
         await db.Transactions
             .IgnoreQueryFilters()

@@ -13,7 +13,7 @@ using NSubstitute;
 namespace EleFi.Ui.Tests.Components.Pages;
 
 /// <summary>
-/// Quick capture: three steps, and a way out to the full form that keeps what was typed.
+/// Quick capture: three steps, then Done or Add other details.
 /// </summary>
 public class QuickCaptureTests : Bunit.TestContext
 {
@@ -49,24 +49,53 @@ public class QuickCaptureTests : Bunit.TestContext
     }
 
     [Fact]
-    public void Add_other_details_with_no_counterparty_hands_the_amount_to_the_full_form()
+    public void Add_other_details_is_not_offered_until_the_last_step()
     {
         Register();
         var page = RenderComponent<QuickCapture>();
 
         page.Find("#q-amount").Input("450");
-        page.Find(".quick-more").Click();
+        Assert.Empty(page.FindAll(".quick-more"));
 
-        // Nothing could honestly be saved without a counterparty, so nothing was.
-        Assert.Empty(_transactions.Added);
-
-        var nav = Services.GetRequiredService<NavigationManager>();
-        Assert.Contains("capture?amount=450", nav.Uri, StringComparison.Ordinal);
-        Assert.Contains($"container={_card.Id}", nav.Uri, StringComparison.Ordinal);
+        page.Find(".quick-actions button.primary").Click();
+        Assert.Empty(page.FindAll(".quick-more"));
     }
 
     [Fact]
-    public void Add_other_details_with_both_ends_saves_and_opens_the_editor_on_it()
+    public void After_the_last_step_done_records_it_flagged_for_review()
+    {
+        Register();
+        var page = ToTheLastQuestion();
+
+        page.Find(".quick-done-button").Click();
+
+        var saved = Assert.Single(_transactions.Added);
+        Assert.True(saved.NeedsReview);
+        Assert.Equal(45000, saved.SourceAmountMinor);
+        Assert.Equal(new Fakes.StoppedClock().Today, saved.OccurredOn);
+    }
+
+    [Fact]
+    public void Add_other_details_opens_the_full_form_filled_in_and_saves_nothing()
+    {
+        Register();
+        var page = ToTheLastQuestion();
+
+        page.Find(".quick-more").Click();
+
+        // Nothing is recorded until the full form is saved.
+        Assert.Empty(_transactions.Added);
+
+        var uri = Services.GetRequiredService<NavigationManager>().Uri;
+        Assert.Contains("capture?amount=450", uri, StringComparison.Ordinal);
+        Assert.Contains($"container={_card.Id}", uri, StringComparison.Ordinal);
+        Assert.Contains("party=Zomato", uri, StringComparison.Ordinal);
+        Assert.Contains($"date={new Fakes.StoppedClock().Today:yyyy-MM-dd}", uri, StringComparison.Ordinal);
+        Assert.Contains("time=", uri, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tapping_a_suggested_name_asks_done_rather_than_recording_straight_away()
     {
         Register();
         var page = RenderComponent<QuickCapture>();
@@ -74,26 +103,23 @@ public class QuickCaptureTests : Bunit.TestContext
         page.Find("#q-amount").Input("450");
         page.Find(".quick-actions button.primary").Click();
         page.Find(".container-choices button").Click();
-        page.Find("#q-to").Input("Zomato");
-        page.Find(".quick-more").Click();
+        page.Find("[role=option]").Click();
 
-        var saved = Assert.Single(_transactions.Added);
-
-        // Still a quick capture: flagged so the editor's review banner explains itself.
-        Assert.True(saved.NeedsReview);
-        Assert.Equal(45000, saved.SourceAmountMinor);
-
-        var nav = Services.GetRequiredService<NavigationManager>();
-        Assert.EndsWith($"/transactions/{saved.Id}", nav.Uri, StringComparison.Ordinal);
+        Assert.Empty(_transactions.Added);
+        Assert.Contains("Zomato", page.Find(".quick-summary").TextContent, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Add_other_details_waits_for_an_amount()
+    private IRenderedComponent<QuickCapture> ToTheLastQuestion()
     {
-        Register();
         var page = RenderComponent<QuickCapture>();
 
-        Assert.True(page.Find(".quick-more").HasAttribute("disabled"));
+        page.Find("#q-amount").Input("450");
+        page.Find(".quick-actions button.primary").Click();
+        page.Find(".container-choices button").Click();
+        page.Find("#q-to").Input("Zomato");
+        page.Find(".quick-actions button.primary").Click();
+
+        return page;
     }
 
     private void Register()
@@ -161,5 +187,8 @@ public class QuickCaptureTests : Bunit.TestContext
 
         public Task<IReadOnlyList<Transaction>> ListDeletedAsync(CancellationToken cancellationToken = default) =>
             _empty.ListDeletedAsync(cancellationToken);
+
+        public Task<IReadOnlyList<EleFi.Application.Typeahead.TypeaheadCandidate>> NotesForPartyAsync(string partyName, CancellationToken cancellationToken = default) =>
+            _empty.NotesForPartyAsync(partyName, cancellationToken);
     }
 }

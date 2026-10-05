@@ -76,6 +76,8 @@ public static class DependencyInjection
         services.AddScoped<IPlanRepository, PlanRepository>();
         services.AddScoped<INoticeRepository, NoticeRepository>();
         services.AddScoped<EleFi.Application.Planning.PlanService>();
+        services.AddScoped<IGoalRepository, GoalRepository>();
+        services.AddScoped<EleFi.Application.Goals.GoalService>();
         services.AddScoped<AlertPartyResolver>();
         services.AddScoped<AlertCaptureService>();
         services.AddScoped<ParseRuleService>();

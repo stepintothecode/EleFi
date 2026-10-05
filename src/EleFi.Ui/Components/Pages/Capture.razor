@@ -16,6 +16,8 @@
 @inject IAppRepository Apps
 @inject IClock Clock
 @inject EleFi.Application.Planning.PlanService Planner
+@inject EleFi.Application.Goals.GoalService Goals
+@inject ITransactionRepository Transactions
 @inject NavigationManager Nav
 
 @*
@@ -94,7 +96,8 @@
         <div class="field">
             <label for="party">@(_kind == TransactionKind.Debit ? "Paid to" : "Received from")</label>
             <TypeaheadInput Id="party"
-                            @bind-Value="_partyName"
+                            Value="@_partyName"
+                            ValueChanged="PartyChangedAsync"
                             Candidates="_partyCandidates"
                             PanelLabel="@(_kind == TransactionKind.Debit ? "People and places you pay" : "People who pay you")"
                             Placeholder="Zomato, Rahul, landlord..." />
@@ -139,7 +142,9 @@
 
     <div class="field">
         <label for="note">Note <span class="muted small">(optional)</span></label>
-        <input id="note" @bind="_description" placeholder="What was it for?" autocomplete="off" />
+        <TypeaheadInput Id="note" Value="@(_description ?? string.Empty)" ValueChanged="v => _description = v"
+                        Candidates="_noteCandidates" IdleCount="3" OffersNew="false" Capitalize="sentences"
+                        EnterKeyHint="done" PanelLabel="Notes used before" Placeholder="What was it for?" />
     </div>
 
     <div class="stack">
@@ -179,6 +184,18 @@
     /// <summary>A note handed over by a plan.</summary>
     [SupplyParameterFromQuery(Name = "note")]
     public string? NoteQuery { get; set; }
+
+    /// <summary>The goal this capture puts money toward. Saving attributes the result to it.</summary>
+    [SupplyParameterFromQuery(Name = "goal")]
+    public Guid? GoalQuery { get; set; }
+
+    /// <summary>The day, as yyyy-MM-dd, when quick capture started: when the money moved.</summary>
+    [SupplyParameterFromQuery(Name = "date")]
+    public string? DateQuery { get; set; }
+
+    /// <summary>The time, as HH:mm, when quick capture started.</summary>
+    [SupplyParameterFromQuery(Name = "time")]
+    public string? TimeQuery { get; set; }
 
 
     private IReadOnlyList<Container> _containers = [];
@@ -234,9 +251,24 @@
             _containerId = handed;
         }
 
-        // Now, from the device, because that is what someone recording a purchase means.
+        // Now, from the device, because that is what someone recording a purchase means. When
+        // quick capture hands over, its moment wins: that is when the money moved, not the
+        // moment the user tapped through to add details.
         _date = Clock.Today.ToDateTime(TimeOnly.MinValue);
         _time = Clock.TimeOfDay;
+        if (DateOnly.TryParseExact(DateQuery, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var handedDate))
+        {
+            _date = handedDate.ToDateTime(TimeOnly.MinValue);
+        }
+
+        if (TimeOnly.TryParseExact(TimeQuery, "HH:mm", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var handedTime))
+        {
+            _time = handedTime;
+        }
+
+        await LoadNoteCandidatesAsync();
 
         _loading = false;
     }
@@ -353,6 +385,23 @@
                 return;
             }
 
+            // Money put toward a goal: attribute it, and go back to the goals.
+            if (GoalQuery is { } goalId)
+            {
+                var problem = await Goals.AttributeAsync(result.Transaction!.Id, goalId);
+                if (problem is null)
+                {
+                    Toasts.Ok($"Saved {MoneyText.ToDisplayString(amount)} toward the goal.");
+                }
+                else
+                {
+                    Toasts.Error($"Saved, but not added to the goal: {problem}");
+                }
+
+                Nav.NavigateTo("plans?tab=goals");
+                return;
+            }
+
             Toasts.Ok($"Saved {MoneyText.ToDisplayString(amount)}.");
             _amountText = string.Empty;
             _description = null;
@@ -370,5 +419,21 @@
         {
             _busy = false;
         }
+    }
+
+    private IReadOnlyList<TypeaheadCandidate> _noteCandidates = [];
+
+    // The note offers what was written with this payee before ("Gift" for Mom), once "Paid
+    // to" names someone already known. Not looked up for a half-typed name.
+    private async Task PartyChangedAsync(string name)
+    {
+        _partyName = name;
+        await LoadNoteCandidatesAsync();
+    }
+
+    private async Task LoadNoteCandidatesAsync()
+    {
+        var known = _partyCandidates.Any(c => string.Equals(c.Name, _partyName.Trim(), StringComparison.OrdinalIgnoreCase));
+        _noteCandidates = known ? await Transactions.NotesForPartyAsync(_partyName) : [];
     }
 }

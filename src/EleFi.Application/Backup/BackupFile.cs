@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace EleFi.Application.Backup;
@@ -19,11 +20,19 @@ namespace EleFi.Application.Backup;
 /// <see cref="SchemaVersion"/> exists so a future format change can refuse an incompatible
 /// file rather than importing half of it.
 /// </para>
+/// <para>
+/// <b>Format 2 holds everything</b>: every table, every row (deleted ones too, so Restore
+/// in Settings still has them), every column, as stored, under <see cref="Tables"/>. It is
+/// written from the database's own model rather than from a list of fields kept by hand, so
+/// a table or column added later is in the backup without anyone remembering to add it. Enum
+/// values are written by name and instants as ISO-8601 text, so it stays readable. Format 1
+/// files, which listed a few fields per entity, still restore through the lists below.
+/// </para>
 /// </remarks>
 public sealed class BackupFile
 {
     /// <summary>The format this file was written in.</summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     /// <summary>Format version, checked on import.</summary>
     [JsonPropertyName("schemaVersion")]
@@ -37,25 +46,67 @@ public sealed class BackupFile
     [JsonPropertyName("appVersion")]
     public string AppVersion { get; set; } = string.Empty;
 
-    /// <summary>Money Containers.</summary>
+    /// <summary>The last database migration the writing app had, so a newer file is refused.</summary>
+    [JsonPropertyName("databaseVersion")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DatabaseVersion { get; set; }
+
+    /// <summary>Format 2: every table by name, each row a column-to-value object.</summary>
+    [JsonPropertyName("tables")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, List<JsonObject>>? Tables { get; set; }
+
+    /// <summary>Format 1 only: Money Containers.</summary>
     [JsonPropertyName("containers")]
-    public List<BackupContainer> Containers { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<BackupContainer>? Containers { get; set; }
 
-    /// <summary>Labels.</summary>
+    /// <summary>Format 1 only: Labels.</summary>
     [JsonPropertyName("labels")]
-    public List<BackupLabel> Labels { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<BackupLabel>? Labels { get; set; }
 
-    /// <summary>Apps, in both roles.</summary>
+    /// <summary>Format 1 only: Apps, in both roles.</summary>
     [JsonPropertyName("apps")]
-    public List<BackupApp> Apps { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<BackupApp>? Apps { get; set; }
 
-    /// <summary>External parties. Container parties are rebuilt from the containers.</summary>
+    /// <summary>Format 1 only: external parties. Container parties are rebuilt from the containers.</summary>
     [JsonPropertyName("parties")]
-    public List<BackupParty> Parties { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<BackupParty>? Parties { get; set; }
 
-    /// <summary>Transactions.</summary>
+    /// <summary>Format 1 only: Transactions.</summary>
     [JsonPropertyName("transactions")]
-    public List<BackupTransaction> Transactions { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<BackupTransaction>? Transactions { get; set; }
+
+    /// <summary>
+    /// How many live (not deleted) rows a table holds, in either format, for telling the user
+    /// what a file contains before they restore it.
+    /// </summary>
+    /// <param name="table">The table: "Transactions", "Containers", "Labels", "Plans", "Goals", "ParseRules".</param>
+    public int LiveCount(string table)
+    {
+        if (Tables is not null)
+        {
+            return Tables.TryGetValue(table, out var rows)
+                ? rows.Count(r => r["DeletedAt"] is null && !IsBuiltIn(r))
+                : 0;
+        }
+
+        return table switch
+        {
+            "Transactions" => Transactions?.Count ?? 0,
+            "Containers" => Containers?.Count ?? 0,
+            "Labels" => Labels?.Count ?? 0,
+            _ => 0,
+        };
+    }
+
+    // Built-in Parse Rules ship with the app, so the count of rules is the ones taught.
+    private static bool IsBuiltIn(JsonObject row) =>
+        row["IsBuiltIn"] is JsonValue value && value.TryGetValue<bool>(out var builtIn) && builtIn;
 }
 
 /// <summary>A container, as stored in a backup.</summary>

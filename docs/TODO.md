@@ -13,22 +13,26 @@ Priorities as of 2026-10-05: multi-currency is **low** priority.
   - [ ] Reminder notification on the due date with "Mark done" and "Snooze to tomorrow"
   - [ ] Labels on a plan, carried into the transaction it records
   - [ ] "Still planned this month" on the dashboard
-  - [ ] Plans in the JSON backup and restore, and in the audit trail
+  - [ ] Plans in the audit trail
   - [ ] Skip an occurrence of a repeating plan
 - [ ] **Steady ledger streak (S42)**: count clean weeks, freezes, milestones, Ele's mood. The
       chip and its explanation exist; nothing is counted yet
-- [ ] **Goals (S14)**: both funding modes, contributions, progress, status. The Plans page has
-      a placeholder section
+- [ ] **Goals, the rest of S14**: goal choice on the capture form and quick capture, goal
+      progress on the dashboard (FR-5.8), projected completion date (FR-6.13), goals in the
+      audit trail
 - [ ] **Undo, the rest of S8**: undo for "Looks right", label changes from the Labels page,
       and container edits
 - [ ] **Notifications, the rest**: clear old read notices after a while, a notice for a plan
-      that falls due, notices in the JSON backup and restore
+      that falls due
+- [ ] One source for the app version: the project file says 0.1.0, About and Settings 0.3.0
+- [ ] Settings > Safety copies: list the copies taken before each update, and restore one
+- [ ] Note suggestions in quick capture's finish step
 
 ## v1.0 - daily driver
 
 - [ ] **Encrypted Google Drive backup (S12)**: OAuth with `drive.appdata` only, passphrase,
       Argon2id, recovery code, AES-256-GCM, WorkManager upload, retention, restore
-- [ ] **Security and settings (S11)**: biometric lock, auto-lock delay, app-switcher masking,
+- [ ] **Security and settings (S11)**: biometric lock, auto-lock delay,
       home currency, cycle start day, theme choice
 - [ ] **Dashboard (S9)**: drill-down from a label to its transactions, income versus spend
 - [ ] **Design system and motion (S10)**: shared motion module, shared-element transitions,
@@ -72,6 +76,24 @@ Priorities as of 2026-10-05: multi-currency is **low** priority.
 - [ ] Budgets per label (S33), attachments (S34), voice capture (S35), statement import (S36)
 
 ## Done recently
+
+- [x] Goals (S14): both funding modes, progress against a straight line to the date, On
+      track / Behind / Achieved, the monthly amount still needed, archive, over-allocation
+      warning, attributing a transaction from the edit page or "Add money to it", 2026-10-05
+- [x] The JSON backup holds everything: every table, row and column, deleted rows and the
+      audit trail included, with a test that fails if a table is ever left out, 2026-10-05
+- [x] A safety copy of the database, encrypted with the same key, before any update changes
+      its schema, 2026-10-05
+- [x] Back steps to the previous screen everywhere; no more crash after Android closes the
+      app in the background, 2026-10-05
+- [x] Hide in recent apps (part of S11), 2026-10-05
+- [x] Label colour picker: 24 ready-made colours, hue, shade and vividness sliders, hex,
+      2026-10-05
+- [x] Note suggestions from what was written before with the same payee, 2026-10-05
+- [x] Quick capture asks Done or Add other details after the last step, and keeps the
+      moment it was started, 2026-10-05
+- [x] "Suggestions" everywhere, in their own colour; readable date and time picker buttons,
+      2026-10-05
 
 - [x] Notifications page behind a bell on Home: full text, tap to mark read or unread, Mark
       all read or unread, 2026-10-05

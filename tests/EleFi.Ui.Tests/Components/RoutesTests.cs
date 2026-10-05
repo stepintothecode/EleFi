@@ -154,6 +154,7 @@ public class RoutesTests : Bunit.TestContext
         Services.AddSingleton<ToastService>();
         Services.AddSingleton<ILinkOpener>(new NoLinks());
         Services.AddSingleton(new PrivacyMode(new Fakes.MemorySettings()));
+        Services.AddSingleton(new AppSwitcherPrivacy(new Fakes.MemorySettings()));
         Services.AddSingleton(new TransactionListState());
         Services.AddSingleton(NSubstitute.Substitute.For<INoticeRepository>());
     }

@@ -1,7 +1,9 @@
 using Bunit;
 using EleFi.Application.Abstractions;
+using EleFi.Application.Goals;
 using EleFi.Application.Planning;
 using EleFi.Domain.Containers;
+using EleFi.Domain.Goals;
 using EleFi.Domain.Parties;
 using EleFi.Domain.Planning;
 using EleFi.Domain.Transactions;
@@ -41,6 +43,10 @@ public class PlansTests : Bunit.TestContext
         Services.AddSingleton(containers);
         Services.AddSingleton(parties);
         Services.AddSingleton(new ToastService());
+
+        var goals = Substitute.For<IGoalRepository>();
+        goals.ListAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<Goal>());
+        Services.AddSingleton(new GoalService(goals, _ledger, _clock));
     }
 
     [Fact]
@@ -139,6 +145,6 @@ public class PlansTests : Bunit.TestContext
 
         page.FindAll(".segmented button")[1].Click();
 
-        Assert.Contains("Goals are coming", page.Markup, StringComparison.Ordinal);
+        Assert.Contains("No goals yet", page.Markup, StringComparison.Ordinal);
     }
 }

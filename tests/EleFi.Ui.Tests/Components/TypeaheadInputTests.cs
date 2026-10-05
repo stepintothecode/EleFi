@@ -109,6 +109,30 @@ public class TypeaheadInputTests : Bunit.TestContext
     }
 
     [Fact]
+    public void The_panel_is_captioned_suggestions_whether_idle_or_typing()
+    {
+        var component = RenderComponent<TypeaheadInput>(p => p.Add(x => x.Candidates, History));
+
+        Assert.Contains("Suggestions", component.Find(".typeahead-caption").TextContent, StringComparison.Ordinal);
+
+        component.Find("input").Input("Zo");
+
+        Assert.Contains("Suggestions", component.Find(".typeahead-caption").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Free_text_such_as_a_note_never_says_it_will_be_added_as_new()
+    {
+        var component = RenderComponent<TypeaheadInput>(p => p
+            .Add(x => x.Candidates, History)
+            .Add(x => x.OffersNew, false));
+
+        component.Find("input").Input("Something nobody wrote before");
+
+        Assert.Empty(component.FindAll(".typeahead-panel"));
+    }
+
+    [Fact]
     public void A_value_the_form_starts_with_shows_no_panel()
     {
         // Editing a transaction: the payee is already there, and repeating it as a "match"

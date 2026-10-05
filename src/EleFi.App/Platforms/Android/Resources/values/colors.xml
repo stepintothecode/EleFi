@@ -4,7 +4,9 @@
          (the ele-bg token in app.css), not the template purple. values-night has the dark one. -->
     <color name="colorPrimary">#F6F7F9</color>
     <color name="colorPrimaryDark">#2B0B98</color>
-    <color name="colorAccent">#2B0B98</color>
+    <!-- Native dialogs (date and time pickers) draw their buttons and selection in this.
+         The template's indigo vanished on the dark dialog; this is the ele-accent-strong token. -->
+    <color name="colorAccent">#4E3F9E</color>
 
     <!-- Ele on the start-up window (drawable/boot_ele.xml), the ele-mascot tokens in app.css. -->
     <color name="ele_mascot_hide">#B9A5D8</color>

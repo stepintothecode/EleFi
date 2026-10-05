@@ -20,6 +20,10 @@
   --ele-accent: #6a58c9;
   --ele-accent-strong: #4e3f9e;
   --ele-accent-soft: #efebfc;
+  /* Suggestions: their own colour, so an offered answer never looks like form chrome. */
+  --ele-suggest: #0f9b8e;
+  --ele-suggest-soft: #e3f8f4;
+  --ele-suggest-ink: #0b5e56;
   --ele-primary: #c9befa;
   --ele-primary-pressed: #b7a8f6;
   --ele-on-primary: #241c47;
@@ -78,6 +82,9 @@
     --ele-accent: #c4b5fd;
     --ele-accent-strong: #ddd3fe;
     --ele-accent-soft: #2a2440;
+    --ele-suggest: #3fd0bd;
+    --ele-suggest-soft: #11302d;
+    --ele-suggest-ink: #9ef0e2;
     --ele-primary: #b9a9f5;
     --ele-primary-pressed: #a796ef;
     --ele-on-primary: #1e1633;
@@ -672,24 +679,37 @@ button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owe
   the field rather than below, so the keyboard never covers it.
 */
 .typeahead-panel {
-  background: var(--ele-accent-soft);
-  border: 1px solid color-mix(in srgb, var(--ele-accent) 45%, var(--ele-line));
+  background: var(--ele-suggest-soft);
+  border: 1px solid color-mix(in srgb, var(--ele-suggest) 55%, var(--ele-line));
   border-radius: var(--ele-radius-sm);
   padding: 8px 10px 10px;
   margin-bottom: 8px;
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--ele-accent) 14%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--ele-suggest) 16%, transparent);
   animation: fade-in 140ms ease both;
 }
 .typeahead-caption {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ele-accent-strong);
+  color: var(--ele-suggest-ink);
   margin-bottom: 6px;
 }
+.typeahead-caption svg { width: 13px; height: 13px; flex: none; }
 .typeahead-options { display: flex; flex-wrap: wrap; gap: 6px; }
-.typeahead-options .chip { min-height: 38px; padding: 6px 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.typeahead-options .chip,
+.picker-option.suggestion {
+  border: 1.5px solid var(--ele-suggest);
+  background: color-mix(in srgb, var(--ele-suggest) 16%, var(--ele-surface));
+  color: var(--ele-suggest-ink);
+}
+.typeahead-options .chip { min-height: 38px; padding: 6px 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.typeahead-options .chip:active,
+.picker-option.suggestion:active { background: color-mix(in srgb, var(--ele-suggest) 30%, var(--ele-surface)); }
+.picker-option.suggestion .picker-name { color: var(--ele-suggest-ink); }
 .typeahead-empty { font-size: 0.85rem; color: var(--ele-text-dim); }
 .typeahead input { width: 100%; }
 
@@ -1300,3 +1320,120 @@ a.about-hero .chev { width: 18px; height: 18px; margin-left: auto; color: var(--
 
 /* Sticky date headers must clear the status bar too, or they slide under the clock. */
 .date-header { top: var(--ele-safe-top); }
+
+/* Goals: a card per goal, a bar with a tick where it should be by today. */
+.goals-head { gap: 12px; margin: 4px 0 12px; }
+.goal-card { padding: 0; overflow: hidden; }
+.goal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 16px;
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+.goal-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.goal-status.on-track { background: color-mix(in srgb, var(--ele-in) 16%, transparent); color: var(--ele-in); }
+.goal-status.behind { background: color-mix(in srgb, var(--ele-out) 16%, transparent); color: var(--ele-out); }
+.goal-status.achieved { background: var(--ele-primary); color: var(--ele-on-primary); }
+.goal-bar {
+  position: relative;
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ele-line) 70%, transparent);
+}
+.goal-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--ele-accent);
+  transition: width 320ms ease;
+}
+.goal-fill.on-track { background: var(--ele-in); }
+.goal-fill.behind { background: var(--ele-out); }
+.goal-fill.achieved { background: var(--ele-accent); }
+.goal-expected {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 16px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--ele-text);
+  opacity: 0.55;
+}
+.goal-add { border-radius: 0; border-top: 1px solid var(--ele-line); }
+.mode-cards { display: grid; gap: 8px; }
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--ele-surface);
+  border: 1.5px solid var(--ele-line);
+  border-radius: var(--ele-radius-sm);
+}
+.mode-card.on { border-color: var(--ele-accent); background: var(--ele-accent-soft); }
+
+/* Quick capture's last question: what is about to be recorded, then Done or more details. */
+.quick-summary { font-size: 1.1rem; font-weight: 600; margin: 0 0 4px; line-height: 1.4; }
+.quick-summary .amount { font-size: 1.35rem; font-weight: 800; display: block; }
+
+/* The label colour picker. */
+.colour-picker { display: grid; gap: 14px; }
+.colour-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--ele-radius-sm);
+  background: color-mix(in srgb, var(--picked) 12%, var(--ele-surface));
+  border: 1px solid color-mix(in srgb, var(--picked) 40%, var(--ele-line));
+}
+.colour-dot { width: 22px; height: 22px; border-radius: 50%; background: var(--picked); flex: none; }
+.colour-preview .tag {
+  background: color-mix(in srgb, var(--picked) 22%, transparent);
+  border-color: var(--picked);
+  color: var(--ele-text);
+}
+.colour-hex { margin-left: auto; font-family: ui-monospace, monospace; font-size: 0.8rem; color: var(--ele-text-dim); }
+.swatch-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; justify-items: center; }
+.swatch-grid .swatch-btn { width: 36px; height: 36px; min-height: 36px; }
+.colour-slider { display: grid; gap: 6px; font-size: 0.8rem; color: var(--ele-text-dim); font-weight: 600; }
+.colour-slider input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 14px;
+  min-height: 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ele-line);
+  padding: 0;
+  margin: 6px 0;
+}
+.colour-slider input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--ele-text);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+}
+.colour-hex-field { margin: 0; }
+.colour-hex-field input { font-family: ui-monospace, monospace; }

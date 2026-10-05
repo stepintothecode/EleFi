@@ -219,6 +219,15 @@ internal sealed class InMemoryLedger
         public Task<IReadOnlyList<Transaction>> ListDeletedAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Transaction>>(ledger.TransactionRows.Where(t => t.DeletedAt is not null).ToList());
 
+        public Task<IReadOnlyList<EleFi.Application.Typeahead.TypeaheadCandidate>> NotesForPartyAsync(string partyName, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<EleFi.Application.Typeahead.TypeaheadCandidate>>(ledger.TransactionRows
+                .Where(t => t.DeletedAt is null && !string.IsNullOrWhiteSpace(t.Description)
+                    && (string.Equals(ledger.PartyRows.FirstOrDefault(p => p.Id == t.DestinationPartyId)?.Name, partyName, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(ledger.PartyRows.FirstOrDefault(p => p.Id == t.SourcePartyId)?.Name, partyName, StringComparison.OrdinalIgnoreCase)))
+                .GroupBy(t => t.Description!, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new EleFi.Application.Typeahead.TypeaheadCandidate(g.Key, g.Count(), g.Max(t => t.CreatedAt)))
+                .ToList());
+
         // The real repository loads the parties and apps the derived Kind and the UI need.
         private Transaction Load(Transaction t)
         {

@@ -18,13 +18,16 @@
     @if (ShowPanel)
     {
         <div class="typeahead-panel" role="listbox" aria-label="@PanelLabel">
-            <div class="typeahead-caption">@(HasQuery ? "Matches" : "Most used")</div>
+            <div class="typeahead-caption">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9z" /><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" /></svg>
+                Suggestions
+            </div>
 
             @if (_shown.Count == 0)
             {
                 @* Said rather than left blank, so an empty panel reads as "this is new" and
                    not as "the app has forgotten everyone". *@
-                <div class="typeahead-empty">No match. &ldquo;@Value.Trim()&rdquo; will be added as new.</div>
+                <div class="typeahead-empty">No suggestions. &ldquo;@Value.Trim()&rdquo; will be added as new.</div>
             }
             else
             {
@@ -43,7 +46,7 @@
            value="@Value"
            placeholder="@Placeholder"
            autocomplete="off"
-           autocapitalize="words"
+           autocapitalize="@Capitalize"
            enterkeyhint="@EnterKeyHint"
            @oninput="OnInputAsync"
            @onkeydown="OnKeyDown" />
@@ -104,13 +107,24 @@
     [Parameter]
     public string PanelLabel { get; set; } = "Suggestions";
 
+    /// <summary>
+    /// Whether typing something new says it will be added as new. True for names, which become
+    /// a payee or an app; false for free text such as a note, which is just kept as typed.
+    /// </summary>
+    [Parameter]
+    public bool OffersNew { get; set; } = true;
+
+    /// <summary>How the keyboard capitalises: "words" for names, "sentences" for a note.</summary>
+    [Parameter]
+    public string Capitalize { get; set; } = "words";
+
     private bool HasQuery => !string.IsNullOrWhiteSpace(Value);
 
     // Empty: the most used, if asked for. Typing: matches, or "will be added as new", unless
     // what is typed already is exactly an existing name and there is nothing else to offer.
     private bool ShowPanel =>
         HasQuery
-            ? _typing && (_shown.Count > 0 || !_exactMatch)
+            ? _typing && (_shown.Count > 0 || (OffersNew && !_exactMatch))
             : IdleCount > 0 && _shown.Count > 0;
 
     /// <inheritdoc />

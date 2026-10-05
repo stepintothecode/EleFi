@@ -30,6 +30,8 @@ public sealed class DataWipe(EleFiDbContext db, DatabaseInitialiser initialiser)
         // transactions naming it.
         await db.TransactionLabels.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.Plans.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await db.GoalContainers.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await db.Goals.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.Notices.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.Transactions.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.CaptureSuggestions.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);

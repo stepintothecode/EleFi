@@ -2,6 +2,7 @@ using Bunit;
 using EleFi.Application.Abstractions;
 using EleFi.Application.Labels;
 using EleFi.Application.Transactions;
+using EleFi.Application.Typeahead;
 using EleFi.Domain.Apps;
 using EleFi.Domain.Containers;
 using EleFi.Domain.Parties;
@@ -19,6 +20,7 @@ public class CaptureTests : Bunit.TestContext
 {
     private readonly Container _bank = new() { Name = "SBI", Kind = ContainerKind.BankAccount };
     private readonly Container _card = new() { Name = "Amex", Kind = ContainerKind.CreditCard };
+    private readonly ITransactionRepository _ledger = Substitute.For<ITransactionRepository>();
 
     [Fact]
     public void Paid_from_starts_on_the_first_card_and_lists_cards_first()
@@ -71,6 +73,35 @@ public class CaptureTests : Bunit.TestContext
         Assert.Equal("SBI", page.Find("#container .picker-name").TextContent);
     }
 
+    [Fact]
+    public void Once_paid_to_names_someone_known_the_note_suggests_what_was_written_with_them()
+    {
+        Register();
+        var page = RenderComponent<Capture>();
+
+        Assert.Empty(page.FindAll(".typeahead-panel[aria-label='Notes used before']"));
+
+        page.Find("#party").Input("Rahul");
+
+        page.WaitForAssertion(() =>
+        {
+            var notes = page.FindAll(".typeahead-panel[aria-label='Notes used before'] [role=option]").Select(o => o.TextContent);
+            Assert.Equal(["Rent share", "Dinner"], notes);
+        });
+    }
+
+    [Fact]
+    public void Quick_captures_moment_is_kept_when_it_hands_over()
+    {
+        Register();
+        Services.GetRequiredService<NavigationManager>().NavigateTo("capture?amount=450&date=2026-08-29&time=21:40");
+
+        var page = RenderComponent<Capture>();
+
+        Assert.Equal("2026-08-29", page.Find("#date").GetAttribute("value"));
+        Assert.StartsWith("21:40", page.Find("#time").GetAttribute("value"), StringComparison.Ordinal);
+    }
+
     private void Register()
     {
         var now = new DateTimeOffset(2026, 8, 30, 9, 0, 0, TimeSpan.Zero);
@@ -100,5 +131,14 @@ public class CaptureTests : Bunit.TestContext
         Services.AddSingleton(new CaptureService(Substitute.For<ITransactionRepository>(), parties, apps, labels, clock));
         Services.AddSingleton(new ToastService());
         Services.AddSingleton(new EleFi.Application.Planning.PlanService(Substitute.For<IPlanRepository>(), Substitute.For<ITransactionRepository>(), clock));
+
+        _ledger.NotesForPartyAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<TypeaheadCandidate>());
+        _ledger.NotesForPartyAsync("Rahul", Arg.Any<CancellationToken>()).Returns(
+            [new TypeaheadCandidate("Rent share", 4, now), new TypeaheadCandidate("Dinner", 1, now)]);
+        Services.AddSingleton(_ledger);
+
+        var goals = Substitute.For<IGoalRepository>();
+        goals.ListAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<EleFi.Domain.Goals.Goal>());
+        Services.AddSingleton(new EleFi.Application.Goals.GoalService(goals, _ledger, clock));
     }
 }

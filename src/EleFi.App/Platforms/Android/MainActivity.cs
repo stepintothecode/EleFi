@@ -3,6 +3,8 @@ using Android.Content;
 using Android.Content.PM;
 using Android.Graphics.Drawables;
 using Android.OS;
+using Android.Views;
+using EleFi.Ui.Services;
 
 namespace EleFi.App;
 
@@ -92,6 +94,35 @@ public class MainActivity : MauiAppCompatActivity
             activity._bootEle = null;
             activity.Window?.SetBackgroundDrawableResource(Resource.Color.colorPrimary);
         });
+    }
+
+    /// <inheritdoc />
+    protected override void OnResume()
+    {
+        base.OnResume();
+
+        // Back on screen: screenshots are allowed again (the older-Android path below).
+        Window?.ClearFlags(WindowManagerFlags.Secure);
+
+        if (OperatingSystem.IsAndroidVersionAtLeast(33))
+        {
+            // Android 13 and later: blank the recent-apps card directly, and screenshots
+            // keep working while the app is open.
+            SetRecentsScreenshotEnabled(!AppSwitcherPrivacy.IsEnabled(new PreferencesSettingsStore()));
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPause()
+    {
+        // Before Android 13 the only way to keep balances out of the recent-apps card is to
+        // mark the window secure as it leaves the screen, which is when the card is taken.
+        if (!OperatingSystem.IsAndroidVersionAtLeast(33) && AppSwitcherPrivacy.IsEnabled(new PreferencesSettingsStore()))
+        {
+            Window?.AddFlags(WindowManagerFlags.Secure);
+        }
+
+        base.OnPause();
     }
 
     /// <inheritdoc />

@@ -213,5 +213,8 @@ public class CsvExporterTests
 
         public Task<IReadOnlyList<Transaction>> ListDeletedAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Transaction>>([]);
+
+        public Task<IReadOnlyList<EleFi.Application.Typeahead.TypeaheadCandidate>> NotesForPartyAsync(string partyName, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<EleFi.Application.Typeahead.TypeaheadCandidate>>([]);
     }
 }

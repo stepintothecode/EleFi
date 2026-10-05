@@ -16,6 +16,33 @@ public class TransactionRepositoryTests
     private static readonly DateOnly Today = new(2026, 8, 30);
 
     [Fact]
+    public async Task Notes_used_with_a_payee_are_offered_with_how_often_whichever_way_the_money_went()
+    {
+        await using var f = await TestDatabase.CreateAsync();
+        var bank = await f.ContainerService.CreateAsync(new CreateContainerRequest(
+            "SBI", ContainerKind.BankAccount, "INR", 10_000_00, new DateOnly(2026, 1, 1)));
+        var mine = await f.Containers.PartyForAsync(bank.Container!.Id);
+        var mom = await f.Parties.GetOrCreateExternalAsync("Mom");
+        var shop = await f.Parties.GetOrCreateExternalAsync("Shop");
+
+        async Task RecordAsync(Guid from, Guid to, string? note) =>
+            Assert.True((await f.Capture.CaptureAsync(new CaptureRequest(from, to, 100_00, "INR", 100_00, "INR",
+                new DateOnly(2026, 8, 1), Description: note))).Succeeded);
+
+        await RecordAsync(mine!.Id, mom.Id, "Gift");
+        await RecordAsync(mine.Id, mom.Id, "gift");
+        await RecordAsync(mom.Id, mine.Id, "Birthday money");
+        await RecordAsync(mine.Id, shop.Id, "Groceries");
+        await RecordAsync(mine.Id, mom.Id, null);
+
+        var notes = await f.Transactions.NotesForPartyAsync("MOM");
+
+        Assert.Equal(2, notes.Single(n => string.Equals(n.Name, "Gift", StringComparison.OrdinalIgnoreCase)).UsageCount);
+        Assert.Contains(notes, n => n.Name == "Birthday money");
+        Assert.DoesNotContain(notes, n => n.Name == "Groceries");
+    }
+
+    [Fact]
     public async Task D2_balance_is_derived_from_opening_balance_plus_movements()
     {
         await using var f = await TestDatabase.CreateAsync(Today);

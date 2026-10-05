@@ -1,0 +1,360 @@
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Goals
+@using EleFi.Domain.Containers
+@using EleFi.Domain.Goals
+@using EleFi.Domain.Money
+@using EleFi.Ui.Services
+@inject GoalService Goals
+@inject IContainerRepository Containers
+@inject ToastService Toasts
+@inject NavigationManager Nav
+@inject IClock Clock
+
+@*
+    Goals: what the money is for.
+
+    Each card says three things in order of use: how far along it is, whether that is on
+    track for the date, and what it needs each month from here. Progress is a view over money
+    already in a container, never extra money (GL3), so nothing here touches net worth.
+*@
+
+<div class="row between goals-head">
+    <p class="muted small grow" style="margin:0;">Save towards something and see whether you are on track.</p>
+    <button class="primary" id="new-goal" @onclick="StartCreate">New goal</button>
+</div>
+
+@foreach (var warning in _warnings)
+{
+    <div class="notice" role="status">@warning</div>
+}
+
+@if (_loading)
+{
+    <div class="card"><div class="skeleton" style="width:60%;"></div></div>
+}
+else if (_views.Count == 0)
+{
+    <div class="card empty-state">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.5" />
+        </svg>
+        <div class="who">No goals yet</div>
+        <p class="muted small">
+            A trip, a ring, a rainy-day fund. Follow a container set aside for it, or count what
+            you put in from money that is mixed with everything else.
+        </p>
+    </div>
+}
+else
+{
+    @foreach (var view in _views.Where(v => !v.Goal.IsArchived))
+    {
+        @GoalCard(view)
+    }
+
+    @if (_views.Any(v => v.Goal.IsArchived))
+    {
+        <details class="completed">
+            <summary>Archived (@_views.Count(v => v.Goal.IsArchived))</summary>
+            @foreach (var view in _views.Where(v => v.Goal.IsArchived))
+            {
+                @GoalCard(view)
+            }
+        </details>
+    }
+}
+
+<Modal Open="_editing" Title="@(_editingId is null ? "New goal" : "Edit goal")" OnCancel="() => _editing = false">
+    <div class="field">
+        <label for="goal-name">What is it for?</label>
+        <input id="goal-name" type="text" @bind="_name" placeholder="Engagement ring" maxlength="120" autocomplete="off" />
+    </div>
+
+    <div class="field">
+        <label for="goal-target">Target</label>
+        <input id="goal-target" class="amount-input" type="text" inputmode="decimal" @bind="_targetText" placeholder="0.00" autocomplete="off" />
+    </div>
+
+    <div class="field">
+        <label for="goal-date">By</label>
+        <input id="goal-date" type="date" @bind="_targetDate" />
+    </div>
+
+    <div class="field">
+        <label>How should progress be measured?</label>
+        <div class="mode-cards" role="radiogroup" aria-label="How progress is measured">
+            <button type="button" role="radio" aria-checked="@(_mode == FundingMode.TracksContainerBalance ? "true" : "false")"
+                    class="mode-card @(_mode == FundingMode.TracksContainerBalance ? "on" : null)" id="mode-balance"
+                    @onclick="() => _mode = FundingMode.TracksContainerBalance">
+                <span class="who">Follow a container</span>
+                <span class="meta">Its balance is the progress. For money set aside only for this, like an RD.</span>
+            </button>
+            <button type="button" role="radio" aria-checked="@(_mode == FundingMode.TracksContributions ? "true" : "false")"
+                    class="mode-card @(_mode == FundingMode.TracksContributions ? "on" : null)" id="mode-contributions"
+                    @onclick="() => _mode = FundingMode.TracksContributions">
+                <span class="who">Count what I put in</span>
+                <span class="meta">Add transactions to it. For money that sits with everything else.</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="field">
+        <label>
+            @(_mode == FundingMode.TracksContainerBalance ? "Which containers?" : "Where the money sits")
+            @if (_mode == FundingMode.TracksContributions)
+            {
+                <span class="muted small">(optional, for a warning if goals claim more than it holds)</span>
+            }
+        </label>
+        <div class="chips" id="goal-containers" role="group" aria-label="Containers">
+            @foreach (var container in _containers)
+            {
+                <button type="button" class="chip @(_picked.Contains(container.Id) ? "on" : null)"
+                        aria-pressed="@(_picked.Contains(container.Id) ? "true" : "false")"
+                        @onclick="() => Toggle(container.Id)">@container.Name</button>
+            }
+        </div>
+    </div>
+
+    @if (_mode == FundingMode.TracksContributions)
+    {
+        <div class="field">
+            <label for="goal-opening">Already saved <span class="muted small">(optional)</span></label>
+            <input id="goal-opening" class="amount-input" type="text" inputmode="decimal" @bind="_openingText" placeholder="0.00" autocomplete="off" />
+        </div>
+    }
+
+    <div class="field">
+        <label for="goal-monthly">I plan to put aside each month <span class="muted small">(optional)</span></label>
+        <input id="goal-monthly" class="amount-input" type="text" inputmode="decimal" @bind="_monthlyText" placeholder="0.00" autocomplete="off" />
+    </div>
+
+    @if (_error is not null)
+    {
+        <p class="notice error" role="alert">@_error</p>
+    }
+
+    <button class="primary btn-block" @onclick="SaveAsync">Save</button>
+
+    @if (_editingId is { } id)
+    {
+        <div class="row" style="margin-top:10px;">
+            <button class="btn-ghost grow" @onclick="() => ArchiveAsync(id)">@(_editingArchived ? "Bring back" : "Archive")</button>
+            <button class="btn-ghost danger grow" @onclick="() => DeleteAsync(id)">Delete</button>
+        </div>
+    }
+</Modal>
+
+@code {
+    private IReadOnlyList<GoalView> _views = [];
+    private IReadOnlyList<string> _warnings = [];
+    private IReadOnlyList<Container> _containers = [];
+    private bool _loading = true;
+
+    private bool _editing;
+    private Guid? _editingId;
+    private bool _editingArchived;
+    private string _name = string.Empty;
+    private string _targetText = string.Empty;
+    private DateOnly _targetDate;
+    private FundingMode _mode = FundingMode.TracksContributions;
+    private HashSet<Guid> _picked = [];
+    private string _openingText = string.Empty;
+    private string _monthlyText = string.Empty;
+    private string? _error;
+
+    /// <inheritdoc />
+    protected override async Task OnInitializedAsync()
+    {
+        _containers = await Containers.ListSelectableAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _views = await Goals.OverviewAsync();
+        _warnings = await Goals.WarningsAsync();
+        _loading = false;
+    }
+
+    private RenderFragment GoalCard(GoalView view) => __builder =>
+    {
+        var goal = view.Goal;
+        var standing = view.Standing;
+        var currency = Currency.Of(goal.CurrencyCode);
+        var expectedPercent = goal.TargetAmountMinor <= 0 ? 0 : (int)Math.Clamp(standing.ExpectedMinor * 100 / goal.TargetAmountMinor, 0, 100);
+
+        <div class="card goal-card" @key="goal.Id">
+            <button type="button" class="goal-body" aria-label="Edit @goal.Name" @onclick="() => StartEdit(goal)">
+                <span class="row between">
+                    <span class="who">@goal.Name</span>
+                    <span class="goal-status @StatusClass(standing.Status)">@StatusText(standing.Status)</span>
+                </span>
+                <span class="goal-bar" role="progressbar" aria-label="@goal.Name progress"
+                      aria-valuemin="0" aria-valuemax="100" aria-valuenow="@standing.Percent">
+                    <span class="goal-fill @StatusClass(standing.Status)" style="width:@(standing.Percent)%;"></span>
+                    @if (standing.Status != GoalStatus.Achieved)
+                    {
+                        <span class="goal-expected" style="left:@(expectedPercent)%;" title="Where it should be today"></span>
+                    }
+                </span>
+                <span class="row between meta">
+                    <span><span class="amount">@MoneyText.ToDisplayString(Money.SignedMinor(standing.ProgressMinor, currency))</span> of <span class="amount">@MoneyText.ToDisplayString(Money.FromMinor(goal.TargetAmountMinor, currency))</span></span>
+                    <span>@standing.Percent%</span>
+                </span>
+                <span class="meta">
+                    @if (standing.Status == GoalStatus.Achieved)
+                    {
+                        @:Reached. Well done.
+                    }
+                    else
+                    {
+                        <span class="amount">@MoneyText.ToDisplayString(Money.FromMinor(standing.RequiredMonthlyMinor, currency))</span>@($" a month to reach it by {goal.TargetDate:MMM yyyy}.")
+                        @if (goal.MonthlyContributionMinor is { } monthly && monthly > 0)
+                        {
+                            @($" You planned ")<span class="amount">@MoneyText.ToDisplayString(Money.FromMinor(monthly, currency))</span>@(".")
+                        }
+                    }
+                </span>
+                <span class="meta">@Describe(view)</span>
+            </button>
+            @if (goal.FundingMode == FundingMode.TracksContributions && !goal.IsArchived)
+            {
+                <button type="button" class="btn-ghost btn-block goal-add" @onclick="() => AddMoney(goal)">Add money to it</button>
+            }
+        </div>
+    };
+
+    private static string Describe(GoalView view) => view.Goal.FundingMode == FundingMode.TracksContainerBalance
+        ? $"Follows {string.Join(", ", view.ContainerNames)}"
+        : view.ContainerNames.Count == 0
+            ? "Counts what you put in"
+            : $"Counts what you put in, kept in {string.Join(", ", view.ContainerNames)}";
+
+    private static string StatusText(GoalStatus status) => status switch
+    {
+        GoalStatus.Achieved => "Achieved",
+        GoalStatus.OnTrack => "On track",
+        _ => "Behind",
+    };
+
+    private static string StatusClass(GoalStatus status) => status switch
+    {
+        GoalStatus.Achieved => "achieved",
+        GoalStatus.OnTrack => "on-track",
+        _ => "behind",
+    };
+
+    private void StartCreate()
+    {
+        _editingId = null;
+        _editingArchived = false;
+        _name = string.Empty;
+        _targetText = string.Empty;
+        _targetDate = Clock.Today.AddYears(1);
+        _mode = FundingMode.TracksContributions;
+        _picked = [];
+        _openingText = string.Empty;
+        _monthlyText = string.Empty;
+        _error = null;
+        _editing = true;
+    }
+
+    private void StartEdit(Goal goal)
+    {
+        var currency = Currency.Of(goal.CurrencyCode);
+        _editingId = goal.Id;
+        _editingArchived = goal.IsArchived;
+        _name = goal.Name;
+        _targetText = MoneyText.ToBareDecimal(Money.FromMinor(goal.TargetAmountMinor, currency));
+        _targetDate = goal.TargetDate;
+        _mode = goal.FundingMode;
+        _picked = [.. goal.Containers.Select(c => c.ContainerId)];
+        _openingText = goal.OpeningAllocationMinor > 0 ? MoneyText.ToBareDecimal(Money.FromMinor(goal.OpeningAllocationMinor, currency)) : string.Empty;
+        _monthlyText = goal.MonthlyContributionMinor is { } monthly ? MoneyText.ToBareDecimal(Money.FromMinor(monthly, currency)) : string.Empty;
+        _error = null;
+        _editing = true;
+    }
+
+    private void Toggle(Guid containerId)
+    {
+        if (!_picked.Remove(containerId))
+        {
+            _picked.Add(containerId);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!MoneyText.TryParse(_targetText, Currency.Inr, out var target))
+        {
+            _error = "Enter the target as an amount, like 300000.";
+            return;
+        }
+
+        long opening = 0;
+        if (_mode == FundingMode.TracksContributions && !string.IsNullOrWhiteSpace(_openingText))
+        {
+            if (!MoneyText.TryParse(_openingText, Currency.Inr, out var openingMoney))
+            {
+                _error = "Enter what is already saved as an amount.";
+                return;
+            }
+
+            opening = openingMoney.Minor;
+        }
+
+        long? monthly = null;
+        if (!string.IsNullOrWhiteSpace(_monthlyText))
+        {
+            if (!MoneyText.TryParse(_monthlyText, Currency.Inr, out var monthlyMoney))
+            {
+                _error = "Enter the monthly amount as an amount.";
+                return;
+            }
+
+            monthly = monthlyMoney.Minor;
+        }
+
+        var draft = new GoalDraft(_name, target.Minor, _targetDate, _mode, [.. _picked], opening, monthly);
+        var result = _editingId is { } id ? await Goals.UpdateAsync(id, draft) : await Goals.CreateAsync(draft);
+        if (!result.Succeeded)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        _editing = false;
+        Toasts.Ok(_editingId is null ? $"{result.Goal!.Name} added." : "Saved.");
+        await LoadAsync();
+    }
+
+    private async Task ArchiveAsync(Guid id)
+    {
+        await Goals.ArchiveAsync(id, !_editingArchived);
+        _editing = false;
+        Toasts.Ok(_editingArchived ? "Back among your goals." : "Archived. Its transactions are kept.");
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(Guid id)
+    {
+        await Goals.DeleteAsync(id);
+        _editing = false;
+        Toasts.Ok("Goal deleted. Its transactions are untouched.");
+        await LoadAsync();
+    }
+
+    // Money put toward a goal is real money moving, so it is recorded as a transaction and
+    // attributed to the goal, rather than typed into the goal as a number.
+    private void AddMoney(Goal goal)
+    {
+        var query = $"capture?goal={goal.Id}&kind=transfer&note={Uri.EscapeDataString(goal.Name)}";
+        if (goal.Containers.FirstOrDefault() is { } kept)
+        {
+            query += $"&to={kept.ContainerId}";
+        }
+
+        Nav.NavigateTo(query);
+    }
+}

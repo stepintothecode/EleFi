@@ -3,7 +3,9 @@
     <!-- Dark twin of values/colors.xml. -->
     <color name="colorPrimary">#101720</color>
     <color name="colorPrimaryDark">#2B0B98</color>
-    <color name="colorAccent">#2B0B98</color>
+    <!-- Native dialogs (date and time pickers) draw their buttons and selection in this.
+         The template's indigo vanished on the dark dialog; this is the dark ele-accent-strong token. -->
+    <color name="colorAccent">#DDD3FE</color>
 
     <color name="ele_mascot_hide">#CDBCE8</color>
     <color name="ele_mascot_hide_dark">#A38FC8</color>

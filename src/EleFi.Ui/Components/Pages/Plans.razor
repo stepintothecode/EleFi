@@ -22,7 +22,7 @@
     links it to the transaction that already records it, or records that transaction, so the
     same money is never in the ledger twice. A plan on its own is never money (D2).
 
-    Goals have a place here and arrive with S14.
+    Goals sit beside them on the same page (GoalsPanel): what the money is for.
 *@
 
 <PageTitle>Plans</PageTitle>
@@ -44,16 +44,7 @@
 
 @if (_tab == "goals")
 {
-    <div class="card empty-state">
-        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.5" />
-        </svg>
-        <div class="who">Goals are coming</div>
-        <p class="muted small">
-            Save towards something, a trip or a ring or a rainy-day fund, and watch the
-            progress: from a container set aside for it, or from the plans that pay into it.
-        </p>
-    </div>
+    <GoalsPanel />
 }
 else if (_loading)
 {
@@ -215,11 +206,15 @@ else
     {
         @if (_candidates.Count > 0)
         {
-            <p class="muted small">These are already in your transactions. Pick the one that is this plan.</p>
+            <div class="typeahead-caption">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9z" /><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" /></svg>
+                Suggestions
+            </div>
+            <p class="muted small">Already in your transactions. Pick the one that is this plan.</p>
             <div class="picker-list">
                 @foreach (var candidate in _candidates)
                 {
-                    <button type="button" class="picker-option" @onclick="() => LinkAsync(plan, candidate.Id)">
+                    <button type="button" class="picker-option suggestion" @onclick="() => LinkAsync(plan, candidate.Id)">
                         <span class="picker-text">
                             <span class="picker-name">@Who(candidate)</span>
                             <span class="detail">@candidate.OccurredOn.ToString("ddd d MMM")</span>
@@ -243,6 +238,10 @@ else
 
 @code {
     private string _tab = "plans";
+
+    /// <summary>Which half to open on: "goals" or "plans".</summary>
+    [SupplyParameterFromQuery(Name = "tab")]
+    public string? TabQuery { get; set; }
     private IReadOnlyList<Plan> _open = [];
     private IReadOnlyList<Plan> _completed = [];
     private IReadOnlyList<Container> _containers = [];
@@ -268,6 +267,11 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        if (TabQuery == "goals")
+        {
+            _tab = "goals";
+        }
+
         _containers = ContainerGrouping.InPickerOrder(await Containers.ListSelectableAsync());
         _partyCandidates = TypeaheadCandidates.From(await Parties.ListExternalAsync());
         await ReloadAsync();

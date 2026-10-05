@@ -176,6 +176,14 @@ public interface ITransactionRepository
     /// <summary>Soft-deleted transactions, most recently deleted first.</summary>
     /// <param name="cancellationToken">Cancellation.</param>
     Task<IReadOnlyList<Transaction>> ListDeletedAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The notes written on past transactions with a payee or payer, each with how often and
+    /// how recently it was used, for suggesting the note once "Paid to" is filled in.
+    /// </summary>
+    /// <param name="partyName">The other party's name, matched without regard to case.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Typeahead.TypeaheadCandidate>> NotesForPartyAsync(string partyName, CancellationToken cancellationToken = default);
 }
 
 /// <summary>What came in and what went out, with transfers between your own containers ignored.</summary>
@@ -531,4 +539,46 @@ public interface ISuggestionRepository
     /// <param name="asOf">The current instant.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     Task<int> PurgeExpiredAsync(DateTimeOffset asOf, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Goals and the transactions attributed to them.</summary>
+public interface IGoalRepository
+{
+    /// <summary>Every goal, with its linked containers, oldest first.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Domain.Goals.Goal>> ListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>One goal with its linked containers, or null.</summary>
+    /// <param name="id">The identifier.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<Domain.Goals.Goal?> FindAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a goal.</summary>
+    /// <param name="goal">The goal.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task AddAsync(Domain.Goals.Goal goal, CancellationToken cancellationToken = default);
+
+    /// <summary>Saves changes to a goal, including which containers are linked.</summary>
+    /// <param name="goal">The goal, already loaded through this repository.</param>
+    /// <param name="containerIds">The containers it should be linked to afterwards.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task UpdateAsync(Domain.Goals.Goal goal, IReadOnlyCollection<Guid> containerIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Soft-deletes a goal and clears it from every transaction attributed to it (GL6). The
+    /// transactions themselves are untouched: the money was real regardless of the goal.
+    /// </summary>
+    /// <param name="id">The identifier.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Live transactions attributed to any goal, with their parties loaded.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Transaction>> ContributionsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Attributes a transaction to a goal, or clears it with null.</summary>
+    /// <param name="transactionId">The transaction.</param>
+    /// <param name="goalId">The goal, or null for none.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task SetGoalAsync(Guid transactionId, Guid? goalId, CancellationToken cancellationToken = default);
 }

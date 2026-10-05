@@ -23,9 +23,10 @@
     three. The result is a complete, real Transaction flagged Needs Review, not a draft:
     a guessed transaction that counts is worth more than a perfect one that never exists.
 
-    "Add other details" is the way out to the full form without losing what was typed: it
-    saves what it can and opens the editor, or hands the partial answer to the capture form
-    when there is not yet enough for a transaction.
+    After the third step it asks one thing: Done, which records it flagged for review, or
+    Add other details, which opens the full form with everything typed so far filled in and
+    nothing saved yet. Both use the moment the user started typing the amount, which is when
+    the money moved, not the moment they finished.
 
     Reached from the home-screen widget, the Quick Settings tile, or the tab bar.
 *@
@@ -53,27 +54,39 @@
         @for (var i = 0; i < StepLabels.Length; i++)
         {
             var index = i;
-            var state = index < _step ? "done" : index == _step ? "on" : string.Empty;
+            var state = index < _step || _finishing ? "done" : index == _step ? "on" : string.Empty;
             <button type="button"
                     class="quick-step @state"
                     style="@ArcStyle(index)"
                     disabled="@(index > _furthest)"
                     aria-current="@(index == _step ? "step" : null)"
                     @onclick="() => GoTo(index)">
-                <span class="dot">@(index < _step ? "✓" : (index + 1).ToString())</span>
+                <span class="dot">@(index < _step || _finishing ? "✓" : (index + 1).ToString())</span>
                 <span class="cap">@StepLabels[index]</span>
             </button>
         }
     </div>
 
-    <div class="quick-stage" @key="_step">
-        @if (_step == 0)
+    <div class="quick-stage" @key="(_finishing ? 3 : _step)">
+        @if (_finishing)
+        {
+            <div class="quick-panel quick-finish">
+                <p class="quick-summary">
+                    <span class="amount">@AmountDisplay</span>
+                    from @(_containers.FirstOrDefault(c => c.Id == _containerId)?.Name)
+                    to @_partyName.Trim()
+                </p>
+                <p class="muted small">@StartedAt.Date.ToString("ddd d MMM") at @StartedAt.Time.ToString("HH:mm")</p>
+                <p class="muted small">Done records it now, flagged for review. Add other details opens the full form with this filled in.</p>
+            </div>
+        }
+        else if (_step == 0)
         {
             <div class="quick-panel">
                 <label for="q-amount">How much?</label>
                 <input id="q-amount" class="amount-input" type="text" inputmode="decimal"
                        placeholder="0.00" autocomplete="off" autofocus enterkeyhint="next"
-                       @bind="_amountText" @bind:event="oninput" @onkeydown="OnAmountKey" />
+                       @bind="_amountText" @bind:event="oninput" @bind:after="AmountTyped" @onkeydown="OnAmountKey" />
                 <p class="muted small">@Clock.Today.ToString("ddd d MMM") at @Clock.TimeOfDay.ToString("HH:mm")</p>
             </div>
         }
@@ -113,26 +126,20 @@
     }
 
     <div class="quick-actions">
-        @if (_step > 0)
+        @if (_finishing)
         {
-            <button class="btn-ghost" @onclick="StepBack">Back</button>
-        }
-        @if (_step < 2)
-        {
-            <button class="primary grow" disabled="@(!CanAdvance)" @onclick="Next">Next</button>
+            <button class="btn-ghost grow quick-more" disabled="@_busy" @onclick="AddOtherDetails">Add other details</button>
+            <button class="primary grow quick-done-button" disabled="@_busy" @onclick="AddAsync">Done</button>
         }
         else
         {
-            <button class="primary grow" disabled="@(_busy || !CanAdvance)" @onclick="AddAsync">Add</button>
+            @if (_step > 0)
+            {
+                <button class="btn-ghost" @onclick="StepBack">Back</button>
+            }
+            <button class="primary grow" disabled="@(!CanAdvance)" @onclick="Next">Next</button>
         }
     </div>
-
-    @* Available once there is an amount, since that is the one thing the full form cannot
-       guess. Everything else carries across as far as it got. *@
-    <button type="button" class="btn-ghost btn-block quick-more" disabled="@(_busy || !HasAmount)"
-            @onclick="AddOtherDetailsAsync">
-        Add other details
-    </button>
 
     @if (_added is not null)
     {
@@ -177,6 +184,17 @@
     private string? _added;
     private string? _problem;
 
+    // On the last question: Done, or Add other details.
+    private bool _finishing;
+
+    // When the user started on this one: when the money moved. Null until the amount is typed.
+    private (DateOnly Date, TimeOnly Time)? _startedAt;
+
+    private (DateOnly Date, TimeOnly Time) StartedAt => _startedAt ?? (Clock.Today, Clock.TimeOfDay);
+
+    private string AmountDisplay =>
+        MoneyText.TryParse(_amountText, Currency.Inr, out var money) ? MoneyText.ToDisplayString(money) : _amountText;
+
     // While past the first step, the back gesture steps back through the form rather than
     // leaving it and losing the amount.
     private IDisposable? _stepBackRegistration;
@@ -220,11 +238,31 @@
     {
         if (index <= _furthest)
         {
+            _finishing = false;
             SetStep(index);
         }
     }
 
-    private void StepBack() => SetStep(System.Math.Max(0, _step - 1));
+    // From the last question, back returns to "Paid to"; otherwise one step back.
+    private void StepBack()
+    {
+        if (_finishing)
+        {
+            _finishing = false;
+            SyncStepBack();
+            return;
+        }
+
+        SetStep(System.Math.Max(0, _step - 1));
+    }
+
+    private void AmountTyped()
+    {
+        if (_startedAt is null && !string.IsNullOrWhiteSpace(_amountText))
+        {
+            _startedAt = (Clock.Today, Clock.TimeOfDay);
+        }
+    }
 
     private void SetStep(int step)
     {
@@ -285,6 +323,14 @@
             return;
         }
 
+        if (_step == 2)
+        {
+            _finishing = true;
+            _problem = null;
+            SyncStepBack();
+            return;
+        }
+
         SetStep(System.Math.Min(2, _step + 1));
         _furthest = System.Math.Max(_furthest, _step);
     }
@@ -295,11 +341,11 @@
         Next();
     }
 
-    // Tapping a name is the answer, so it records straight away rather than asking for Add.
-    private Task ChooseParty(string name)
+    // Tapping a name is the answer to the last step, so it moves straight on to Done.
+    private void ChooseParty(string name)
     {
         _partyName = name;
-        return AddAsync();
+        Next();
     }
 
     private void OnAmountKey(KeyboardEventArgs e)
@@ -310,11 +356,11 @@
         }
     }
 
-    private async Task OnPartyKey(KeyboardEventArgs e)
+    private void OnPartyKey(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
         {
-            await AddAsync();
+            Next();
         }
     }
 
@@ -350,6 +396,8 @@
 
             _amountText = string.Empty;
             _partyName = string.Empty;
+            _startedAt = null;
+            _finishing = false;
             _furthest = 0;
             SetStep(0);
             await LoadCandidatesAsync();
@@ -363,45 +411,24 @@
     }
 
     /// <summary>
-    /// Saves what there is and opens the full editor on it, or hands over to the capture form.
+    /// Opens the full capture form with everything answered so far, and saves nothing.
     /// </summary>
     /// <remarks>
-    /// A transaction needs both ends. With a counterparty typed there is enough, so it is
-    /// recorded now (flagged for review, as every quick capture is) and the editor opens on
-    /// it. Without one there is nothing that could honestly be saved, so the capture form
-    /// opens with the amount and container already filled in instead.
+    /// Nothing is recorded until the full form is saved, so backing out of it leaves no half
+    /// transaction behind. The moment the user started is handed over too, so the form shows
+    /// when the money moved rather than when the details were added.
     /// </remarks>
-    private async Task AddOtherDetailsAsync()
+    private void AddOtherDetails()
     {
-        if (_busy || !HasAmount)
-        {
-            return;
-        }
+        var started = StartedAt;
+        var query = $"capture?amount={Uri.EscapeDataString(_amountText.Trim())}"
+            + $"&container={_containerId}"
+            + $"&party={Uri.EscapeDataString(_partyName.Trim())}"
+            + "&kind=debit"
+            + $"&date={started.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}"
+            + $"&time={started.Time.ToString("HH\\:mm", System.Globalization.CultureInfo.InvariantCulture)}";
 
-        if (string.IsNullOrWhiteSpace(_partyName) || _containerId == Guid.Empty)
-        {
-            var query = $"capture?amount={Uri.EscapeDataString(_amountText.Trim())}";
-            if (_containerId != Guid.Empty)
-            {
-                query += $"&container={_containerId}";
-            }
-
-            Nav.NavigateTo(query);
-            return;
-        }
-
-        _busy = true;
-        try
-        {
-            if (await SaveAsync() is { } saved)
-            {
-                Nav.NavigateTo($"transactions/{saved.TransactionId}");
-            }
-        }
-        finally
-        {
-            _busy = false;
-        }
+        Nav.NavigateTo(query);
     }
 
     private async Task<(Guid TransactionId, Money Amount, string Counterparty)?> SaveAsync()
@@ -430,8 +457,8 @@
             Currency.Inr.Code,
             amount.Minor,
             Currency.Inr.Code,
-            Clock.Today,
-            Clock.TimeOfDay,
+            StartedAt.Date,
+            StartedAt.Time,
             // No labels. Quick capture asks three questions and labels are not one of
             // them, and an invented one would be worse than none now that unlabelled is
             // a real state.

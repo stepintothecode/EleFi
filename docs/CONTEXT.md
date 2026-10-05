@@ -251,6 +251,11 @@ forward **on completion**, not on the calendar, so a missed month stays overdue.
 occurrence is its own Plan in the same **series**; a monthly plan keeps its day of the month
 (the 31st becomes the 30th in a short month, and the 31st again after).
 
+### Suggestion
+An answer the app offers from history: a payee, an app, a note used before with the same
+payee, or a transaction that could be the one a plan meant. Always captioned
+"Suggestions" and drawn in its own colour, never "matches" or "most used".
+
 ### Plan Match
 A recorded transaction that could be the one a plan meant: the same amount, within four days
 of the due date, from the plan's container when it names one, and not already claimed by
@@ -278,7 +283,10 @@ genuinely different:
   plus an opening allocation. Use when the money is mixed in with other money.
 
 ### Contribution
-A transaction attributed to a goal, in Tracks Contributions mode.
+A transaction attributed to a goal, in Tracks Contributions mode. Money spent from the goal
+(a Debit, such as buying the ring) takes progress down; money moved toward it or received
+for it (a Self Transfer or a Credit) adds to it. Attributed from the edit page, or recorded
+through "Add money to it" on the goal.
 
 ### Allocation
 Money earmarked for a goal. Critically, **an allocation never creates money**. ₹1 lakh
@@ -392,6 +400,16 @@ phone yields ciphertext rather than a readable ledger.
 ### Backup
 An encrypted snapshot of the local database stored in the user's own Google Drive.
 Protects against a lost, broken, or wiped device.
+
+### Export File
+The local JSON backup the user saves through the share sheet. Unencrypted, and it holds
+**everything**: every table, every row (deleted ones too) and every column, written from the
+database's own model so nothing added later can be left out.
+
+### Safety Copy
+A copy of the database taken on the device just before an app update changes its schema,
+encrypted with the same key, kept in the app's private storage. The newest three are kept.
+Never leaves the device.
 
 ### Restore
 Replacing the local database with a backup. Destructive to whatever is on the device
