@@ -1,6 +1,7 @@
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
+using Android.Graphics.Drawables;
 using Android.OS;
 
 namespace EleFi.App;
@@ -13,7 +14,7 @@ namespace EleFi.App;
 /// each of which asks for a particular screen rather than the dashboard.
 /// </remarks>
 [Activity(
-    Theme = "@style/Maui.SplashTheme",
+    Theme = "@style/EleFi.SplashTheme",
     MainLauncher = true,
     LaunchMode = LaunchMode.SingleTask,
     ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation | ConfigChanges.UiMode
@@ -28,6 +29,8 @@ public class MainActivity : MauiAppCompatActivity
 
     private static readonly object Gate = new();
     private static string? _requestedRoute;
+    private static MainActivity? _booting;
+    private AnimatedVectorDrawable? _bootEle;
 
     /// <summary>Raised when a running app is asked for a screen.</summary>
     public static event Action? RouteRequested;
@@ -55,6 +58,34 @@ public class MainActivity : MauiAppCompatActivity
     {
         Remember(Intent);
         base.OnCreate(savedInstanceState);
+
+        // Between the system splash and the WebView's first paint, the window itself shows Ele
+        // floating on the app's ground, and index.html's boot screen then takes over in place.
+        Window?.SetBackgroundDrawableResource(Resource.Drawable.boot_window);
+        if (Window?.DecorView.Background is LayerDrawable layers && layers.GetDrawable(1) is AnimatedVectorDrawable ele)
+        {
+            _bootEle = ele;
+            _bootEle.Start();
+            _booting = this;
+        }
+    }
+
+    /// <summary>
+    /// Stops Ele floating behind the WebView and leaves the plain ground, once Blazor is up.
+    /// </summary>
+    /// <remarks>
+    /// An endless animation on the window background would keep redrawing it under the app
+    /// for as long as it runs. Safe to call more than once and from any thread.
+    /// </remarks>
+    public static void EndBootScreen()
+    {
+        var activity = Interlocked.Exchange(ref _booting, null);
+        activity?.RunOnUiThread(() =>
+        {
+            activity._bootEle?.Stop();
+            activity._bootEle = null;
+            activity.Window?.SetBackgroundDrawableResource(Resource.Color.colorPrimary);
+        });
     }
 
     /// <inheritdoc />

@@ -20,31 +20,27 @@
 
     <div id="app">
         <!--
-            Shown until Blazor starts. Ele, happy and bobbing, rather than a spinner: the
-            first thing the app says is hello. Plain SVG because the canvas mascot needs the
-            runtime that is still loading. Colours come from the same tokens Ele uses later.
+            Shown until Blazor starts: the hello under Ele. Ele itself is not drawn here. The
+            window behind this transparent page shows it floating (boot_window.xml), because
+            that animation runs on Android's render thread and keeps moving while Blazor's
+            start-up holds the UI thread, which would freeze a CSS animation here.
         -->
         <div class="boot">
-            <svg class="boot-ele" viewBox="0 0 100 100" role="img" aria-label="Ele, smiling">
-                <ellipse cx="22" cy="44" rx="20" ry="26" transform="rotate(-12 22 44)" fill="var(--ele-mascot-hide-dark)" />
-                <ellipse cx="24" cy="45" rx="12" ry="17" transform="rotate(-12 24 45)" fill="var(--ele-mascot-ear)" />
-                <ellipse cx="78" cy="44" rx="20" ry="26" transform="rotate(12 78 44)" fill="var(--ele-mascot-hide-dark)" />
-                <ellipse cx="76" cy="45" rx="12" ry="17" transform="rotate(12 76 45)" fill="var(--ele-mascot-ear)" />
-                <path d="M50 58 Q55 86 64 80" fill="none" stroke="var(--ele-mascot-hide)" stroke-width="12" stroke-linecap="round" />
-                <ellipse cx="50" cy="47" rx="30" ry="28" fill="var(--ele-mascot-hide)" />
-                <path d="M37 61 Q33 70 38 75 M63 61 Q67 70 62 75" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" />
-                <path d="M36.5 41 Q39.5 37 42.5 41 M57.5 41 Q60.5 37 63.5 41" fill="none" stroke="var(--ele-mascot-ink)" stroke-width="3.6" stroke-linecap="round" />
-                <path d="M42 52 Q50 59 58 52" fill="none" stroke="var(--ele-mascot-ink)" stroke-width="2.6" stroke-linecap="round" />
-                <ellipse cx="33" cy="51" rx="4" ry="2.4" fill="#f9a8d4" opacity="0.55" />
-                <ellipse cx="67" cy="51" rx="4" ry="2.4" fill="#f9a8d4" opacity="0.55" />
-            </svg>
-            <p class="boot-hello" id="boot-hello">Hello!</p>
-            <p class="boot-sub">Opening your ledger</p>
+            <div class="boot-words">
+                <p class="boot-hello" id="boot-hello">Hello!</p>
+                <p class="boot-sub">Opening your ledger</p>
+            </div>
         </div>
     </div>
     <script>
         // A greeting for the time of day. Nothing else runs before Blazor.
         (function () {
+            // Ele floats at the middle of the screen, not of the WebView (boot_window.xml), and
+            // the words go under it. The two differ by the navigation bar, which the WebView
+            // stops above.
+            if (window.screen && screen.height > window.innerHeight) {
+                document.documentElement.style.setProperty('--boot-mid', (screen.height / 2) + 'px');
+            }
             var h = new Date().getHours();
             var el = document.getElementById('boot-hello');
             if (el) { el.textContent = h < 5 ? 'Up late?' : h < 12 ? 'Good morning!' : h < 17 ? 'Good afternoon!' : 'Good evening!'; }

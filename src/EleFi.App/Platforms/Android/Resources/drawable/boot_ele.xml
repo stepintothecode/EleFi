@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ele, happy, as on the loading screen. A vector, so Android can draw it before the
+     WebView exists and animate it on the render thread while the app starts.
+
+     288dp with Ele 132dp in the middle: the size Android 12's splash screen gives an icon
+     with no background. .boot-words in app.css places the greeting just under it. The inner
+     group "ele" is what boot_float.xml moves. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+    <group android:translateX="78" android:translateY="78" android:scaleX="1.32" android:scaleY="1.32">
+        <group android:name="ele" android:pivotX="50" android:pivotY="50" android:rotation="-2">
+            <group android:rotation="-12" android:pivotX="22" android:pivotY="44">
+                <path android:fillColor="@color/ele_mascot_hide_dark" android:pathData="M2,44 a20,26 0 1,0 40,0 a20,26 0 1,0 -40,0" />
+            </group>
+            <group android:rotation="-12" android:pivotX="24" android:pivotY="45">
+                <path android:fillColor="@color/ele_mascot_ear" android:pathData="M12,45 a12,17 0 1,0 24,0 a12,17 0 1,0 -24,0" />
+            </group>
+            <group android:rotation="12" android:pivotX="78" android:pivotY="44">
+                <path android:fillColor="@color/ele_mascot_hide_dark" android:pathData="M58,44 a20,26 0 1,0 40,0 a20,26 0 1,0 -40,0" />
+            </group>
+            <group android:rotation="12" android:pivotX="76" android:pivotY="45">
+                <path android:fillColor="@color/ele_mascot_ear" android:pathData="M64,45 a12,17 0 1,0 24,0 a12,17 0 1,0 -24,0" />
+            </group>
+            <path android:strokeColor="@color/ele_mascot_hide" android:strokeWidth="12" android:strokeLineCap="round"
+                android:pathData="M50,58 Q55,86 64,80" />
+            <path android:fillColor="@color/ele_mascot_hide" android:pathData="M20,47 a30,28 0 1,0 60,0 a30,28 0 1,0 -60,0" />
+            <path android:strokeColor="#FFFFFF" android:strokeWidth="4" android:strokeLineCap="round"
+                android:pathData="M37,61 Q33,70 38,75 M63,61 Q67,70 62,75" />
+            <path android:strokeColor="@color/ele_mascot_ink" android:strokeWidth="3.6" android:strokeLineCap="round"
+                android:pathData="M36.5,41 Q39.5,37 42.5,41 M57.5,41 Q60.5,37 63.5,41" />
+            <path android:strokeColor="@color/ele_mascot_ink" android:strokeWidth="2.6" android:strokeLineCap="round"
+                android:pathData="M42,52 Q50,59 58,52" />
+            <path android:fillColor="#F9A8D4" android:fillAlpha="0.55" android:pathData="M29,51 a4,2.4 0 1,0 8,0 a4,2.4 0 1,0 -8,0" />
+            <path android:fillColor="#F9A8D4" android:fillAlpha="0.55" android:pathData="M63,51 a4,2.4 0 1,0 8,0 a4,2.4 0 1,0 -8,0" />
+        </group>
+    </group>
+</vector>

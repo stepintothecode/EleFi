@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark twin of values/colors.xml. -->
+    <color name="colorPrimary">#101720</color>
+    <color name="colorPrimaryDark">#2B0B98</color>
+    <color name="colorAccent">#2B0B98</color>
+
+    <color name="ele_mascot_hide">#CDBCE8</color>
+    <color name="ele_mascot_hide_dark">#A38FC8</color>
+    <color name="ele_mascot_ear">#8E77B4</color>
+    <color name="ele_mascot_ink">#241C36</color>
+</resources>

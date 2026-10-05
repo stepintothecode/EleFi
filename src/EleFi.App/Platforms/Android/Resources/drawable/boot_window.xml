@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the window shows while the app starts: the app's ground with Ele floating in the
+     middle, exactly where the system splash had it. index.html's see-through boot screen adds
+     the greeting under it. MainActivity starts the float and swaps this for the plain ground
+     once Blazor runs. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/colorPrimary" />
+    <item android:drawable="@drawable/boot_ele_floating" android:gravity="center" />
+</layer-list>

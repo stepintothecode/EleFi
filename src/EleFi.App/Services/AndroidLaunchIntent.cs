@@ -20,5 +20,13 @@ public sealed class AndroidLaunchIntent : ILaunchIntent
     public event Action? RouteRequested;
 
     /// <inheritdoc />
-    public string? ConsumeRequestedRoute() => MainActivity.ConsumeRequestedRoute();
+    /// <remarks>
+    /// The router asks once, on its first render, which is also the moment the boot screen
+    /// is covered for good, so the window's floating Ele is stopped here too.
+    /// </remarks>
+    public string? ConsumeRequestedRoute()
+    {
+        MainActivity.EndBootScreen();
+        return MainActivity.ConsumeRequestedRoute();
+    }
 }

@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#512BD4</color>
+    <!-- The window shows colorPrimary until the WebView paints, so it is the app's own ground
+         (the ele-bg token in app.css), not the template purple. values-night has the dark one. -->
+    <color name="colorPrimary">#F6F7F9</color>
     <color name="colorPrimaryDark">#2B0B98</color>
     <color name="colorAccent">#2B0B98</color>
+
+    <!-- Ele on the start-up window (drawable/boot_ele.xml), the ele-mascot tokens in app.css. -->
+    <color name="ele_mascot_hide">#B9A5D8</color>
+    <color name="ele_mascot_hide_dark">#8E77B4</color>
+    <color name="ele_mascot_ear">#7C63A6</color>
+    <color name="ele_mascot_ink">#2A2140</color>
 </resources>

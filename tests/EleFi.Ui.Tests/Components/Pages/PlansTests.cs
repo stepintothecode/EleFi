@@ -73,6 +73,17 @@ public class PlansTests : Bunit.TestContext
     }
 
     [Fact]
+    public void The_form_uses_the_capture_forms_words_never_to_and_from()
+    {
+        var page = RenderComponent<Plans>();
+
+        page.Find(".section-head button.primary").Click();
+
+        Assert.StartsWith("Paid from", page.Find("label[for=plan-from]").TextContent, StringComparison.Ordinal);
+        Assert.StartsWith("Paid to", page.Find("label[for=plan-who]").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Ticking_a_plan_with_no_amount_marks_it_done_and_moves_it_to_completed()
     {
         _plans.Add(new Plan { Title = "Call the bank", DueOn = _clock.Today });

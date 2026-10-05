@@ -2,9 +2,13 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:ui="clr-namespace:EleFi.Ui.Components;assembly=EleFi.Ui"
-             x:Class="EleFi.App.MainPage">
+             x:Class="EleFi.App.MainPage"
+             BackgroundColor="Transparent">
 
-    <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
+    <!-- Transparent, so until index.html paints, the window's start-up picture shows through:
+         Ele floating on the app's ground (boot_window.xml). The page body has its own ground. -->
+    <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html"
+                   BackgroundColor="Transparent">
         <BlazorWebView.RootComponents>
             <RootComponent Selector="#app" ComponentType="{x:Type ui:Routes}" />
         </BlazorWebView.RootComponents>

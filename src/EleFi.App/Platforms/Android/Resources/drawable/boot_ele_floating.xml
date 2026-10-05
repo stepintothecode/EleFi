@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ele floating: the splash icon on Android 12 and later, and the window's start-up picture. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/boot_ele">
+    <target android:name="ele" android:animation="@animator/boot_float" />
+</animated-vector>

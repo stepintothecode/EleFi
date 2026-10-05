@@ -271,21 +271,14 @@ html, body {
   text-align: center;
 }
 
-/* Ele on the loading screen: happy, gently bobbing, a soft shadow breathing under him. */
-.boot { gap: 6px; }
-.boot-ele {
-  width: 132px;
-  height: 132px;
-  animation: boot-float 2.6s ease-in-out infinite;
-  filter: drop-shadow(0 14px 18px color-mix(in srgb, var(--ele-mascot-ink) 35%, transparent));
-}
-.boot-hello { margin: 14px 0 0; font-size: 1.3rem; font-weight: 700; color: var(--ele-text); }
+/* The loading screen is see-through: Ele floats on the window behind it (boot_window.xml,
+   132dp at the screen's middle), and only the greeting is drawn here, just under Ele. */
+html:has(.boot), body:has(.boot) { background: transparent; }
+.boot { position: relative; padding: 0; }
+.boot-words { position: absolute; left: 24px; right: 24px; top: calc(var(--boot-mid, 50vh) + 78px); }
+.boot-hello { margin: 0 0 4px; font-size: 1.3rem; font-weight: 700; color: var(--ele-text); }
 .boot-sub { margin: 0; font-size: 0.85rem; color: var(--ele-text-dim); }
 
-@keyframes boot-float {
-  0%, 100% { transform: translateY(0) rotate(-2deg); }
-  50% { transform: translateY(-12px) rotate(2deg); }
-}
 
 h1 { font-size: 1.35rem; margin: 4px 0 16px; letter-spacing: -0.01em; }
 h2 { font-size: 1.05rem; margin: 20px 0 10px; color: var(--ele-text-dim); font-weight: 600; }

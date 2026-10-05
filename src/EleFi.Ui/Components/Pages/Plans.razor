@@ -148,23 +148,23 @@ else
     </div>
 
     <div class="field">
-        <label for="plan-from">@(_direction == TransactionKind.Credit ? "Into" : "From") <span class="muted small">(optional)</span></label>
-        <ContainerSelect Id="plan-from" Title="@(_direction == TransactionKind.Credit ? "Into" : "From")" Containers="_containers"
+        <label for="plan-from">@ContainerLabel <span class="muted small">(optional)</span></label>
+        <ContainerSelect Id="plan-from" Title="@ContainerLabel" Containers="_containers"
                          Placeholder="Any container" Value="_containerId" ValueChanged="id => _containerId = id" />
     </div>
 
     @if (_direction == TransactionKind.SelfTransfer)
     {
         <div class="field">
-            <label for="plan-to">To</label>
-            <ContainerSelect Id="plan-to" Title="To" Containers="_containers" Placeholder="Choose one"
+            <label for="plan-to">Destination container</label>
+            <ContainerSelect Id="plan-to" Title="Destination container" Containers="_containers" Placeholder="Choose one"
                              Value="_destinationId" ValueChanged="id => _destinationId = id" />
         </div>
     }
     else
     {
         <div class="field">
-            <label for="plan-who">@(_direction == TransactionKind.Credit ? "From" : "To") <span class="muted small">(optional)</span></label>
+            <label for="plan-who">@(_direction == TransactionKind.Credit ? "Received from" : "Paid to") <span class="muted small">(optional)</span></label>
             <TypeaheadInput Id="plan-who" Value="@_who" ValueChanged="v => _who = v" Candidates="_partyCandidates" IdleCount="0" />
         </div>
     }
@@ -484,4 +484,12 @@ else
         query.Add("note=" + Uri.EscapeDataString(plan.Note ?? plan.Title));
         Nav.NavigateTo("capture?" + string.Join('&', query));
     }
+
+    // The capture form's words, so a plan reads like the transaction it will become.
+    private string ContainerLabel => _direction switch
+    {
+        TransactionKind.Credit => "Received into",
+        TransactionKind.SelfTransfer => "Source container",
+        _ => "Paid from",
+    };
 }
