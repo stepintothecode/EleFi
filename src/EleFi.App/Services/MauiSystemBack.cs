@@ -6,7 +6,7 @@ namespace EleFi.App.Services;
 /// Hands the system back gesture to the UI instead of letting it close the app.
 /// </summary>
 /// <remarks>
-/// <see cref="MainPage"/> forwards every back press here and reports it handled, so the
+/// <c>SystemBackCallback</c> forwards every back press here and reports it handled, so the
 /// activity is never finished by back alone. The UI's back navigator then decides: close a
 /// sheet, step back a screen, or call <see cref="LeaveApp"/> from the dashboard.
 /// </remarks>

@@ -57,7 +57,13 @@ public class MainActivity : MauiAppCompatActivity
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         Remember(Intent);
-        base.OnCreate(savedInstanceState);
+
+        // Never the saved state. After Android kills the process in the background, it hands
+        // back the fragment state of the old MAUI page, which cannot be restored into the new
+        // one ("No view found for id ... for fragment NavigationRootManager"): the app then
+        // crashed on every launch until its data was cleared. MAUI rebuilds the page from
+        // scratch anyway, and nothing on screen lives in that bundle.
+        base.OnCreate(null);
 
         // Between the system splash and the WebView's first paint, the window itself shows Ele
         // floating on the app's ground, and index.html's boot screen then takes over in place.

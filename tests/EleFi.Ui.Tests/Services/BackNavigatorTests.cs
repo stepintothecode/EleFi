@@ -28,6 +28,20 @@ public class BackNavigatorTests : Bunit.TestContext
     }
 
     [Fact]
+    public async Task Back_from_a_page_inside_settings_returns_to_settings()
+    {
+        var (nav, back) = Start();
+
+        nav.NavigateTo("settings");
+        nav.NavigateTo("settings/labels");
+
+        Assert.True(await back.GoBackAsync());
+
+        Assert.EndsWith("/settings", nav.Uri, StringComparison.Ordinal);
+        Assert.Equal(0, _system.Left);
+    }
+
+    [Fact]
     public async Task Stepping_back_twice_walks_the_history_in_reverse()
     {
         var (nav, back) = Start();

@@ -3,23 +3,24 @@ using EleFi.Application.Abstractions;
 
 namespace EleFi.App;
 
+/// <summary>The only page: the BlazorWebView that hosts the whole UI.</summary>
 public partial class MainPage : ContentPage
 {
+    /// <summary>Creates the page and routes the back gesture into the UI.</summary>
     public MainPage()
     {
         InitializeComponent();
-    }
 
-    /// <summary>
-    /// Routes the system back gesture into the app rather than letting it close the page.
-    /// </summary>
-    /// <remarks>
-    /// This page is the only page, so the default behaviour finished the activity from any
-    /// screen. Returning true keeps it open; the UI decides what back means.
-    /// </remarks>
-    protected override bool OnBackButtonPressed()
-    {
-        var back = Handler?.MauiContext?.Services.GetService<ISystemBack>() as MauiSystemBack;
-        return back?.Raise() == true || base.OnBackButtonPressed();
+        // Once the WebView exists, so our back handler is registered after its own and runs
+        // first. See SystemBackCallback for why there must be only one.
+        blazorWebView.BlazorWebViewInitialized += (_, _) =>
+        {
+#if ANDROID
+            if (blazorWebView.Handler?.MauiContext?.Services.GetService<ISystemBack>() is MauiSystemBack back)
+            {
+                SystemBackCallback.Install(back);
+            }
+#endif
+        };
     }
 }
