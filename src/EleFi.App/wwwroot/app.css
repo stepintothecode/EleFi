@@ -557,8 +557,13 @@ button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owe
   border-radius: 50%;
   transition: transform var(--ele-settle);
 }
-.switch input:checked + .track { background: var(--ele-accent); }
-.switch input:checked + .track::before { background: var(--ele-primary); }
+/* On: a lavender track with a dark knob, so the knob reads at a glance in light and dark. */
+.switch input:checked + .track { background: var(--ele-primary); }
+.switch input:checked + .track::before {
+  background: var(--ele-on-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.switch .track::before { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
 .switch input:checked + .track::before { transform: translateX(18px); }
 .switch input:disabled + .track { opacity: 0.45; }
 
