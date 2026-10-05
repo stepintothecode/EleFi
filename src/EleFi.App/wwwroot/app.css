@@ -912,6 +912,18 @@ hr.divider { border: none; border-top: 1px solid var(--ele-line); margin: 16px 0
 /* Quick capture's chips: a small gap where one kind of container ends and the next begins. */
 .choice-break { flex-basis: 100%; height: 2px; }
 
+/* A small status tag, for things that are not actions. */
+.tag {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--ele-surface-2);
+  color: var(--ele-text-dim);
+}
+
 /* What EleFi read from a message. */
 .facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 14px; }
 .facts dt { color: var(--ele-text-dim); font-size: 0.85rem; }
