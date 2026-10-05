@@ -4,22 +4,55 @@ using EleFi.Ui.Components;
 
 namespace EleFi.Ui.Tests.Components;
 
-/// <summary>The "Paid from" dropdown, sectioned rather than alphabetical.</summary>
+/// <summary>The "Paid from" picker: ordered by kind, no headings, bank and last four under each name.</summary>
 public class ContainerSelectTests : Bunit.TestContext
 {
-    private static readonly Container Sbi = new() { Name = "SBI", Kind = ContainerKind.BankAccount };
+    private static readonly Container Sbi = new() { Name = "SBI", Kind = ContainerKind.BankAccount, InstitutionName = "SBI", AccountNumberLast4 = "9001" };
     private static readonly Container Amex = new() { Name = "Amex", Kind = ContainerKind.CreditCard };
     private static readonly Container Cash = new() { Name = "Cash", Kind = ContainerKind.Cash };
 
     [Fact]
-    public void Cards_come_first_then_banks_then_the_rest_each_under_a_heading()
+    public void The_field_shows_the_choice_with_its_bank_and_last_four_underneath()
     {
-        var component = RenderComponent<ContainerSelect>(p => p.Add(x => x.Containers, [Sbi, Cash, Amex]));
+        var component = RenderComponent<ContainerSelect>(p => p
+            .Add(x => x.Containers, [Sbi, Amex])
+            .Add(x => x.Value, Sbi.Id));
 
-        var groups = component.FindAll("optgroup");
+        Assert.Equal("SBI", component.Find(".picker .picker-name").TextContent);
+        Assert.Equal("SBI ••9001", component.Find(".picker .detail").TextContent);
+    }
 
-        Assert.Equal(["Credit cards", "Bank accounts", "Cash and wallets"], groups.Select(g => g.GetAttribute("label")));
-        Assert.Equal(["Amex", "SBI", "Cash"], component.FindAll("option").Select(o => o.TextContent));
+    [Fact]
+    public void Options_come_cards_first_then_banks_then_the_rest_with_no_headings()
+    {
+        var component = RenderComponent<ContainerSelect>(p => p
+            .Add(x => x.Containers, [Sbi, Cash, Amex])
+            .Add(x => x.Title, "Paid from"));
+
+        component.Find(".picker").Click();
+
+        Assert.Equal("Paid from", component.Find("[role=dialog]").GetAttribute("aria-label"));
+        Assert.Equal(["Amex", "SBI", "Cash"], component.FindAll("[role=option] .picker-name").Select(o => o.TextContent));
+
+        // The order says it; the names of the kinds would only repeat it.
+        Assert.DoesNotContain("Credit cards", component.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Bank accounts", component.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Choosing_an_option_reports_it_and_closes_the_sheet()
+    {
+        var chosen = Guid.Empty;
+        var component = RenderComponent<ContainerSelect>(p => p
+            .Add(x => x.Containers, [Sbi, Amex])
+            .Add(x => x.Value, Amex.Id)
+            .Add(x => x.ValueChanged, id => chosen = id));
+
+        component.Find(".picker").Click();
+        component.FindAll("[role=option]")[1].Click();
+
+        Assert.Equal(Sbi.Id, chosen);
+        Assert.Empty(component.FindAll("[role=dialog]"));
     }
 
     [Fact]
@@ -29,21 +62,6 @@ public class ContainerSelectTests : Bunit.TestContext
             .Add(x => x.Containers, [Sbi, Amex])
             .Add(x => x.Placeholder, "Choose one"));
 
-        var first = component.Find("option");
-        Assert.Equal("Choose one", first.TextContent);
-        Assert.Equal(string.Empty, first.GetAttribute("value"));
-    }
-
-    [Fact]
-    public void Choosing_an_option_reports_the_container()
-    {
-        var chosen = Guid.Empty;
-        var component = RenderComponent<ContainerSelect>(p => p
-            .Add(x => x.Containers, [Sbi, Amex])
-            .Add(x => x.ValueChanged, id => chosen = id));
-
-        component.Find("select").Change(Sbi.Id.ToString());
-
-        Assert.Equal(Sbi.Id, chosen);
+        Assert.Equal("Choose one", component.Find(".picker .picker-text").TextContent.Trim());
     }
 }

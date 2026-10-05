@@ -57,7 +57,7 @@ public class TypeaheadInputTests : Bunit.TestContext
     }
 
     [Fact]
-    public void Tapping_an_answer_fills_the_field_and_reports_the_pick()
+    public void Tapping_an_answer_fills_the_field_reports_the_pick_and_puts_the_panel_away()
     {
         string? value = null;
         string? picked = null;
@@ -71,6 +71,30 @@ public class TypeaheadInputTests : Bunit.TestContext
         Assert.Equal("Swiggy", value);
         Assert.Equal("Swiggy", picked);
         Assert.Equal("Swiggy", component.Find("input").GetAttribute("value"));
+
+        // Shown once, in the field. Not again in a box above it.
+        Assert.Empty(component.FindAll(".typeahead-panel"));
+    }
+
+    [Fact]
+    public void Typing_a_name_exactly_does_not_offer_that_same_name_back()
+    {
+        var component = RenderComponent<TypeaheadInput>(p => p.Add(x => x.Candidates, History));
+
+        component.Find("input").Input("Rahul");
+
+        Assert.Empty(component.FindAll(".typeahead-panel"));
+    }
+
+    [Fact]
+    public void Typing_part_of_a_name_offers_the_others_but_not_what_is_already_typed()
+    {
+        var component = RenderComponent<TypeaheadInput>(p => p.Add(x => x.Candidates,
+            [new TypeaheadCandidate("Swiggy", 2, Now), new TypeaheadCandidate("Swiggy Instamart", 1, Now)]));
+
+        component.Find("input").Input("swiggy");
+
+        Assert.Equal(["Swiggy Instamart"], Options(component));
     }
 
     [Fact]
@@ -85,14 +109,15 @@ public class TypeaheadInputTests : Bunit.TestContext
     }
 
     [Fact]
-    public void The_chosen_answer_is_marked_as_selected()
+    public void A_value_the_form_starts_with_shows_no_panel()
     {
+        // Editing a transaction: the payee is already there, and repeating it as a "match"
+        // above the field was noise.
         var component = RenderComponent<TypeaheadInput>(p => p
             .Add(x => x.Candidates, History)
-            .Add(x => x.Value, "zomato"));
+            .Add(x => x.Value, "Zom"));
 
-        var option = component.Find("[role=option]");
-        Assert.Equal("true", option.GetAttribute("aria-selected"));
+        Assert.Empty(component.FindAll(".typeahead-panel"));
     }
 
     [Fact]

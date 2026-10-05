@@ -1,40 +1,39 @@
 @using EleFi.Domain.Containers
 
 @*
-    Containers as tappable chips, sectioned the same way as ContainerSelect.
+    Containers as tappable chips, in the same order as ContainerSelect.
 
-    For quick capture, where one tap should both choose and move on. The sections match the
-    full form's dropdown, so a card is found in the same place on both screens.
+    For quick capture, where one tap should both choose and move on. No section headings:
+    the order (cards, banks, the rest) says it, and a small gap marks where one kind ends.
+    Each chip carries the bank and last four digits under the name.
 *@
 
-<div class="container-choices">
-    @foreach (var group in _groups)
+<div class="container-choices chips">
+    @for (var i = 0; i < _ordered.Count; i++)
     {
-        <section class="choice-group" aria-label="@group.Heading">
-            <div class="choice-heading">@group.Heading</div>
-            <div class="chips">
-                @foreach (var container in group.Containers)
-                {
-                    var on = container.Id == Selected;
-                    <button type="button"
-                            class="chip chip-stacked @(on ? "on" : string.Empty)"
-                            aria-pressed="@(on ? "true" : "false")"
-                            @onclick="() => OnChosen.InvokeAsync(container.Id)">
-                        <span>@container.Name</span>
-                        @if (container.Describe() is { } detail)
-                        {
-                            <small class="detail">@detail</small>
-                        }
-                    </button>
-                }
-            </div>
-        </section>
+        var container = _ordered[i];
+        var on = container.Id == Selected;
+        var startsSection = i > 0 && container.Kind.PickerGroup() != _ordered[i - 1].Kind.PickerGroup();
+        @if (startsSection)
+        {
+            <span class="choice-break" aria-hidden="true"></span>
+        }
+        <button type="button"
+                class="chip chip-stacked @(on ? "on" : string.Empty)"
+                aria-pressed="@(on ? "true" : "false")"
+                @onclick="() => OnChosen.InvokeAsync(container.Id)">
+            <span>@container.Name</span>
+            @if (container.Describe() is { } detail)
+            {
+                <small class="detail">@detail</small>
+            }
+        </button>
     }
 </div>
 
 @code {
-    private IReadOnlyList<ContainerGroup> _groups = [];
-    private IReadOnlyList<Container>? _groupedFrom;
+    private IReadOnlyList<Container> _ordered = [];
+    private IReadOnlyList<Container>? _orderedFrom;
 
     /// <summary>The containers to choose from, in the user's preferred order.</summary>
     [Parameter]
@@ -51,10 +50,10 @@
     /// <inheritdoc />
     protected override void OnParametersSet()
     {
-        if (!ReferenceEquals(_groupedFrom, Containers))
+        if (!ReferenceEquals(_orderedFrom, Containers))
         {
-            _groupedFrom = Containers;
-            _groups = ContainerGrouping.ForPicker(Containers);
+            _orderedFrom = Containers;
+            _ordered = ContainerGrouping.InPickerOrder(Containers);
         }
     }
 }

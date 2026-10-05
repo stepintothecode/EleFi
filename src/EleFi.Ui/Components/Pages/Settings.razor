@@ -65,11 +65,60 @@
         </p>
     </InfoButton>
 </div>
-<div class="card stack">
-    <a class="btn btn-ghost btn-block" href="settings/labels">Edit labels</a>
-    <a class="btn btn-ghost btn-block" href="settings/deleted">Deleted transactions</a>
-    <button class="btn-ghost btn-block" disabled="@_busy" @onclick="ExportAsync">Export to a file</button>
-    <button class="btn-ghost btn-block" disabled="@_busy" @onclick="StartRestore">Restore from a file</button>
+<div class="card settings-list">
+    <a class="settings-row" href="settings/labels">
+        <span class="settings-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3.5 12.6V5a1.5 1.5 0 0 1 1.5-1.5h7.6a1.5 1.5 0 0 1 1.06.44l6.9 6.9a1.5 1.5 0 0 1 0 2.12l-7.56 7.56a1.5 1.5 0 0 1-2.12 0l-6.9-6.9a1.5 1.5 0 0 1-.48-1.02Z" />
+                <circle cx="8.3" cy="8.3" r="1.4" />
+            </svg>
+        </span>
+        <span class="settings-text">
+            <span class="settings-title">Edit labels</span>
+            <span class="settings-sub">Add, rename, recolour</span>
+        </span>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
+    </a>
+
+    <a class="settings-row" href="settings/deleted">
+        <span class="settings-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h16M9.5 7V4.8h5V7M6.2 7l.9 12.2a1.6 1.6 0 0 0 1.6 1.5h6.6a1.6 1.6 0 0 0 1.6-1.5L17.8 7" />
+                <path d="M10 11.5l-1.6 1.6 1.6 1.6M8.6 13.1h4.6a1.9 1.9 0 0 1 0 3.8h-.9" />
+            </svg>
+        </span>
+        <span class="settings-text">
+            <span class="settings-title">Deleted transactions</span>
+            <span class="settings-sub">Bring back anything you removed</span>
+        </span>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
+    </a>
+
+    <button type="button" class="settings-row" disabled="@_busy" @onclick="ExportAsync">
+        <span class="settings-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2" />
+            </svg>
+        </span>
+        <span class="settings-text">
+            <span class="settings-title">Export to a file</span>
+            <span class="settings-sub">Everything, as one JSON file</span>
+        </span>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
+    </button>
+
+    <button type="button" class="settings-row" disabled="@_busy" @onclick="StartRestore">
+        <span class="settings-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2" />
+            </svg>
+        </span>
+        <span class="settings-text">
+            <span class="settings-title">Restore from a file</span>
+            <span class="settings-sub">Replace this device's data with a backup</span>
+        </span>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
+    </button>
 </div>
 
 @* NFR-10.7: on a platform that cannot read alerts, no switch is shown at all. Teaching
@@ -133,7 +182,21 @@
         }
     }
 
-    <a class="btn btn-ghost btn-block" style="margin-top:12px;" href="settings/teach">Teach EleFi a message</a>
+    <div class="settings-list" style="margin-top:12px;">
+        <a class="settings-row" href="settings/teach">
+            <span class="settings-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4.5 5.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z" />
+                    <path d="M8 9.5h8M8 12.5h5" />
+                </svg>
+            </span>
+            <span class="settings-text">
+                <span class="settings-title">Teach EleFi a message</span>
+                <span class="settings-sub">For a bank message it missed or misread</span>
+            </span>
+            <span class="chev" aria-hidden="true">&rsaquo;</span>
+        </a>
+    </div>
 </div>
 
 <div class="field-head section-gap">

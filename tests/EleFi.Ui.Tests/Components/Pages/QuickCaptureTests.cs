@@ -24,7 +24,7 @@ public class QuickCaptureTests : Bunit.TestContext
     private readonly RecordingTransactions _transactions = new();
 
     [Fact]
-    public void From_is_sectioned_cards_first()
+    public void From_lists_cards_first_with_no_headings()
     {
         Register();
         var page = RenderComponent<QuickCapture>();
@@ -32,9 +32,7 @@ public class QuickCaptureTests : Bunit.TestContext
         page.Find("#q-amount").Input("450");
         page.Find(".quick-actions button.primary").Click();
 
-        Assert.Equal(
-            ["Credit cards", "Bank accounts"],
-            page.FindAll(".choice-heading").Select(h => h.TextContent));
+        Assert.Equal(["Amex", "SBI"], page.FindAll(".container-choices button > span").Select(s => s.TextContent));
     }
 
     [Fact]

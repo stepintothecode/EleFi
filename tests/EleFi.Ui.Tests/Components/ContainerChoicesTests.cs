@@ -4,20 +4,27 @@ using EleFi.Ui.Components;
 
 namespace EleFi.Ui.Tests.Components;
 
-/// <summary>Quick capture's From step: the same sections as the full form, as chips.</summary>
+/// <summary>Quick capture's From step: the same order as the full form, as chips.</summary>
 public class ContainerChoicesTests : Bunit.TestContext
 {
-    private static readonly Container Sbi = new() { Name = "SBI", Kind = ContainerKind.BankAccount };
+    private static readonly Container Sbi = new() { Name = "SBI", Kind = ContainerKind.BankAccount, InstitutionName = "SBI", AccountNumberLast4 = "9001" };
     private static readonly Container Amex = new() { Name = "Amex", Kind = ContainerKind.CreditCard };
 
     [Fact]
-    public void Containers_are_sectioned_cards_first()
+    public void Containers_come_cards_first_with_no_headings()
     {
         var component = RenderComponent<ContainerChoices>(p => p.Add(x => x.Containers, [Sbi, Amex]));
 
-        Assert.Equal(
-            ["Credit cards", "Bank accounts"],
-            component.FindAll(".choice-heading").Select(h => h.TextContent));
+        Assert.Equal(["Amex", "SBI"], component.FindAll("button > span").Select(s => s.TextContent));
+        Assert.DoesNotContain("Credit cards", component.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_chip_carries_its_bank_and_last_four_under_the_name()
+    {
+        var component = RenderComponent<ContainerChoices>(p => p.Add(x => x.Containers, [Sbi]));
+
+        Assert.Equal("SBI ••9001", component.Find("button small.detail").TextContent);
     }
 
     [Fact]
@@ -29,8 +36,7 @@ public class ContainerChoicesTests : Bunit.TestContext
             .Add(x => x.Selected, Amex.Id)
             .Add(x => x.OnChosen, id => chosen = id));
 
-        Assert.Equal("true", component.Find("button[aria-pressed=true]").GetAttribute("aria-pressed"));
-        Assert.Equal("Amex", component.Find("button[aria-pressed=true]").TextContent);
+        Assert.Equal("Amex", component.Find("button[aria-pressed=true] > span").TextContent);
 
         component.FindAll("button")[1].Click();
 

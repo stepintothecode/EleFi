@@ -21,14 +21,16 @@ public class CaptureTests : Bunit.TestContext
     private readonly Container _card = new() { Name = "Amex", Kind = ContainerKind.CreditCard };
 
     [Fact]
-    public void Paid_from_is_sectioned_and_starts_on_the_first_card()
+    public void Paid_from_starts_on_the_first_card_and_lists_cards_first()
     {
         Register();
 
         var page = RenderComponent<Capture>();
 
-        Assert.Equal("Credit cards", page.Find("#container optgroup").GetAttribute("label"));
-        Assert.Equal(_card.Id.ToString(), page.Find("#container").GetAttribute("value"));
+        Assert.Equal("Amex", page.Find("#container .picker-name").TextContent);
+
+        page.Find("#container").Click();
+        Assert.Equal(["Amex", "SBI"], page.FindAll("[role=option] .picker-name").Select(o => o.TextContent));
     }
 
     [Fact]
@@ -66,7 +68,7 @@ public class CaptureTests : Bunit.TestContext
         var page = RenderComponent<Capture>();
 
         Assert.Equal("450", page.Find("#amount").GetAttribute("value"));
-        Assert.Equal(_bank.Id.ToString(), page.Find("#container").GetAttribute("value"));
+        Assert.Equal("SBI", page.Find("#container .picker-name").TextContent);
     }
 
     private void Register()

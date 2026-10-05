@@ -65,11 +65,11 @@
     {
         <div class="field">
             <label for="from">Source container</label>
-            <ContainerSelect Id="from" Containers="_containers" @bind-Value="_containerId" />
+            <ContainerSelect Id="from" Title="Source container" Containers="_containers" @bind-Value="_containerId" />
         </div>
         <div class="field">
             <label for="to">Destination container</label>
-            <ContainerSelect Id="to" Containers="_containers" @bind-Value="_destinationContainerId" />
+            <ContainerSelect Id="to" Title="Destination container" Containers="_containers" @bind-Value="_destinationContainerId" />
         </div>
     }
     else
@@ -85,7 +85,7 @@
             }
             else
             {
-                <ContainerSelect Id="container" Containers="_containers" @bind-Value="_containerId" />
+                <ContainerSelect Id="container" Title="@(_kind == TransactionKind.Debit ? "Paid from" : "Received into")" Containers="_containers" @bind-Value="_containerId" />
             }
         </div>
 

@@ -8,12 +8,14 @@
     handed. This draws the answers inside the page, above the field, where the keyboard
     cannot cover them, and searches every name the user has ever entered.
 
-    With nothing typed it shows the few most used. Once something is typed it shows the best
-    matches from the whole history. Tapping one fills the field.
+    The panel shows in two cases only. With the field empty, the few most used (where the
+    caller asks for them). While the user is typing, the best matches from the whole history.
+    It never repeats what is already in the field: a value that was picked, or that the form
+    started with, is shown once, in the field, and nowhere else.
 *@
 
 <div class="typeahead">
-    @if (_shown.Count > 0 || HasQuery)
+    @if (ShowPanel)
     {
         <div class="typeahead-panel" role="listbox" aria-label="@PanelLabel">
             <div class="typeahead-caption">@(HasQuery ? "Matches" : "Most used")</div>
@@ -29,11 +31,7 @@
                 <div class="typeahead-options">
                     @foreach (var name in _shown)
                     {
-                        var on = string.Equals(name, Value.Trim(), StringComparison.OrdinalIgnoreCase);
-                        <button type="button"
-                                role="option"
-                                class="chip @(on ? "on" : string.Empty)"
-                                aria-selected="@(on ? "true" : "false")"
+                        <button type="button" role="option" class="chip" aria-selected="false"
                                 @onclick="() => PickAsync(name)">@name</button>
                     }
                 </div>
@@ -53,8 +51,14 @@
 
 @code {
     private IReadOnlyList<string> _shown = [];
+    private bool _exactMatch;
     private IReadOnlyList<TypeaheadCandidate>? _rankedFrom;
     private string? _rankedFor;
+
+    // True only while the text in the field is what the user is typing. A pick, or a value
+    // handed in by the form, ends it, so neither is echoed back as a "match".
+    private bool _typing;
+    private string? _lastEmitted;
 
     /// <summary>The input's id, so a label can point at it.</summary>
     [Parameter]
@@ -80,11 +84,11 @@
     [Parameter]
     public IReadOnlyList<TypeaheadCandidate> Candidates { get; set; } = [];
 
-    /// <summary>How many to show before anything is typed. Zero shows nothing until typing starts.</summary>
+    /// <summary>How many to show while the field is empty. Zero shows nothing until typing starts.</summary>
     [Parameter]
     public int IdleCount { get; set; } = 3;
 
-    /// <summary>How many matches to show once something is typed.</summary>
+    /// <summary>How many matches to show while typing.</summary>
     [Parameter]
     public int MatchCount { get; set; } = 5;
 
@@ -102,8 +106,26 @@
 
     private bool HasQuery => !string.IsNullOrWhiteSpace(Value);
 
+    // Empty: the most used, if asked for. Typing: matches, or "will be added as new", unless
+    // what is typed already is exactly an existing name and there is nothing else to offer.
+    private bool ShowPanel =>
+        HasQuery
+            ? _typing && (_shown.Count > 0 || !_exactMatch)
+            : IdleCount > 0 && _shown.Count > 0;
+
     /// <inheritdoc />
-    protected override void OnParametersSet() => Rerank();
+    protected override void OnParametersSet()
+    {
+        // A value that did not come from this field (the form loading a transaction, or
+        // clearing after a save) is not something the user is typing.
+        if (!string.Equals(Value, _lastEmitted, StringComparison.Ordinal))
+        {
+            _typing = false;
+            _lastEmitted = Value;
+        }
+
+        Rerank();
+    }
 
     // Ranked only when the text or the candidate list actually changed, so an unrelated
     // re-render elsewhere on the form costs nothing here.
@@ -116,12 +138,30 @@
 
         _rankedFrom = Candidates;
         _rankedFor = Value;
-        _shown = TypeaheadRanker.Rank(Candidates, Value, HasQuery ? MatchCount : IdleCount);
+
+        if (!HasQuery)
+        {
+            _shown = TypeaheadRanker.Rank(Candidates, null, IdleCount);
+            _exactMatch = false;
+            return;
+        }
+
+        // One extra, so leaving out the exact match still leaves a full panel.
+        var ranked = TypeaheadRanker.Rank(Candidates, Value, MatchCount + 1);
+        var typed = Value.Trim();
+
+        _exactMatch = ranked.Any(n => string.Equals(n, typed, StringComparison.OrdinalIgnoreCase));
+        _shown = ranked
+            .Where(n => !string.Equals(n, typed, StringComparison.OrdinalIgnoreCase))
+            .Take(MatchCount)
+            .ToList();
     }
 
     private async Task OnInputAsync(ChangeEventArgs e)
     {
         Value = e.Value?.ToString() ?? string.Empty;
+        _typing = true;
+        _lastEmitted = Value;
         Rerank();
         await ValueChanged.InvokeAsync(Value);
     }
@@ -129,6 +169,8 @@
     private async Task PickAsync(string name)
     {
         Value = name;
+        _typing = false;
+        _lastEmitted = name;
         Rerank();
         await ValueChanged.InvokeAsync(name);
         await OnPicked.InvokeAsync(name);

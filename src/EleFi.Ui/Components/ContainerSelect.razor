@@ -1,38 +1,74 @@
 @using EleFi.Domain.Containers
 
 @*
-    A container dropdown, sectioned: credit cards, then bank accounts, then the rest.
+    A container picker: the chosen container as a button, and a sheet to choose another.
 
-    Still a native <select>, because Android's own picker is fast, accessible, and familiar.
-    The <optgroup> headings are what turn one long alphabetical list into sections the eye
-    can jump between.
+    Not a native <select>. Android draws a select's options as one line of plain text, so the
+    bank and last four digits could only be tacked on after the name, and the section
+    headings repeated what the order already says. This draws each container as its name with
+    the bank and last four in small text underneath, in picker order (cards, banks, the rest),
+    with a hairline between sections instead of a heading.
 *@
 
-<select id="@Id" value="@(Value == Guid.Empty ? string.Empty : Value.ToString())" @onchange="OnChangeAsync" aria-label="@AriaLabel">
-    @if (Placeholder is not null && Value == Guid.Empty)
+<button type="button" id="@Id" class="picker" aria-haspopup="dialog" aria-label="@AriaLabel"
+        @onclick="() => _open = true">
+    @if (_selected is { } chosen)
     {
-        @* Shown only while nothing is chosen, so an unmatched container is asked for
-           rather than silently defaulted to the first one in the list. *@
-        <option value="">@Placeholder</option>
-    }
-    @foreach (var group in _groups)
-    {
-        <optgroup label="@group.Heading">
-            @foreach (var container in group.Containers)
+        <span class="picker-text">
+            <span class="picker-name">@chosen.Name</span>
+            @if (chosen.Describe() is { } detail)
             {
-                @* A select option has room for one line, so the bank and last four digits ride
-                   along after the name rather than under it. *@
-                <option value="@container.Id">@container.Name@(container.Describe() is { } detail ? $" · {detail}" : string.Empty)</option>
+                <span class="detail">@detail</span>
             }
-        </optgroup>
+        </span>
     }
-</select>
+    else
+    {
+        <span class="picker-text muted">@(Placeholder ?? "Choose one")</span>
+    }
+    <svg class="picker-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6 9l6 6 6-6" />
+    </svg>
+</button>
+
+<Modal Open="_open" Title="@Title" OnCancel="() => _open = false">
+    <div class="picker-list" role="listbox" aria-label="@Title">
+        @for (var i = 0; i < _ordered.Count; i++)
+        {
+            var container = _ordered[i];
+            var on = container.Id == Value;
+            var startsSection = i > 0 && container.Kind.PickerGroup() != _ordered[i - 1].Kind.PickerGroup();
+            <button type="button" role="option"
+                    class="picker-option @(on ? "on" : null) @(startsSection ? "section-start" : null)"
+                    aria-selected="@(on ? "true" : "false")"
+                    @onclick="() => ChooseAsync(container.Id)">
+                <span class="picker-text">
+                    <span class="picker-name">@container.Name</span>
+                    @if (container.Describe() is { } detail)
+                    {
+                        <span class="detail">@detail</span>
+                    }
+                </span>
+                @if (on)
+                {
+                    <svg class="picker-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M5 12.5l4.5 4.5L19 7.5" />
+                    </svg>
+                }
+            </button>
+        }
+    </div>
+</Modal>
 
 @code {
-    private IReadOnlyList<ContainerGroup> _groups = [];
-    private IReadOnlyList<Container>? _groupedFrom;
+    private IReadOnlyList<Container> _ordered = [];
+    private IReadOnlyList<Container>? _orderedFrom;
+    private Container? _selected;
+    private bool _open;
 
-    /// <summary>The select's id, so a label can point at it.</summary>
+    /// <summary>The button's id, so a label can point at it.</summary>
     [Parameter]
     public string? Id { get; set; }
 
@@ -40,17 +76,21 @@
     [Parameter]
     public string? AriaLabel { get; set; }
 
+    /// <summary>The sheet's title: what is being chosen, such as "Paid from".</summary>
+    [Parameter]
+    public string Title { get; set; } = "Choose a container";
+
     /// <summary>The containers to choose from, in the user's preferred order.</summary>
     [Parameter]
     public IReadOnlyList<Container> Containers { get; set; } = [];
 
-    /// <summary>The chosen container.</summary>
+    /// <summary>The chosen container, or empty for none yet.</summary>
     [Parameter]
     public Guid Value { get; set; }
 
     /// <summary>
-    /// A first option shown while <see cref="Value"/> is empty, such as "Choose one". Null
-    /// for no placeholder.
+    /// What the button says while nothing is chosen, such as "Choose one". Shown instead of
+    /// silently defaulting, so an unknown container is asked for rather than guessed.
     /// </summary>
     [Parameter]
     public string? Placeholder { get; set; }
@@ -62,13 +102,23 @@
     /// <inheritdoc />
     protected override void OnParametersSet()
     {
-        if (!ReferenceEquals(_groupedFrom, Containers))
+        if (!ReferenceEquals(_orderedFrom, Containers))
         {
-            _groupedFrom = Containers;
-            _groups = ContainerGrouping.ForPicker(Containers);
+            _orderedFrom = Containers;
+            _ordered = ContainerGrouping.InPickerOrder(Containers);
         }
+
+        _selected = _ordered.FirstOrDefault(c => c.Id == Value);
     }
 
-    private Task OnChangeAsync(ChangeEventArgs e) =>
-        Guid.TryParse(e.Value?.ToString(), out var id) ? ValueChanged.InvokeAsync(id) : Task.CompletedTask;
+    private async Task ChooseAsync(Guid id)
+    {
+        _open = false;
+        _selected = _ordered.FirstOrDefault(c => c.Id == id);
+
+        if (id != Value)
+        {
+            await ValueChanged.InvokeAsync(id);
+        }
+    }
 }

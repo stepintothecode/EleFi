@@ -687,16 +687,8 @@ button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owe
 .typeahead-empty { font-size: 0.85rem; color: var(--ele-text-dim); }
 .typeahead input { width: 100%; }
 
-/* Containers as chips in titled sections, for quick capture's From step. */
-.container-choices { display: flex; flex-direction: column; gap: 12px; }
-.choice-heading {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ele-text-dim);
-  margin-bottom: 6px;
-}
+/* Containers as chips for quick capture's From step, in picker order. */
+.container-choices { row-gap: 8px; }
 
 .quick-more { margin-top: 10px; color: var(--ele-accent-strong); }
 
@@ -831,6 +823,86 @@ hr.divider { border: none; border-top: 1px solid var(--ele-line); margin: 16px 0
   margin-bottom: var(--ele-gap);
 }
 .review-bar .field-head { margin-bottom: 8px; }
+
+/*
+  Settings rows: an icon in a lavender disc, a title, a quiet line under it, a chevron. Rows
+  sit in one card divided by hairlines, like a native settings list.
+*/
+.settings-list { padding: 4px 0; }
+.card.settings-list { padding: 4px 14px; }
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 2px;
+  min-height: 64px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--ele-line);
+  color: var(--ele-text);
+  text-align: left;
+  text-decoration: none;
+  justify-content: flex-start;
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row:active { transform: none; background: var(--ele-surface-2); }
+.settings-row:disabled { opacity: 0.55; }
+.settings-icon {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--ele-accent-soft);
+  color: var(--ele-accent);
+}
+.settings-icon svg { width: 22px; height: 22px; }
+.settings-text { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; gap: 2px; }
+.settings-title { font-weight: 600; font-size: 0.98rem; }
+.settings-sub { font-size: 0.8rem; color: var(--ele-text-dim); }
+.settings-row .chev { color: var(--ele-text-dim); font-size: 1.5rem; line-height: 1; }
+
+/*
+  The container picker: a field-shaped button showing the choice, and a sheet of options.
+  The bank and last four digits sit under the name in small text.
+*/
+.picker {
+  width: 100%;
+  justify-content: space-between;
+  text-align: left;
+  min-height: 52px;
+  padding: 8px 12px;
+}
+.picker-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.picker-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.picker-chev { width: 18px; height: 18px; flex: 0 0 auto; color: var(--ele-text-dim); }
+.picker-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.picker-option {
+  width: 100%;
+  justify-content: space-between;
+  text-align: left;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  background: transparent;
+}
+.picker-option.on { background: var(--ele-accent-soft); border-color: color-mix(in srgb, var(--ele-accent) 45%, var(--ele-line)); }
+.picker-option.section-start { margin-top: 8px; position: relative; }
+.picker-option.section-start::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: -7px;
+  border-top: 1px solid var(--ele-line);
+}
+.picker-check { width: 20px; height: 20px; color: var(--ele-accent); flex: 0 0 auto; }
+
+/* Quick capture's chips: a small gap where one kind of container ends and the next begins. */
+.choice-break { flex-basis: 100%; height: 2px; }
 
 /* What EleFi read from a message. */
 .facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 14px; }
