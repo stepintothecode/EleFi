@@ -1,6 +1,7 @@
 using EleFi.Application.Transactions;
 using EleFi.Domain.Alerts;
 using EleFi.Domain.Money;
+using EleFi.Domain.Notices;
 
 namespace EleFi.Application.Suggestions;
 
@@ -17,7 +18,10 @@ public sealed class IncomingAlertHandler(
     AlertCaptureService capture,
     AlertCaptureSettings settings,
     EditTransactionService editing,
-    Abstractions.IAlertPromptSurface prompts)
+    Planning.PlanService planner,
+    Abstractions.INoticeRepository notices,
+    Abstractions.IAlertPromptSurface prompts,
+    Abstractions.IClock clock)
 {
     /// <summary>Handles one incoming alert.</summary>
     /// <param name="channel">Where it arrived from.</param>
@@ -56,7 +60,25 @@ public sealed class IncomingAlertHandler(
             // Same identity when this completed an earlier alert's transaction, so the
             // prompt already on screen is updated in place rather than joined by a second.
             var app = transaction.PaymentApp?.Name ?? PaymentApps.Find(sender)?.Name;
-            prompts.Show(AlertPromptText.For(transaction, result.ContainerName, app));
+
+            // The SIP whose SMS came ticks itself off; the one whose SMS never came stays open.
+            var plan = await planner.CompleteMatchingAsync(transaction, cancellationToken).ConfigureAwait(false);
+            var prompt = AlertPromptText.For(transaction, result.ContainerName, app, plan?.Title);
+            prompts.Show(prompt);
+
+            // Kept in the app's own list too, so it can be read in full after the system
+            // notification has been swiped away. One entry per transaction: a merged second
+            // alert rewrites it with the fuller story rather than adding another.
+            await notices.UpsertAsync(
+                new Notice
+                {
+                    Title = prompt.Title,
+                    Body = prompt.Body,
+                    Route = $"transactions/{transaction.Id}",
+                    CreatedAt = clock.UtcNow,
+                    UpdatedAt = clock.UtcNow,
+                },
+                cancellationToken).ConfigureAwait(false);
         }
 
         return result;

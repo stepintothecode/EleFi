@@ -1,0 +1,109 @@
+@page "/notifications"
+@using EleFi.Application.Abstractions
+@using EleFi.Domain.Notices
+@inject INoticeRepository Notices
+@inject NavigationManager Nav
+
+@*
+    Everything EleFi has told the user, in full.
+
+    A system notification is truncated and gone once swiped away. This keeps them: each
+    payment recorded from a message, each plan that ticked itself off. Tapping one toggles
+    read and unread; Open goes to what it is about.
+*@
+
+<PageTitle>Notifications</PageTitle>
+
+<div class="section-head">
+    <h1>Notifications</h1>
+    @if (_notices.Count > 0)
+    {
+        <button class="btn-ghost" @onclick="ToggleAllAsync">@(AnyUnread ? "Mark all read" : "Mark all unread")</button>
+    }
+</div>
+
+@if (_loading)
+{
+    <div class="card"><div class="skeleton" style="width:60%;"></div></div>
+}
+else if (_notices.Count == 0)
+{
+    <div class="card empty-state">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 2h-15Z" /><path d="M10 20.5a2 2 0 0 0 4 0" />
+        </svg>
+        <div class="who">All quiet</div>
+        <p class="muted small">Payments recorded from your SMS and payment apps, and plans that tick themselves off, are listed here.</p>
+    </div>
+}
+else
+{
+    <div class="card notice-list">
+        @foreach (var notice in _notices)
+        {
+            <div class="notice-row @(notice.IsRead ? "read" : "unread")" @key="notice.Id">
+                <button type="button" class="notice-body" aria-pressed="@(notice.IsRead ? "true" : "false")"
+                        aria-label="@(notice.IsRead ? "Mark unread" : "Mark read"): @notice.Title"
+                        @onclick="() => ToggleAsync(notice)">
+                    <span class="notice-dot" aria-hidden="true"></span>
+                    <span class="notice-text">
+                        <span class="who">@notice.Title</span>
+                        <span class="notice-full">@notice.Body</span>
+                        <span class="meta">@When(notice.CreatedAt)</span>
+                    </span>
+                </button>
+                @if (notice.Route is { } route)
+                {
+                    <button type="button" class="btn-ghost btn-icon" @onclick="() => OpenAsync(notice, route)">Open</button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private IReadOnlyList<Notice> _notices = [];
+    private bool _loading = true;
+
+    private bool AnyUnread => _notices.Any(n => !n.IsRead);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        _loading = false;
+    }
+
+    private async Task ReloadAsync() => _notices = await Notices.ListAsync();
+
+    private async Task ToggleAsync(Notice notice)
+    {
+        await Notices.SetReadAsync(notice.Id, !notice.IsRead);
+        await ReloadAsync();
+    }
+
+    private async Task ToggleAllAsync()
+    {
+        await Notices.SetAllReadAsync(AnyUnread);
+        await ReloadAsync();
+    }
+
+    // Opening something is reading it.
+    private async Task OpenAsync(Notice notice, string route)
+    {
+        if (!notice.IsRead)
+        {
+            await Notices.SetReadAsync(notice.Id, true);
+        }
+
+        Nav.NavigateTo(route);
+    }
+
+    private static string When(DateTimeOffset at)
+    {
+        var local = at.ToLocalTime();
+        var today = DateTimeOffset.Now.Date;
+        return local.Date == today ? $"Today, {local:HH:mm}"
+            : local.Date == today.AddDays(-1) ? $"Yesterday, {local:HH:mm}"
+            : local.ToString("d MMM yyyy, HH:mm");
+    }
+}

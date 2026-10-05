@@ -53,6 +53,12 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
     /// <summary>The append-only audit trail, written by triggers.</summary>
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
+    /// <summary>Plans: money the user expects to move.</summary>
+    public DbSet<Domain.Planning.Plan> Plans => Set<Domain.Planning.Plan>();
+
+    /// <summary>The in-app notification list.</summary>
+    public DbSet<Domain.Notices.Notice> Notices => Set<Domain.Notices.Notice>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -249,6 +255,46 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
             // No soft-delete filter and no DeletedAt column, on purpose. A dismissed
             // suggestion is hard-deleted (SM5): it is machine output the user rejected,
             // not user-entered data that soft delete exists to protect.
+        });
+
+        modelBuilder.Entity<Domain.Planning.Plan>(e =>
+        {
+            e.ToTable("Plans");
+            e.HasKey(p => p.Id);
+            e.Property(p => p.Title).IsRequired().HasMaxLength(120);
+            e.Property(p => p.Note).HasMaxLength(500);
+            e.Property(p => p.CurrencyCode).IsRequired().HasMaxLength(3);
+            e.Property(p => p.CounterpartyName).HasMaxLength(200);
+            e.Property(p => p.DueOn).HasConversion(dateOnly).IsRequired();
+            e.Property(p => p.DueTime).HasConversion(nullableTimeOnly).HasMaxLength(5);
+            e.Property(p => p.CompletedAt).HasConversion(nullableInstant);
+            e.Property(p => p.CreatedAt).HasConversion(instant);
+            e.Property(p => p.UpdatedAt).HasConversion(instant);
+            e.Property(p => p.DeletedAt).HasConversion(nullableInstant);
+            e.Ignore(p => p.Repeat);
+
+            // A plan is never money (D2): no foreign key ties it to a balance, only to the
+            // transaction it was ticked off against.
+            e.HasQueryFilter(p => p.DeletedAt == null);
+            e.HasIndex(p => p.DueOn);
+            e.HasIndex(p => p.TransactionId);
+            e.HasIndex(p => p.SeriesId);
+        });
+
+        modelBuilder.Entity<Domain.Notices.Notice>(e =>
+        {
+            e.ToTable("Notices");
+            e.HasKey(n => n.Id);
+            e.Property(n => n.Title).IsRequired().HasMaxLength(200);
+            e.Property(n => n.Body).IsRequired().HasMaxLength(1000);
+            e.Property(n => n.Route).HasMaxLength(200);
+            e.Property(n => n.ReadAt).HasConversion(nullableInstant);
+            e.Property(n => n.CreatedAt).HasConversion(instant);
+            e.Property(n => n.UpdatedAt).HasConversion(instant);
+            e.Property(n => n.DeletedAt).HasConversion(nullableInstant);
+            e.HasQueryFilter(n => n.DeletedAt == null);
+            e.HasIndex(n => n.Route);
+            e.HasIndex(n => n.CreatedAt);
         });
 
         modelBuilder.Entity<AuditEvent>(e =>

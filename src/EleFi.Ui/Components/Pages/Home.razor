@@ -11,6 +11,7 @@
 @inject ITransactionRepository Transactions
 @inject PrivacyMode Privacy
 @inject TransactionListState ListState
+@inject INoticeRepository Notices
 @inject IClock Clock
 
 @*
@@ -25,6 +26,43 @@
 *@
 
 <PageTitle>EleFi</PageTitle>
+
+@* The top bar: the streak, and the bell for everything EleFi has done on the user's behalf. *@
+<div class="home-top">
+    <button type="button" class="streak-chip" aria-label="Steady ledger streak" @onclick="() => _streakOpen = true">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12.6 2.5c.5 3-1 4.6-2.4 6.2C8.7 10.3 7.5 11.8 7.5 14.4A4.6 4.6 0 0 0 12 19c2.6 0 4.6-1.9 4.6-4.6 0-1.6-.6-2.8-1.4-3.9.1 1.3-.4 2.3-1.3 2.8.3-2.8-.4-6.7-1.3-10.8Z" />
+        </svg>
+        <span>0 weeks</span>
+    </button>
+    <a class="bell" href="notifications" aria-label="@(_unread == 0 ? "Notifications" : $"Notifications, {_unread} unread")">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 2h-15Z" /><path d="M10 20.5a2 2 0 0 0 4 0" />
+        </svg>
+        @if (_unread > 0)
+        {
+            <span class="bell-count">@(_unread > 99 ? "99+" : _unread.ToString())</span>
+        }
+    </a>
+</div>
+
+<Modal Open="_streakOpen" Title="Steady ledger" OnCancel="() => _streakOpen = false">
+    <p>
+        A week counts when, by Sunday night, nothing from that week still needs review and no
+        plan due that week is left open. A week with no transactions counts too: there was
+        nothing to tidy.
+    </p>
+    <p class="muted small">
+        It is about keeping the numbers true, not adding something every day. With your SMS and
+        payment apps recording most payments, a clean week is usually a minute of tidying.
+    </p>
+    <p class="muted small">
+        Earn a freeze every four clean weeks, so a holiday does not reset a long streak. Ele
+        celebrates at 4, 12, 26 and 52 weeks.
+    </p>
+    <p class="notice small" style="background:var(--ele-accent-soft);">Counting starts in a coming update. Your weeks are not being counted yet.</p>
+    <button class="primary btn-block" @onclick="() => _streakOpen = false">Got it</button>
+</Modal>
 
 <div class="row between">
     <div>
@@ -188,6 +226,8 @@ else
     private Currency _home = Currency.Inr;
     private MascotMood _mood = MascotMood.Idle;
     private int _needsReview;
+    private int _unread;
+    private bool _streakOpen;
 
     private DatePreset _period = DatePreset.ThisMonth;
     private TransactionFilter _range = TransactionFilter.Empty;
@@ -205,6 +245,7 @@ else
         _balances = await Containers.BalancesAsync();
         _netWorth = await Containers.NetWorthAsync(_home);
         _needsReview = await Transactions.CountAsync(new TransactionFilter { NeedsReview = true });
+        _unread = await Notices.UnreadCountAsync();
 
         _range = TransactionFilter.Empty.WithPreset(_period, Clock.Today);
         await LoadSpendAsync();

@@ -227,6 +227,39 @@ via GPay. Recorded, needs review." Tapping opens the transaction. Its Delete but
 soft-deletes it, for a message that was not really a payment. When a second alert completes
 the same payment, the prompt already showing is updated rather than joined by another.
 
+### Notice
+One entry in the in-app **Notifications** list, opened from the bell on Home. Every Alert
+Prompt leaves one behind, so a prompt swiped away is not lost. One per transaction: a
+second alert for the same payment rewrites it and marks it unread again. Read or unread is
+the user's to toggle. A Notice holds the prompt's text, never the message it came from
+(`SM1`).
+
+---
+
+## Planning
+
+### Plan
+Something the user means to do, usually with money in it: "SIP, ₹5,000 from SBI on the 5th,
+every month". A Plan is **not** a transaction and moves no balance. It is open until
+**completed**, which links it to a transaction already recorded, records one through the
+capture form, or, for a plan with no amount, just ticks it. An alert whose transaction
+matches an open plan completes it automatically.
+
+### Repeat
+How a plan comes back: daily, weekly, monthly or yearly, every N. A repeating plan rolls
+forward **on completion**, not on the calendar, so a missed month stays overdue. Each
+occurrence is its own Plan in the same **series**; a monthly plan keeps its day of the month
+(the 31st becomes the 30th in a short month, and the 31st again after).
+
+### Plan Match
+A recorded transaction that could be the one a plan meant: the same amount, within four days
+of the due date, from the plan's container when it names one, and not already claimed by
+another plan.
+
+### Steady Ledger
+The streak shown on Home (S42). It counts **weeks**, not days, kept when nothing from that
+week still needs review and no plan due that week is open. Not counted yet.
+
 ---
 
 ## Goals

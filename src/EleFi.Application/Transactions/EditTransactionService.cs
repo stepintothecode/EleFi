@@ -28,7 +28,34 @@ public sealed record EditRequest(
     string? Description = null,
     Guid? MarketplaceAppId = null,
     Guid? PaymentAppId = null,
-    bool NeedsReview = false);
+    bool NeedsReview = false)
+{
+    /// <summary>
+    /// The edit that would put a transaction back exactly as it is now.
+    /// </summary>
+    /// <remarks>
+    /// Taken just before an edit is saved, so Undo is applying this through the same path,
+    /// with the same checks and the same audit trail, rather than a special reverse write.
+    /// </remarks>
+    /// <param name="transaction">The transaction as it stands, with its labels loaded.</param>
+    public static EditRequest Snapshot(Transaction transaction)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+
+        return new EditRequest(
+            transaction.Id,
+            transaction.SourcePartyId,
+            transaction.DestinationPartyId,
+            transaction.SourceAmountMinor,
+            transaction.OccurredOn,
+            transaction.OccurredAtTime,
+            [.. transaction.Labels.Select(l => l.LabelId)],
+            transaction.Description,
+            transaction.MarketplaceAppId,
+            transaction.PaymentAppId,
+            transaction.NeedsReview);
+    }
+}
 
 /// <summary>
 /// Edits, deletes, and restores transactions, and reads their history.
@@ -215,10 +242,19 @@ public sealed class EditTransactionService(
     /// trail records the restore and the flag.
     /// </remarks>
     /// <param name="id">The transaction.</param>
+    /// <param name="flagForReview">
+    /// False for an Undo straight after deleting, which puts it back exactly as it was. A
+    /// restore from the Deleted screen, days later, flags it.
+    /// </param>
     /// <param name="cancellationToken">Cancellation.</param>
-    public async Task RestoreAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task RestoreAsync(Guid id, bool flagForReview = true, CancellationToken cancellationToken = default)
     {
         await transactions.RestoreAsync(id, cancellationToken).ConfigureAwait(false);
+
+        if (!flagForReview)
+        {
+            return;
+        }
 
         var restored = await transactions.FindAsync(id, cancellationToken).ConfigureAwait(false);
         if (restored is not null && !restored.NeedsReview)
@@ -237,7 +273,7 @@ public sealed class EditTransactionService(
 
         foreach (var transaction in deleted)
         {
-            await RestoreAsync(transaction.Id, cancellationToken).ConfigureAwait(false);
+            await RestoreAsync(transaction.Id, flagForReview: true, cancellationToken).ConfigureAwait(false);
         }
 
         return deleted.Count;

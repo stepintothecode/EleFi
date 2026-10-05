@@ -99,5 +99,6 @@ public class CaptureTests : Bunit.TestContext
         Services.AddSingleton(new LabelService(labels, clock));
         Services.AddSingleton(new CaptureService(Substitute.For<ITransactionRepository>(), parties, apps, labels, clock));
         Services.AddSingleton(new ToastService());
+        Services.AddSingleton(new EleFi.Application.Planning.PlanService(Substitute.For<IPlanRepository>(), Substitute.For<ITransactionRepository>(), clock));
     }
 }

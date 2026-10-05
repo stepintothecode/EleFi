@@ -47,6 +47,38 @@ public class EditTransactionServiceTests
         });
     }
 
+    [Fact]
+    public async Task Undo_straight_after_deleting_puts_it_back_exactly_as_it_was()
+    {
+        var spent = await SpendAsync();
+        var editing = Service();
+        await editing.DeleteAsync(spent.Id);
+
+        await editing.RestoreAsync(spent.Id, flagForReview: false);
+
+        Assert.Null(spent.DeletedAt);
+        Assert.False(spent.NeedsReview);
+    }
+
+    [Fact]
+    public async Task Undo_after_an_edit_puts_every_field_back_through_the_same_checked_path()
+    {
+        var spent = await SpendAsync();
+        spent.NeedsReview = true;
+        spent.Description = "before";
+        var editing = Service();
+        var before = EditRequest.Snapshot(spent);
+
+        await editing.EditAsync(before with { AmountMinor = 999, Description = "after", NeedsReview = false });
+        Assert.Equal(999, spent.SourceAmountMinor);
+
+        await editing.EditAsync(before);
+
+        Assert.Equal(100, spent.SourceAmountMinor);
+        Assert.Equal("before", spent.Description);
+        Assert.True(spent.NeedsReview);
+    }
+
     private EditTransactionService Service() =>
         new(_ledger.Transactions, _ledger.Parties, _ledger.Labels, Substitute.For<IAuditRepository>(), new MovableClock());
 

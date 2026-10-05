@@ -367,6 +367,74 @@ public interface IAppRepository
     Task TouchAsync(IEnumerable<Guid> appIds, CancellationToken cancellationToken = default);
 }
 
+/// <summary>Reads and writes plans: money the user expects to move.</summary>
+public interface IPlanRepository
+{
+    /// <summary>Plans not yet done, soonest first.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Domain.Planning.Plan>> ListOpenAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Plans done, most recently first.</summary>
+    /// <param name="take">How many.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Domain.Planning.Plan>> ListCompletedAsync(int take = 100, CancellationToken cancellationToken = default);
+
+    /// <summary>One plan, or null.</summary>
+    /// <param name="id">The plan.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<Domain.Planning.Plan?> FindAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a plan.</summary>
+    /// <param name="plan">The plan.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task AddAsync(Domain.Planning.Plan plan, CancellationToken cancellationToken = default);
+
+    /// <summary>Saves changes to a plan.</summary>
+    /// <param name="plan">The plan, as returned by this repository.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task UpdateAsync(Domain.Planning.Plan plan, CancellationToken cancellationToken = default);
+
+    /// <summary>Soft-deletes a plan.</summary>
+    /// <param name="id">The plan.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Every transaction some plan is linked to, so none is claimed twice.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlySet<Guid>> ClaimedTransactionIdsAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>Reads and writes the in-app notification list.</summary>
+public interface INoticeRepository
+{
+    /// <summary>Every notification, newest first.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Domain.Notices.Notice>> ListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>How many are unread, for the bell.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<int> UnreadCountAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adds a notification, or rewrites the one already about the same thing (same route),
+    /// marking it unread again because it now says something new.
+    /// </summary>
+    /// <param name="notice">The notification.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task UpsertAsync(Domain.Notices.Notice notice, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks one read or unread.</summary>
+    /// <param name="id">The notification.</param>
+    /// <param name="read">True for read.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task SetReadAsync(Guid id, bool read, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks every notification read or unread.</summary>
+    /// <param name="read">True for read.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task SetAllReadAsync(bool read, CancellationToken cancellationToken = default);
+}
+
 /// <summary>Reads and writes Parse Rules, built-in and taught.</summary>
 public interface IParseRuleRepository
 {

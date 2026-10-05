@@ -20,6 +20,8 @@ public class IncomingAlertHandlerTests
     private readonly MemorySettings _store = new();
     private readonly RecordingPrompts _prompts = new();
     private readonly MovableClock _clock = new();
+    private readonly InMemoryPlans _plans = new();
+    private readonly InMemoryNotices _notices = new();
 
     public IncomingAlertHandlerTests() =>
         _ledger.AddContainer("HDFC Card", ContainerKind.CreditCard, "4417");
@@ -87,6 +89,35 @@ public class IncomingAlertHandlerTests
     }
 
     [Fact]
+    public async Task A_recorded_payment_is_kept_in_the_notification_list_once_even_when_completed_by_a_second_alert()
+    {
+        _store.Write(AlertCaptureSettings.SmsKey, "true");
+        _store.Write(AlertCaptureSettings.PaymentAppsKey, "true");
+        var handler = Handler();
+
+        await handler.HandleAsync(AlertChannel.Sms, "VM-HDFCBK", HdfcSms, _clock.UtcNow);
+        await handler.HandleAsync(AlertChannel.PaymentApp, PaymentApps.GPay.Package, "Paid ₹450 to Zomato", _clock.UtcNow);
+
+        var notice = Assert.Single(_notices.Rows);
+        Assert.Contains("via GPay", notice.Body, StringComparison.Ordinal);
+        Assert.Equal($"transactions/{_ledger.TransactionRows[0].Id}", notice.Route);
+        Assert.False(notice.IsRead);
+    }
+
+    [Fact]
+    public async Task A_recorded_payment_ticks_off_the_plan_it_fulfils_and_says_so()
+    {
+        _store.Write(AlertCaptureSettings.SmsKey, "true");
+        _plans.Rows.Add(new EleFi.Domain.Planning.Plan { Title = "Zomato order", AmountMinor = 45000, DueOn = _clock.Today });
+
+        await Handler().HandleAsync(AlertChannel.Sms, "VM-HDFCBK", HdfcSms, _clock.UtcNow);
+
+        Assert.True(_plans.Rows[0].IsDone);
+        Assert.Equal(_ledger.TransactionRows[0].Id, _plans.Rows[0].TransactionId);
+        Assert.Contains("Plan \"Zomato order\" done", _prompts.Shown[0].Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Delete_from_the_prompt_soft_deletes_the_transaction_and_withdraws_the_prompt()
     {
         _store.Write(AlertCaptureSettings.SmsKey, "true");
@@ -109,7 +140,8 @@ public class IncomingAlertHandlerTests
         var resolver = new AlertPartyResolver(_ledger.Containers, _ledger.Parties, _ledger.Apps, _ledger.Transactions);
         var service = new AlertCaptureService(_links, resolver, _ledger.Apps, capture, editing, _clock);
 
-        return new IncomingAlertHandler(service, new AlertCaptureSettings(_store), editing, _prompts);
+        var planner = new EleFi.Application.Planning.PlanService(_plans, _ledger.Transactions, _clock);
+        return new IncomingAlertHandler(service, new AlertCaptureSettings(_store), editing, planner, _notices, _prompts, _clock);
     }
 
     private sealed class MemorySettings : ISettingsStore

@@ -271,16 +271,21 @@ html, body {
   text-align: center;
 }
 
-.boot-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 3px solid var(--ele-line);
-  border-top-color: var(--ele-accent);
-  animation: boot-spin 900ms linear infinite;
+/* Ele on the loading screen: happy, gently bobbing, a soft shadow breathing under him. */
+.boot { gap: 6px; }
+.boot-ele {
+  width: 132px;
+  height: 132px;
+  animation: boot-float 2.6s ease-in-out infinite;
+  filter: drop-shadow(0 14px 18px color-mix(in srgb, var(--ele-mascot-ink) 35%, transparent));
 }
+.boot-hello { margin: 14px 0 0; font-size: 1.3rem; font-weight: 700; color: var(--ele-text); }
+.boot-sub { margin: 0; font-size: 0.85rem; color: var(--ele-text-dim); }
 
-@keyframes boot-spin { to { transform: rotate(360deg); } }
+@keyframes boot-float {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-12px) rotate(2deg); }
+}
 
 h1 { font-size: 1.35rem; margin: 4px 0 16px; letter-spacing: -0.01em; }
 h2 { font-size: 1.05rem; margin: 20px 0 10px; color: var(--ele-text-dim); font-weight: 600; }
@@ -912,6 +917,128 @@ hr.divider { border: none; border-top: 1px solid var(--ele-line); margin: 16px 0
 /* Quick capture's chips: a small gap where one kind of container ends and the next begins. */
 .choice-break { flex-basis: 100%; height: 2px; }
 
+/* Home's top bar: the streak on the left, the bell on the right. */
+.home-top { display: flex; align-items: center; justify-content: space-between; margin: -4px 0 6px; }
+.streak-chip {
+  min-height: 36px;
+  padding: 4px 12px 4px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ele-out) 30%, var(--ele-line));
+  background: color-mix(in srgb, var(--ele-out) 10%, var(--ele-surface));
+  color: var(--ele-text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  gap: 4px;
+}
+.streak-chip svg { width: 20px; height: 20px; color: var(--ele-out); }
+.bell {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--ele-text);
+}
+.bell svg { width: 24px; height: 24px; }
+.bell:active { background: var(--ele-surface-2); }
+.bell-count {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--ele-primary);
+  color: var(--ele-on-primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+
+/* An empty list: an icon, a title, a line. */
+.empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 26px 18px; }
+.empty-icon { width: 44px; height: 44px; color: var(--ele-accent); margin-bottom: 8px; }
+.empty-state p { margin: 6px 0 0; }
+
+/* Plans: a to-do list with money in it. */
+.plan-group { margin: 18px 0 8px; }
+.plan-group.overdue { color: var(--ele-owed); }
+.card.plan-list { padding: 4px 12px; }
+.plan-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ele-line);
+}
+.plan-row:last-child { border-bottom: none; }
+.plan-tick {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  color: var(--ele-accent);
+  display: grid;
+  place-items: center;
+}
+.plan-tick svg { width: 26px; height: 26px; }
+.plan-tick:active { background: var(--ele-accent-soft); }
+.plan-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: auto;
+  color: var(--ele-text);
+}
+.plan-row.done .who { text-decoration: line-through; color: var(--ele-text-dim); }
+details.completed { margin-top: 18px; }
+details.completed summary {
+  cursor: pointer;
+  color: var(--ele-text-dim);
+  font-weight: 700;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+/* Notifications: unread ones carry a lavender dot and a tint. */
+.card.notice-list { padding: 4px 8px; }
+.notice-row { display: flex; align-items: flex-start; gap: 6px; border-bottom: 1px solid var(--ele-line); }
+.notice-row:last-child { border-bottom: none; }
+.notice-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 12px 4px;
+  color: var(--ele-text);
+  justify-content: flex-start;
+}
+.notice-dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; margin-top: 7px; background: transparent; }
+.notice-row.unread .notice-dot { background: var(--ele-accent); }
+.notice-row.unread .who { font-weight: 700; }
+.notice-row.read .notice-text { opacity: 0.75; }
+.notice-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.notice-full { font-size: 0.88rem; line-height: 1.45; overflow-wrap: anywhere; }
+.notice-row .btn-icon { margin-top: 10px; }
+
 /* A small status tag, for things that are not actions. */
 .tag {
   flex: 0 0 auto;
@@ -992,6 +1119,18 @@ hr.divider { border: none; border-top: 1px solid var(--ele-line); margin: 16px 0
   font-size: 1rem;
 }
 
+.toast-action {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: none;
+  background: var(--ele-primary);
+  color: var(--ele-on-primary);
+  font-weight: 700;
+  font-size: 0.85rem;
+  align-self: center;
+}
 .toast.ok { background: #14532d; color: #dcfce7; }
 .toast.error { background: #7f1d1d; color: #fee2e2; }
 .toast.info { background: var(--ele-accent-strong); color: #fff; }

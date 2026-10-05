@@ -15,6 +15,8 @@
 @inject IPartyRepository Parties
 @inject IAppRepository Apps
 @inject IClock Clock
+@inject EleFi.Application.Planning.PlanService Planner
+@inject NavigationManager Nav
 
 @*
     The core screen. Everything else exists to make this worth doing.
@@ -154,9 +156,29 @@
     [SupplyParameterFromQuery(Name = "amount")]
     public string? AmountQuery { get; set; }
 
-    /// <summary>A container handed over by quick capture.</summary>
+    /// <summary>A container handed over by quick capture or a plan.</summary>
     [SupplyParameterFromQuery(Name = "container")]
     public Guid? ContainerQuery { get; set; }
+
+    /// <summary>The plan this capture records. Saving ticks it off against the result.</summary>
+    [SupplyParameterFromQuery(Name = "plan")]
+    public Guid? PlanQuery { get; set; }
+
+    /// <summary>A counterparty handed over by a plan.</summary>
+    [SupplyParameterFromQuery(Name = "party")]
+    public string? PartyQuery { get; set; }
+
+    /// <summary>debit, credit or transfer, handed over by a plan.</summary>
+    [SupplyParameterFromQuery(Name = "kind")]
+    public string? KindQuery { get; set; }
+
+    /// <summary>A destination container for a transfer, handed over by a plan.</summary>
+    [SupplyParameterFromQuery(Name = "to")]
+    public Guid? ToQuery { get; set; }
+
+    /// <summary>A note handed over by a plan.</summary>
+    [SupplyParameterFromQuery(Name = "note")]
+    public string? NoteQuery { get; set; }
 
 
     private IReadOnlyList<Container> _containers = [];
@@ -194,6 +216,19 @@
 
         // Whatever quick capture had, it hands over rather than making the user type it twice.
         _amountText = AmountQuery ?? string.Empty;
+        _partyName = PartyQuery ?? string.Empty;
+        _description = NoteQuery;
+        _kind = KindQuery switch
+        {
+            "credit" => TransactionKind.Credit,
+            "transfer" => TransactionKind.SelfTransfer,
+            _ => TransactionKind.Debit,
+        };
+
+        if (ToQuery is { } to && _containers.Any(c => c.Id == to))
+        {
+            _destinationContainerId = to;
+        }
         if (ContainerQuery is { } handed && _containers.Any(c => c.Id == handed))
         {
             _containerId = handed;
@@ -305,6 +340,16 @@
             if (!result.Succeeded)
             {
                 Toasts.Error(result.Error!);
+                return;
+            }
+
+            // Recorded for a plan: tick the plan off against what was just saved, and go back
+            // to the plans, which is where the user came from.
+            if (PlanQuery is { } planId)
+            {
+                await Planner.CompleteAsync(planId, result.Transaction!.Id);
+                Toasts.Ok($"Saved {MoneyText.ToDisplayString(amount)}, plan done.");
+                Nav.NavigateTo("plans");
                 return;
             }
 

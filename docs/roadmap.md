@@ -11,6 +11,12 @@ Vocabulary from [CONTEXT.md](CONTEXT.md). Requirement IDs from
 The largest risk to this project is not a wrong technical decision - it is the project
 stalling before it becomes a habit. Every cut below serves that.
 
+**Status 2026-10-05, later.** S41 Planner has its first cut: a Plans tab with repeats,
+completion that links or records a transaction, and alerts that tick a matching plan. Undo
+after an edit or delete closes the main gap in S8. Home has a Notifications bell and a
+placeholder Steady ledger chip (S42); Goals (S14) has a placeholder. Every open item is now
+in [TODO.md](TODO.md). See [the decision log](prompts/2026-10-05-planner-and-consistency.md).
+
 **Status 2026-10-05.** Alerts are now recorded straight away as Needs Review transactions
 ([ADR-0015](adr/0015-record-alerts-as-needs-review.md)); the To confirm inbox is gone, replaced by
 Teach EleFi a message (taught Parse Rules, the first part of S39) and a Deleted screen with Restore.

@@ -18,6 +18,7 @@
 @inject IClock Clock
 @inject ToastService Toasts
 @inject NavigationManager Nav
+@implements IDisposable
 
 @*
     Edit one transaction, and see everything that has ever happened to it.
@@ -246,6 +247,7 @@ else
     private bool _loading = true;
     private bool _busy;
     private bool _deleteArmed;
+    private bool _disposed;
 
     private Currency Currency => _transaction?.SourceCurrency ?? Currency.Inr;
 
@@ -373,6 +375,9 @@ else
                 ? null
                 : (await Apps.GetOrCreateAsync(_paymentAppName)).Id;
 
+            // Taken before saving, so Undo can put every field back through the same path.
+            var before = EditRequest.Snapshot(_transaction!);
+
             var result = await Editing.EditAsync(new EditRequest(
                 Id,
                 sourceId,
@@ -394,7 +399,7 @@ else
                 return;
             }
 
-            Toasts.Ok("Saved.");
+            Toasts.Ok("Saved.", new ToastAction("Undo", () => UndoEditAsync(before)));
             await LoadAsync();
         }
         finally
@@ -405,6 +410,7 @@ else
 
     private async Task MarkReviewedAsync()
     {
+        var before = EditRequest.Snapshot(_transaction!);
         var result = await Editing.MarkReviewedAsync(Id);
 
         if (!result.Succeeded)
@@ -413,17 +419,49 @@ else
             return;
         }
 
-        Toasts.Ok("Confirmed.");
+        Toasts.Ok("Confirmed.", new ToastAction("Undo", () => UndoEditAsync(before)));
         await LoadAsync();
     }
 
     private async Task DeleteAsync()
     {
-        await Editing.DeleteAsync(Id);
+        var id = Id;
+        await Editing.DeleteAsync(id);
 
-        Toasts.Ok("Deleted. It has left every balance, and the deletion is in its history.");
+        Toasts.Ok("Deleted. Restorable from Settings.", new ToastAction("Undo", async () =>
+        {
+            // Straight back, exactly as it was: not flagged, because nothing about it changed.
+            await Editing.RestoreAsync(id, flagForReview: false);
+            Toasts.Info("Restored.");
+            Nav.NavigateTo($"transactions/{id}");
+        }));
+
         Nav.NavigateTo("transactions");
     }
+
+    // Puts every field back as it was before the last save. The same checked path as any
+    // edit, so the undo is in the history too.
+    private async Task UndoEditAsync(EditRequest before)
+    {
+        var result = await Editing.EditAsync(before);
+        if (!result.Succeeded)
+        {
+            Toasts.Error(result.Error!);
+            return;
+        }
+
+        Toasts.Info("Undone.");
+        if (!_disposed)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    public void Dispose() => _disposed = true;
 
     private string Value(string field, string raw) =>
         EditTransactionService.FieldValue(field, raw, Currency);

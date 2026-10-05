@@ -13,11 +13,17 @@ public enum ToastKind
     Info = 2,
 }
 
+/// <summary>A button on a toast, such as Undo.</summary>
+/// <param name="Label">What the button says.</param>
+/// <param name="Run">What it does. The toast is dismissed first.</param>
+public sealed record ToastAction(string Label, Func<Task> Run);
+
 /// <summary>One message on screen.</summary>
 /// <param name="Id">Identity, so a dismissal removes the right one.</param>
 /// <param name="Kind">How it reads.</param>
 /// <param name="Message">What it says.</param>
-public sealed record Toast(Guid Id, ToastKind Kind, string Message);
+/// <param name="Action">A button to show beside it, if any.</param>
+public sealed record Toast(Guid Id, ToastKind Kind, string Message, ToastAction? Action = null);
 
 /// <summary>
 /// Short messages that appear near the user's thumb rather than at the top of the page.
@@ -52,6 +58,21 @@ public sealed class ToastService
     /// <param name="message">What to say.</param>
     public void Ok(string message) => Show(ToastKind.Ok, message);
 
+    /// <summary>How long a message with an action stays, so there is time to reach the button.</summary>
+    public static TimeSpan ActionLifetime { get; } = TimeSpan.FromSeconds(6);
+
+    /// <summary>
+    /// Shows a success message with a button, such as "Saved" with Undo.
+    /// </summary>
+    /// <remarks>
+    /// Undo right after the fact is the cheapest way to make a mistake harmless. It stays for
+    /// <see cref="ActionLifetime"/> rather than the usual three seconds, because reading a
+    /// message and then reaching for its button takes longer than reading it.
+    /// </remarks>
+    /// <param name="message">What to say.</param>
+    /// <param name="action">The button.</param>
+    public void Ok(string message, ToastAction action) => Show(ToastKind.Ok, message, action);
+
     /// <summary>Shows an error, which stays until dismissed.</summary>
     /// <param name="message">What went wrong, and what to do about it.</param>
     public void Error(string message) => Show(ToastKind.Error, message);
@@ -82,14 +103,14 @@ public sealed class ToastService
         Changed?.Invoke();
     }
 
-    private void Show(ToastKind kind, string message)
+    private void Show(ToastKind kind, string message, ToastAction? action = null)
     {
         if (string.IsNullOrWhiteSpace(message))
         {
             return;
         }
 
-        var toast = new Toast(Guid.CreateVersion7(), kind, message.Trim());
+        var toast = new Toast(Guid.CreateVersion7(), kind, message.Trim(), action);
 
         // Three at once is already more than anyone reads. Dropping the oldest keeps the
         // most recent thing that happened visible, which is the one being reacted to.
@@ -103,13 +124,13 @@ public sealed class ToastService
 
         if (kind != ToastKind.Error)
         {
-            _ = DismissLaterAsync(toast.Id);
+            _ = DismissLaterAsync(toast.Id, action is null ? SuccessLifetime : ActionLifetime);
         }
     }
 
-    private async Task DismissLaterAsync(Guid id)
+    private async Task DismissLaterAsync(Guid id, TimeSpan after)
     {
-        await Task.Delay(SuccessLifetime).ConfigureAwait(false);
+        await Task.Delay(after).ConfigureAwait(false);
         Dismiss(id);
     }
 }

@@ -1,0 +1,487 @@
+@page "/plans"
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Planning
+@using EleFi.Application.Typeahead
+@using EleFi.Domain.Containers
+@using EleFi.Domain.Money
+@using EleFi.Domain.Planning
+@using EleFi.Domain.Transactions
+@using EleFi.Ui.Services
+@inject PlanService Planner
+@inject IContainerRepository Containers
+@inject IPartyRepository Parties
+@inject ToastService Toasts
+@inject NavigationManager Nav
+@inject IClock Clock
+
+@*
+    Plans and goals: what is coming, and what it is all for.
+
+    A plan is money the user expects to move, shaped like a to-do item: a circle to tick on
+    the left, grouped by when it is due, done ones collapsed under Completed. Ticking one off
+    links it to the transaction that already records it, or records that transaction, so the
+    same money is never in the ledger twice. A plan on its own is never money (D2).
+
+    Goals have a place here and arrive with S14.
+*@
+
+<PageTitle>Plans</PageTitle>
+
+<div class="section-head">
+    <h1>Plans</h1>
+    @if (_tab == "plans")
+    {
+        <button class="primary" @onclick="StartCreate">New plan</button>
+    }
+</div>
+
+<div class="segmented" role="tablist" aria-label="Plans or goals" style="margin-top:0;">
+    <button type="button" role="tab" class="@(_tab == "plans" ? "on" : null)" aria-selected="@(_tab == "plans" ? "true" : "false")"
+            @onclick='() => _tab = "plans"'>Plans</button>
+    <button type="button" role="tab" class="@(_tab == "goals" ? "on" : null)" aria-selected="@(_tab == "goals" ? "true" : "false")"
+            @onclick='() => _tab = "goals"'>Goals</button>
+</div>
+
+@if (_tab == "goals")
+{
+    <div class="card empty-state">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.5" />
+        </svg>
+        <div class="who">Goals are coming</div>
+        <p class="muted small">
+            Save towards something, a trip or a ring or a rainy-day fund, and watch the
+            progress: from a container set aside for it, or from the plans that pay into it.
+        </p>
+    </div>
+}
+else if (_loading)
+{
+    <div class="card"><div class="skeleton" style="width:60%;"></div></div>
+}
+else
+{
+    @if (_open.Count == 0)
+    {
+        <div class="card empty-state">
+            <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="4" y="5" width="16" height="15" rx="2.5" /><path d="M8 3v4M16 3v4M4 10h16M9 14.5l2 2 4-4" />
+            </svg>
+            <div class="who">Nothing planned</div>
+            <p class="muted small">Add the money you know is coming: a SIP, the rent, the card bill, paying someone back.</p>
+        </div>
+    }
+
+    @foreach (var group in _open.GroupBy(p => p.BucketOn(Clock.Today)).OrderBy(g => g.Key))
+    {
+        <h2 class="plan-group @(group.Key == PlanBucket.Overdue ? "overdue" : null)">@BucketName(group.Key)</h2>
+        <div class="card plan-list">
+            @foreach (var plan in group)
+            {
+                <div class="plan-row" @key="plan.Id">
+                    <button type="button" class="plan-tick" aria-label="Mark @plan.Title done" @onclick="() => TickAsync(plan)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /></svg>
+                    </button>
+                    <button type="button" class="plan-body" @onclick="() => StartEdit(plan)">
+                        <span class="who">@plan.Title</span>
+                        <span class="meta">@Describe(plan)</span>
+                    </button>
+                    @if (plan.AmountMinor is { } minor)
+                    {
+                        <span class="amount @(plan.Direction == TransactionKind.Credit ? "in" : plan.Direction == TransactionKind.SelfTransfer ? "transfer" : "out")">
+                            @MoneyText.ToDisplayString(Money.FromMinor(minor, Currency.Of(plan.CurrencyCode)))
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (_completed.Count > 0)
+    {
+        <details class="completed">
+            <summary>Completed (@_completed.Count)</summary>
+            <div class="card plan-list">
+                @foreach (var plan in _completed)
+                {
+                    <div class="plan-row done" @key="plan.Id">
+                        <button type="button" class="plan-tick on" aria-label="Mark @plan.Title not done" @onclick="() => ReopenAsync(plan)">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10" fill="currentColor" />
+                                <path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="var(--ele-on-primary)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </button>
+                        <div class="plan-body">
+                            <span class="who">@plan.Title</span>
+                            <span class="meta">
+                                Done @plan.CompletedAt?.ToLocalTime().ToString("d MMM")
+                                @(plan.TransactionId is null ? " · no transaction" : " · linked")
+                            </span>
+                        </div>
+                        @if (plan.TransactionId is { } linked)
+                        {
+                            <a class="btn btn-ghost btn-icon" href="transactions/@linked">Open</a>
+                        }
+                    </div>
+                }
+            </div>
+        </details>
+    }
+}
+
+@* The plan form, in a sheet. *@
+<Modal Open="_editing" Title="@(_editingId is null ? "New plan" : "Edit plan")" OnCancel="() => _editing = false">
+    <div class="field">
+        <label for="plan-title">What is it?</label>
+        <input id="plan-title" @bind="_title" placeholder="SIP, Axis Bluechip" autocomplete="off" />
+    </div>
+
+    <div class="chips" role="group" aria-label="Kind" style="margin-bottom:12px;">
+        <button type="button" class="chip @(_direction == TransactionKind.Debit ? "on" : null)" @onclick="() => _direction = TransactionKind.Debit">Pay</button>
+        <button type="button" class="chip @(_direction == TransactionKind.Credit ? "on" : null)" @onclick="() => _direction = TransactionKind.Credit">Receive</button>
+        <button type="button" class="chip @(_direction == TransactionKind.SelfTransfer ? "on" : null)" @onclick="() => _direction = TransactionKind.SelfTransfer">Move between mine</button>
+    </div>
+
+    <div class="field">
+        <label for="plan-amount">Amount <span class="muted small">(optional)</span></label>
+        <input id="plan-amount" class="amount-input" type="text" inputmode="decimal" @bind="_amountText" placeholder="0.00" autocomplete="off" />
+    </div>
+
+    <div class="field">
+        <label for="plan-from">@(_direction == TransactionKind.Credit ? "Into" : "From") <span class="muted small">(optional)</span></label>
+        <ContainerSelect Id="plan-from" Title="@(_direction == TransactionKind.Credit ? "Into" : "From")" Containers="_containers"
+                         Placeholder="Any container" Value="_containerId" ValueChanged="id => _containerId = id" />
+    </div>
+
+    @if (_direction == TransactionKind.SelfTransfer)
+    {
+        <div class="field">
+            <label for="plan-to">To</label>
+            <ContainerSelect Id="plan-to" Title="To" Containers="_containers" Placeholder="Choose one"
+                             Value="_destinationId" ValueChanged="id => _destinationId = id" />
+        </div>
+    }
+    else
+    {
+        <div class="field">
+            <label for="plan-who">@(_direction == TransactionKind.Credit ? "From" : "To") <span class="muted small">(optional)</span></label>
+            <TypeaheadInput Id="plan-who" Value="@_who" ValueChanged="v => _who = v" Candidates="_partyCandidates" IdleCount="0" />
+        </div>
+    }
+
+    <div class="row">
+        <div class="field grow">
+            <label for="plan-due">Due</label>
+            <input id="plan-due" type="date" @bind="_due" />
+        </div>
+        <div class="field grow">
+            <label for="plan-repeat">Repeat</label>
+            <select id="plan-repeat" @bind="_frequency">
+                <option value="@RepeatFrequency.None">Never</option>
+                <option value="@RepeatFrequency.Daily">Daily</option>
+                <option value="@RepeatFrequency.Weekly">Weekly</option>
+                <option value="@RepeatFrequency.Monthly">Monthly</option>
+                <option value="@RepeatFrequency.Yearly">Yearly</option>
+            </select>
+        </div>
+    </div>
+
+    @if (_frequency != RepeatFrequency.None)
+    {
+        <div class="field">
+            <label for="plan-every">Every</label>
+            <div class="row">
+                <input id="plan-every" type="number" min="1" max="99" inputmode="numeric" @bind="_interval" style="width:90px;" />
+                <span class="muted small">@(new RepeatRule(_frequency, Math.Max(1, _interval)).Describe().ToLowerInvariant())</span>
+            </div>
+        </div>
+    }
+
+    <div class="field">
+        <label for="plan-note">Note <span class="muted small">(optional)</span></label>
+        <input id="plan-note" @bind="_note" autocomplete="off" />
+    </div>
+
+    <button class="primary btn-block" disabled="@_busy" @onclick="SaveAsync">Save</button>
+    @if (_editingId is { } editing)
+    {
+        <button class="btn-ghost btn-block danger" style="margin-top:8px;" @onclick="() => DeleteAsync(editing)">Delete plan</button>
+    }
+</Modal>
+
+@* Ticking off a plan with an amount: link what is already there, or record it. *@
+<Modal Open="_ticking is not null" Title="@($"Mark {_ticking?.Title} done")" OnCancel="() => _ticking = null">
+    @if (_ticking is { } plan)
+    {
+        @if (_candidates.Count > 0)
+        {
+            <p class="muted small">These are already in your transactions. Pick the one that is this plan.</p>
+            <div class="picker-list">
+                @foreach (var candidate in _candidates)
+                {
+                    <button type="button" class="picker-option" @onclick="() => LinkAsync(plan, candidate.Id)">
+                        <span class="picker-text">
+                            <span class="picker-name">@Who(candidate)</span>
+                            <span class="detail">@candidate.OccurredOn.ToString("ddd d MMM")</span>
+                        </span>
+                        <span class="amount">@MoneyText.ToDisplayString(candidate.SourceAmount)</span>
+                    </button>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="muted small">No transaction like this is in the ledger yet, so nothing was recorded for it.</p>
+        }
+
+        <div class="stack" style="margin-top:12px;">
+            <button class="primary btn-block" @onclick="() => RecordNow(plan)">Record it now</button>
+            <button class="btn-ghost btn-block" @onclick="() => LinkAsync(plan, null)">Done, no transaction</button>
+        </div>
+    }
+</Modal>
+
+@code {
+    private string _tab = "plans";
+    private IReadOnlyList<Plan> _open = [];
+    private IReadOnlyList<Plan> _completed = [];
+    private IReadOnlyList<Container> _containers = [];
+    private IReadOnlyList<TypeaheadCandidate> _partyCandidates = [];
+    private bool _loading = true;
+    private bool _busy;
+
+    private bool _editing;
+    private Guid? _editingId;
+    private string _title = string.Empty;
+    private TransactionKind _direction = TransactionKind.Debit;
+    private string _amountText = string.Empty;
+    private Guid _containerId;
+    private Guid _destinationId;
+    private string _who = string.Empty;
+    private DateTime _due = DateTime.Today;
+    private RepeatFrequency _frequency = RepeatFrequency.None;
+    private int _interval = 1;
+    private string? _note;
+
+    private Plan? _ticking;
+    private IReadOnlyList<Transaction> _candidates = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _containers = ContainerGrouping.InPickerOrder(await Containers.ListSelectableAsync());
+        _partyCandidates = TypeaheadCandidates.From(await Parties.ListExternalAsync());
+        await ReloadAsync();
+        _loading = false;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _open = await Planner.OpenAsync();
+        _completed = await Planner.CompletedAsync();
+    }
+
+    private static string BucketName(PlanBucket bucket) => bucket switch
+    {
+        PlanBucket.Overdue => "Overdue",
+        PlanBucket.Today => "Today",
+        PlanBucket.ThisWeek => "This week",
+        _ => "Later",
+    };
+
+    private string Describe(Plan plan)
+    {
+        var parts = new List<string> { plan.DueOn == Clock.Today ? "Today" : plan.DueOn.ToString("ddd d MMM") };
+
+        if (plan.Repeat.Repeats)
+        {
+            parts.Add("↻ " + plan.Repeat.Describe());
+        }
+
+        if (plan.ContainerId is { } id && _containers.FirstOrDefault(c => c.Id == id) is { } container)
+        {
+            parts.Add(container.Name);
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private static string Who(Transaction t) => t.Kind switch
+    {
+        TransactionKind.Credit => t.SourceParty?.Name ?? "Received",
+        TransactionKind.Debit => t.DestinationParty?.Name ?? "Paid",
+        _ => "Transfer",
+    };
+
+    private void StartCreate()
+    {
+        _editingId = null;
+        _title = string.Empty;
+        _direction = TransactionKind.Debit;
+        _amountText = string.Empty;
+        _containerId = Guid.Empty;
+        _destinationId = Guid.Empty;
+        _who = string.Empty;
+        _due = Clock.Today.ToDateTime(TimeOnly.MinValue);
+        _frequency = RepeatFrequency.None;
+        _interval = 1;
+        _note = null;
+        _editing = true;
+    }
+
+    private void StartEdit(Plan plan)
+    {
+        _editingId = plan.Id;
+        _title = plan.Title;
+        _direction = plan.Direction;
+        _amountText = plan.AmountMinor is { } minor ? MoneyText.ToBareDecimal(Money.FromMinor(minor, Currency.Of(plan.CurrencyCode))) : string.Empty;
+        _containerId = plan.ContainerId ?? Guid.Empty;
+        _destinationId = plan.DestinationContainerId ?? Guid.Empty;
+        _who = plan.CounterpartyName ?? string.Empty;
+        _due = plan.DueOn.ToDateTime(TimeOnly.MinValue);
+        _frequency = plan.RepeatFrequency;
+        _interval = plan.RepeatInterval;
+        _note = plan.Note;
+        _editing = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        long? amount = null;
+        if (!string.IsNullOrWhiteSpace(_amountText))
+        {
+            if (!MoneyText.TryParse(_amountText, Currency.Inr, out var parsed) || parsed.Minor <= 0)
+            {
+                Toasts.Error("The amount must be a number more than zero, or left empty.");
+                return;
+            }
+
+            amount = parsed.Minor;
+        }
+
+        var draft = new PlanDraft(
+            _title,
+            DateOnly.FromDateTime(_due),
+            amount,
+            _direction,
+            _containerId == Guid.Empty ? null : _containerId,
+            _who,
+            _destinationId == Guid.Empty ? null : _destinationId,
+            new RepeatRule(_frequency, Math.Max(1, _interval)),
+            Note: _note);
+
+        _busy = true;
+        try
+        {
+            var result = _editingId is { } id ? await Planner.UpdateAsync(id, draft) : await Planner.CreateAsync(draft);
+            if (!result.Succeeded)
+            {
+                Toasts.Error(result.Error!);
+                return;
+            }
+
+            _editing = false;
+            Toasts.Ok(_editingId is null ? $"Planned {result.Plan!.Title}." : "Saved.");
+            await ReloadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteAsync(Guid id)
+    {
+        await Planner.DeleteAsync(id);
+        _editing = false;
+        Toasts.Ok("Plan deleted.");
+        await ReloadAsync();
+    }
+
+    // Ticking off: one obvious transaction is linked at once, with Undo. Anything else asks.
+    private async Task TickAsync(Plan plan)
+    {
+        if (plan.AmountMinor is null)
+        {
+            await LinkAsync(plan, null);
+            return;
+        }
+
+        var candidates = await Planner.CandidatesAsync(plan.Id);
+        if (candidates.Count == 1)
+        {
+            await LinkAsync(plan, candidates[0].Id);
+            return;
+        }
+
+        _candidates = candidates;
+        _ticking = plan;
+    }
+
+    private async Task LinkAsync(Plan plan, Guid? transactionId)
+    {
+        _ticking = null;
+        var result = await Planner.CompleteAsync(plan.Id, transactionId);
+        if (!result.Succeeded)
+        {
+            Toasts.Error(result.Error!);
+            return;
+        }
+
+        var message = transactionId is null ? $"{plan.Title} done." : $"{plan.Title} done, linked to its transaction.";
+        Toasts.Ok(message, new ToastAction("Undo", async () =>
+        {
+            await Planner.ReopenAsync(plan.Id);
+            await InvokeAsync(async () =>
+            {
+                await ReloadAsync();
+                StateHasChanged();
+            });
+        }));
+
+        await ReloadAsync();
+    }
+
+    private async Task ReopenAsync(Plan plan)
+    {
+        await Planner.ReopenAsync(plan.Id);
+        Toasts.Info($"{plan.Title} is back on the list.");
+        await ReloadAsync();
+    }
+
+    // The capture form, filled from the plan. Saving it ticks the plan off against the result.
+    private void RecordNow(Plan plan)
+    {
+        _ticking = null;
+
+        var query = new List<string> { $"plan={plan.Id}" };
+        if (plan.AmountMinor is { } minor)
+        {
+            query.Add("amount=" + Uri.EscapeDataString(MoneyText.ToBareDecimal(Money.FromMinor(minor, Currency.Of(plan.CurrencyCode)))));
+        }
+
+        if (plan.ContainerId is { } container)
+        {
+            query.Add($"container={container}");
+        }
+
+        query.Add("kind=" + plan.Direction switch
+        {
+            TransactionKind.Credit => "credit",
+            TransactionKind.SelfTransfer => "transfer",
+            _ => "debit",
+        });
+
+        if (plan.DestinationContainerId is { } to)
+        {
+            query.Add($"to={to}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(plan.CounterpartyName))
+        {
+            query.Add("party=" + Uri.EscapeDataString(plan.CounterpartyName));
+        }
+
+        query.Add("note=" + Uri.EscapeDataString(plan.Note ?? plan.Title));
+        Nav.NavigateTo("capture?" + string.Join('&', query));
+    }
+}

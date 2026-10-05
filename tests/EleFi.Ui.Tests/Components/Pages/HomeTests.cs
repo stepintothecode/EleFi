@@ -177,6 +177,32 @@ public class HomeTests : Bunit.TestContext
     }
 
     private readonly EleFi.Ui.Services.PrivacyMode _privacy = new(new Fakes.MemorySettings());
+    private readonly INoticeRepository _notices = NSubstitute.Substitute.For<INoticeRepository>();
+
+    [Fact]
+    public void The_bell_shows_how_many_notifications_are_unread_and_opens_the_list()
+    {
+        NSubstitute.SubstituteExtensions.Returns(_notices.UnreadCountAsync(NSubstitute.Arg.Any<CancellationToken>()), 3);
+        Register();
+
+        var component = RenderComponent<Home>();
+
+        var bell = component.Find("a.bell");
+        Assert.Equal("notifications", bell.GetAttribute("href"));
+        Assert.Equal("3", component.Find(".bell-count").TextContent);
+    }
+
+    [Fact]
+    public void The_streak_chip_opens_a_sheet_explaining_it()
+    {
+        Register();
+        var component = RenderComponent<Home>();
+
+        component.Find(".streak-chip").Click();
+
+        Assert.Equal("Steady ledger", component.Find("[role=dialog]").GetAttribute("aria-label"));
+        Assert.Contains("Sunday night", component.Find("[role=dialog]").TextContent, StringComparison.Ordinal);
+    }
     private Fakes.EmptyTransactions _transactions = new();
 
     private void Register(SpendBreakdown? spend = null, int needsReview = 0, IReadOnlyList<ContainerBalance>? balances = null)
@@ -191,6 +217,7 @@ public class HomeTests : Bunit.TestContext
         };
 
         Services.AddSingleton(_privacy);
+        Services.AddSingleton(_notices);
         Services.AddSingleton(new EleFi.Ui.Services.TransactionListState());
         Services.AddSingleton<IClock>(clock);
         Services.AddSingleton<ITransactionRepository>(_transactions);

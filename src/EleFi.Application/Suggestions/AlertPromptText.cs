@@ -15,7 +15,8 @@ public static class AlertPromptText
     /// <param name="transaction">The transaction, with its parties loaded.</param>
     /// <param name="containerName">The container it was recorded against.</param>
     /// <param name="paymentAppName">The Payment App, when an app reported it.</param>
-    public static AlertPrompt For(Transaction transaction, string? containerName, string? paymentAppName)
+    /// <param name="completedPlan">The plan it ticked off, if it fulfilled one.</param>
+    public static AlertPrompt For(Transaction transaction, string? containerName, string? paymentAppName, string? completedPlan = null)
     {
         ArgumentNullException.ThrowIfNull(transaction);
 
@@ -46,6 +47,7 @@ public static class AlertPromptText
         }
 
         var detail = parts.Count == 0 ? string.Empty : string.Join(" ", parts) + ". ";
-        return new AlertPrompt(transaction.Id, title, $"{detail}Recorded, needs review. Tap to check it.");
+        var plan = completedPlan is null ? string.Empty : $"Plan \"{completedPlan}\" done. ";
+        return new AlertPrompt(transaction.Id, title, $"{detail}{plan}Recorded, needs review. Tap to check it.");
     }
 }

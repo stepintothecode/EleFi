@@ -63,7 +63,7 @@ public class RoutesTests : Bunit.TestContext
 
         // The tab bar hard-codes these. A typo in one is a dead tab, which is the kind of
         // thing nobody notices until they tap it.
-        foreach (var tab in new[] { "", "containers", "quick", "capture", "transactions", "settings", "about" })
+        foreach (var tab in new[] { "", "plans", "containers", "quick", "capture", "transactions", "settings", "about", "notifications" })
         {
             Assert.Contains(tab, routes, StringComparer.OrdinalIgnoreCase);
         }
@@ -155,6 +155,7 @@ public class RoutesTests : Bunit.TestContext
         Services.AddSingleton<ILinkOpener>(new NoLinks());
         Services.AddSingleton(new PrivacyMode(new Fakes.MemorySettings()));
         Services.AddSingleton(new TransactionListState());
+        Services.AddSingleton(NSubstitute.Substitute.For<INoticeRepository>());
     }
 
     private sealed class NoLinks : ILinkOpener

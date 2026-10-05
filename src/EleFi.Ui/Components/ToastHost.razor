@@ -17,6 +17,10 @@
             <div class="toast @CssFor(toast.Kind)" role="@RoleFor(toast.Kind)">
                 <span class="glyph" aria-hidden="true">@GlyphFor(toast.Kind)</span>
                 <span class="body">@toast.Message</span>
+                @if (toast.Action is { } action)
+                {
+                    <button class="toast-action" @onclick="() => RunAsync(toast.Id, action)">@action.Label</button>
+                }
                 <button class="close" aria-label="Dismiss" @onclick="() => Toasts.Dismiss(toast.Id)">&#10005;</button>
             </div>
         }
@@ -31,6 +35,13 @@
     // The dismissal timer fires on a thread-pool thread, so the re-render has to be
     // marshalled back. Without InvokeAsync this throws the moment a toast expires.
     private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    // Dismissed first, so a second tap cannot run it twice.
+    private Task RunAsync(Guid id, ToastAction action)
+    {
+        Toasts.Dismiss(id);
+        return action.Run();
+    }
 
     private static string CssFor(ToastKind kind) => kind switch
     {
