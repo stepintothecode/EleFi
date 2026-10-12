@@ -190,6 +190,8 @@ over substantial functionality.
 | Export | `ITransactionExporter` | Serialisation. Tested against the list's own query |
 | Mascot | `IMascotService` | The Rive runtime and all `IJSRuntime` interop. A recording double in bUnit tests |
 | Outbound links | `ILinkOpener` | `Browser.OpenAsync`. Keeps FR-12.4 testable and stops an `<a href>` hijacking the WebView |
+| Phone contacts | `IContactPicker` | The system contacts picker, no permission. A fake in bUnit tests (FR-13.2) |
+| Timers | `TimeProvider` | Ele's few seconds on screen; a manual clock in tests, so nothing waits on real time |
 | `EleFi.Domain.*` | none needed | Pure functions and values, tested directly |
 
 Most tests should exercise **the repository seam and above**, against a real in-memory

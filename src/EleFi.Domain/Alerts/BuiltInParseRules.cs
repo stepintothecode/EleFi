@@ -29,7 +29,7 @@ namespace EleFi.Domain.Alerts;
 public static class BuiltInParseRules
 {
     // Named groups the parser recognises: amount, currency, last4, counterparty, occurredOn, note.
-    private const string Amount = @"(?<currency>₹|Rs\.?|INR)\s?(?<amount>\d[\d,]*(?:\.\d{1,2})?)";
+    private const string Amount = @"(?<currency>₹|Rs\.?|INR)\s*(?<amount>\d[\d,]*(?:\.\d{1,2})?)";
 
     // A name runs to the end of the line, a full stop, or a joining word. Lazy, so it stops
     // at the first of those rather than swallowing the rest of the notification.
@@ -42,8 +42,10 @@ public static class BuiltInParseRules
     private const string Settled =
         @"\A(?![\s\S]*\b(?:failed|failure|pending|declined|reversed|refund|refunded|unsuccessful|cancelled|requested|request)\b)[\s\S]*?";
 
+    // A phrase starts at a line, a word, or after a space: "₹" is not a word character, so
+    // "Transaction successful! ₹200 sent" has no word boundary in front of its amount.
     private const string AppPaid =
-        @"(?m)" + Settled + @"(?:^|\b)(?:"
+        @"(?m)" + Settled + @"(?:^|\b|(?<=\s))(?:"
         + @"(?:you\s+)?(?:paid|sent)\s+" + Amount + @"\s+(?:successfully\s+)?to\s+" + Name + Note + End
         + @"|" + Amount + @"\s+(?:paid|sent)\s+(?:successfully\s+)?to\s+" + Name + Note + End
         + @"|payment\s+of\s+" + Amount + @"\s+to\s+" + Name

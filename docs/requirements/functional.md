@@ -164,7 +164,7 @@ The core feature. Everything else exists to make this worth doing.
 | FR-4.12 | Save a filter under a name; re-apply in one tap | 1.0 |
 | FR-4.13 | Filter state survives navigation away and back | 1.0 |
 | FR-4.14 | Edit a transaction inline from the list | 1.0 |
-| FR-4.15 | Delete with undo available for at least 10 seconds | 1.0 |
+| FR-4.15 | Delete, edit and confirm can be undone and redone from two arrows beside Filters and beside Close on an open transaction, greyed out when there is nothing to undo or redo (FR-14.1) | 1.0 |
 | FR-4.16 | Indian digit grouping (`₹1,23,456`) when locale is `en-IN` | 1.0 |
 | FR-4.17 | An export control on this page, exporting exactly the current filtered set - see FR-7.17-7.22 | 1.0 |
 
@@ -183,7 +183,7 @@ The core feature. Everything else exists to make this worth doing.
 | ID | Requirement | Release |
 |---|---|---|
 | FR-5.1 | Net worth headline in the home currency | 1.0 |
-| FR-5.2 | Three tiles: Liquid, Locked, Owed | 1.0 |
+| FR-5.2 | Three tiles: Liquid, Locked, Owed. Tapping one lists the containers that make it up | 1.0 |
 | FR-5.3 | Spend by label for the current cycle, largest first, including an "unlabelled" bucket | 1.0 |
 | FR-5.3a | State on the same screen that a transaction with several labels counts in full under each, so the bars can exceed the total. Bars are scaled to the largest label, never to the total | 1.0 |
 | FR-5.4 | Tap any label to drill into its filtered transaction list | 1.0 |
@@ -191,6 +191,9 @@ The core feature. Everything else exists to make this worth doing.
 | FR-5.6 | `needs_review` count with a link to the review queue | 1.0 |
 | FR-5.7 | Cycle selector: current, previous, any past cycle | 1.0 |
 | FR-5.8 | Goal progress summary with on-track status | 1.1 |
+| FR-5.8a | What is still planned this month: to pay, to come in, and how many plans | 1.1 |
+| FR-5.8b | The Steady ledger streak, with this week's status, recent weeks, freezes and the next milestone (S42) | 1.1 |
+| FR-5.8c | Containers are listed on the Containers tab only; Home shows the figures they add up to | 1.1 |
 | FR-5.9 | Net worth trend over time | 1.2 |
 | FR-5.10 | Month-over-month comparison per label | 1.2 |
 | FR-5.11 | Top parties and top apps by spend | 1.2 |
@@ -225,7 +228,8 @@ app reads as one system.
 | FR-6.10 | Warn when combined allocations exceed a linked container's balance | 1.1 |
 | FR-6.11 | Never include goal progress in net worth | 1.1 |
 | FR-6.12 | Archive a goal without deleting its transactions | 1.1 |
-| FR-6.13 | Projected completion date at the current contribution rate | 1.2 |
+| FR-6.13 | Projected completion date at the current pace: the last 90 days of contributions, or the planned monthly amount before there are any | 1.1 |
+| FR-6.14 | Choose the goal a transaction counts toward on the capture form | 1.1 |
 
 **User stories**
 
@@ -303,6 +307,7 @@ Paywalling the exit from a money app is corrosive.
 | FR-8.7 | Audit written by database triggers, unbypassable by application code | 1.0 |
 | FR-8.8 | Free-text comments on a transaction, appearing in its timeline | 2.0 |
 | FR-8.9 | Global activity feed across all entities | 2.0 |
+| FR-8.10 | The timeline names parties, containers and apps, and shows dates, flags and capture sources in words, never as stored ids or numbers; a party since deleted or merged is still named | 1.0 |
 
 **User stories**
 
@@ -417,6 +422,8 @@ Every requirement below is downstream of it.
 | FR-11.30 | Parsed alerts are recorded straight away as transactions flagged Needs Review, with a prompt to open or delete each (ADR-0015) | 1.2 |
 | FR-11.31 | Teach EleFi a message: paste a message, see what is read, record it, or mark its values so EleFi learns a rule from one example; taught rules can be switched off or forgotten | 1.2 |
 | FR-11.32 | Deleted transactions are listed in Settings with Restore and Restore all; restored ones are flagged for review | 1.2 |
+| FR-11.33 | Teaching a message with no last four digits can capture the account's name instead; with no digits, the one container the name or the sender's bank fits is used (`SM18`) | 1.2 |
+| FR-11.34 | A recorded alert takes the time it arrived, unless the message dates it to another day (`SM19`) | 1.2 |
 | FR-11.26 | Parse Rules are bundled with the app. No rule is ever fetched from a network | 1.2 |
 
 **FR-11.22 and FR-11.23 are not consolation prizes.** They are the requirements that keep
@@ -475,6 +482,105 @@ you.
 57. As a user, I want to chip in if I feel like it, once, without being asked twice.
 58. As a user, I want the support link to open my actual browser, so I can see where it goes before I decide anything.
 59. As a user, I want to be told the tip buys nothing, so I am not confused about what I just did.
+
+---
+
+## FR-13 · Contacts
+
+The people and businesses money goes to and comes from. A contact is the external party a
+transaction already names ([ADR-0016](../adr/0016-contacts-merge-with-aliases.md)).
+
+| ID | Requirement | Release |
+|---|---|---|
+| FR-13.1 | Settings > Contacts lists every contact with its transaction count, searchable by name | 1.1 |
+| FR-13.2 | A contact can be added by name, or picked from the phone's contacts with no contacts permission | 1.1 |
+| FR-13.3 | A contact's page shows what was paid to it and received from it, and opens the transaction list filtered to it and its linked contacts | 1.1 |
+| FR-13.4 | Phone numbers, emails, addresses and other details, each with an optional label, checked before they are kept (`CT2`) | 1.1 |
+| FR-13.5 | Notes on a contact | 1.1 |
+| FR-13.6 | Link two contacts as the same, or as another account of the same person or business (`CT3`) | 1.1 |
+| FR-13.7 | Likely duplicates have their own page, behind a button beside New that shows how many wait. Each pair offers Merge, Same and Different, explained by an "i" | 1.1 |
+| FR-13.8 | Merge one contact into another: everything moves, the old name becomes an alias, and the undo arrow reverses it (`CT4`) | 1.1 |
+| FR-13.9 | Renaming can keep the old name as an alias, so alerts that still use it land on the contact | 1.1 |
+| FR-13.10 | Contacts, their details, links, notes and aliases are in the JSON backup and come back on restore | 1.1 |
+
+**User stories**
+
+60. As a user, I want "ZOMATO LTD", "Zomato" and "zomato@hdfcbank" to be one contact, so spending at one place reads as one place.
+61. As a user, I want my landlord's number and account details beside the rent I pay them, so I do not hunt through chats for them.
+62. As a user, I want Rahul's two UPI accounts linked, so I can see everything I have sent him in one list.
+
+---
+
+## FR-14 · Ele, undo, and the Planner
+
+| ID | Requirement | Release |
+|---|---|---|
+| FR-14.1 | Undo and Redo arrows at the top of every page that changes things: transactions, deleted, capture, quick capture, containers, labels, contacts, duplicates, plans, goals. Each reaches only its own kind of change, runs through the same checked path as the change, and is greyed out when there is nothing to do | 1.1 |
+| FR-14.2 | Ele is the only messenger: every confirmation, undo and problem, including a required field left empty, is something Ele says. No toasts, no inline error banners | 1.1 |
+| FR-14.3 | Ele is pleased when something worked, calm for a deletion or an undo, and cross for a problem. A newer message pushes the one showing down and out | 1.1 |
+| FR-14.4 | A short synthesised sound with each message, matching its tone, which can be turned off in Settings | 1.1 |
+| FR-14.5 | A weekly plan can fall on chosen days; a monthly plan on the last day of every month; any repeat can end on a date or after a number of times | 1.1 |
+| FR-14.6 | An occurrence can be skipped; a repeating plan then rolls on, and reopening undoes the skip | 1.1 |
+| FR-14.7 | A plan's labels go onto the transaction it becomes when that has none | 1.1 |
+| FR-14.8 | A reminder notification on the due day, at the plan's time or 9:00, with Mark done and Snooze to tomorrow. Put back after a restart | 1.1 |
+| FR-14.9 | Every change to a plan is in its history | 1.1 |
+
+### Ele's moods
+
+Ele has three moods. Each has its own face, movement and sound, so the mood reads at a
+glance even with the sound off. Built in `EleReactions` (`EleTone`) and `EleOverlay`; the
+sounds are synthesised in `wwwroot/js/elefi-sound.js`.
+
+| Mood | Face | Movement | Sound | Stays | Meaning |
+|---|---|---|---|---|---|
+| **Pleased** | Happy | Hops twice, then floats | A short, jolly elephant trumpet | 4 s | Something worked |
+| **Calm** | At rest, neither happy nor cross | Only floats | A soft, low hum | 4 s | Something neutral: a deletion, an undo, an archive |
+| **Cross** | Frowning | Shakes its head twice, then floats; the line is in the warning colour | A short grumpy snort, never a buzzer | 5 s, long enough to read | Something needs fixing |
+
+Every mood arrives from the right above the tab bar and leaves by sliding down and fading
+over 0.42 s, whether it timed out, its × was tapped, or a newer message replaced it. Only
+the × takes a tap; everything under Ele keeps working. Settings > Ele's sound silences all
+three sounds. Ele itself cannot be switched off.
+
+**Which mood each action brings**
+
+| Where | Pleased | Calm | Cross |
+|---|---|---|---|
+| Capture, Quick capture | Recorded | | An empty or zero amount; no Paid to or Received from; a container that no longer exists; recorded but not added to the goal |
+| An open transaction | Saved changes; Looks right | Deleted | The same checks as Capture |
+| Deleted transactions | Restored, or Restore all | | |
+| Undo and Redo arrows, any page | | Undone, or Redone, naming what | The step could not run, and why |
+| All transactions | Export written | | Export did not finish |
+| Containers | Added; updated | Deleted; archived | No name; a name taken; an opening balance that is not a number; delete refused because it has transactions |
+| Labels | Added; renamed | Deleted | No name; a name taken |
+| Contacts, a contact's page | Added; renamed; detail added; linked; linked to a phone contact; merged | Notes updated; detail removed; unlinked | A name taken; a detail that is not what it says (an email that is not one) |
+| Possible duplicates | Merge; Same | Different | The merge or link was refused |
+| Plans | Planned; updated; ticked off | Deleted; skipped; back on the list | No title; an amount that is not a number; an end date before the due date; a count under one |
+| Goals | Added; updated | Archived or brought back; deleted | No name; a target, saved or monthly amount that is not a number; following a balance with no container |
+| Home | A streak milestone: 4, 12, 26 or 52 weeks, once each | | |
+| Teach EleFi a message | Recorded; learned | Forgot a rule | A value copied that is not in the message; nothing recorded |
+| Settings | Backup written; restored; turn on notification access | Everything wiped | SMS permission refused; not an EleFi backup; restore or export stopped |
+
+**How to see and hear each one.** Nothing here changes data you keep: every step is undone
+by the next.
+
+1. **Cross:** Capture, tap Record with the amount empty. Ele: "Enter an amount greater than
+   zero."
+2. **Replacement:** type an amount, leave Paid to empty, tap Record. The first Ele slides
+   down and fades as the second asks "Who was it paid to?"
+3. **Pleased:** fill in Paid to ("Ele test"), tap Record.
+4. **Calm:** tap the Undo arrow at the top. Ele: "Undone: recording ₹... to Ele test." The
+   test transaction is soft-deleted and waits in Settings > Deleted like any other.
+5. For no trace at all: Settings > Edit labels, Add "Test" (pleased), then Undo (calm).
+
+The sounds follow the phone's media volume.
+
+**User stories**
+
+63. As a user, I want to take back the last thing I did on any page, so a wrong tap costs nothing.
+64. As a user, I want one voice telling me what happened, so a confirmation and an error never compete.
+65. As a user, I want my gym plan on Monday and Thursday and my rent on the last day, so plans match my real life.
+66. As a user, I want a reminder I can snooze from the notification, so a busy day does not mean a missed bill.
 
 ---
 

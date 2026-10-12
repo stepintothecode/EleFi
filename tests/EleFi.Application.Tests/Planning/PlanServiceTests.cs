@@ -114,7 +114,137 @@ public class PlanServiceTests
         Assert.False(result.Succeeded);
     }
 
-    private PlanService Service() => new(_plans, _ledger.Transactions, _clock);
+    [Fact]
+    public async Task Skipping_puts_this_occurrence_away_without_a_transaction_and_rolls_on()
+    {
+        var service = Service();
+        var sip = (await service.CreateAsync(new PlanDraft("SIP", _clock.Today, 5_000_00, Repeat: new RepeatRule(RepeatFrequency.Monthly)))).Plan!;
+
+        await service.SkipAsync(sip.Id);
+
+        Assert.True(sip.IsSkipped);
+        Assert.Null(sip.TransactionId);
+        Assert.Equal(_clock.Today.AddMonths(1), Assert.Single(await service.OpenAsync()).DueOn);
+    }
+
+    [Fact]
+    public async Task The_last_day_of_the_month_an_end_date_and_a_count_are_kept_from_the_form()
+    {
+        var plan = (await Service().CreateAsync(new PlanDraft(
+            "Card bill", new DateOnly(2026, 9, 30), 100, Repeat: new RepeatRule(RepeatFrequency.Monthly),
+            LastDayOfMonth: true, RepeatUntil: new DateOnly(2027, 3, 31), RepeatCount: 6))).Plan!;
+
+        Assert.Equal(RepeatRule.LastDay, plan.AnchorDay);
+        Assert.Equal(new DateOnly(2027, 3, 31), plan.RepeatUntil);
+        Assert.Equal(6, plan.RepeatCount);
+    }
+
+    [Fact]
+    public async Task An_end_date_before_the_first_due_date_is_refused()
+    {
+        var result = await Service().CreateAsync(new PlanDraft(
+            "Rent", _clock.Today, 100, Repeat: new RepeatRule(RepeatFrequency.Monthly), RepeatUntil: _clock.Today.AddDays(-1)));
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task A_plans_labels_are_carried_into_the_unlabelled_transaction_it_is_ticked_off_against()
+    {
+        var service = Service();
+        var investment = Guid.NewGuid();
+        var sip = (await service.CreateAsync(new PlanDraft("SIP", _clock.Today, 5_000_00, LabelIds: [investment]))).Plan!;
+        var spent = await SpendAsync(5_000_00);
+
+        await service.CompleteAsync(sip.Id, spent.Id);
+
+        Assert.Equal([investment], spent.Labels.Select(l => l.LabelId));
+    }
+
+    [Fact]
+    public async Task A_transaction_already_labelled_keeps_its_own_labels()
+    {
+        var service = Service();
+        var sip = (await service.CreateAsync(new PlanDraft("SIP", _clock.Today, 5_000_00, LabelIds: [Guid.NewGuid()]))).Plan!;
+        var spent = await SpendAsync(5_000_00);
+        var mine = Guid.NewGuid();
+        spent.Labels.Add(new TransactionLabel { TransactionId = spent.Id, LabelId = mine });
+
+        await service.CompleteAsync(sip.Id, spent.Id);
+
+        Assert.Equal([mine], spent.Labels.Select(l => l.LabelId));
+    }
+
+    [Fact]
+    public async Task Every_change_to_the_plans_reschedules_their_reminders()
+    {
+        var service = Service();
+
+        var rent = (await service.CreateAsync(new PlanDraft("Rent", _clock.Today.AddDays(2), 100))).Plan!;
+        Assert.Equal([rent.Id], _reminders.Last!.Select(r => r.PlanId));
+
+        await service.DeleteAsync(rent.Id);
+        Assert.Empty(_reminders.Last!);
+    }
+
+    [Fact]
+    public async Task Snoozing_moves_the_reminder_to_tomorrow_and_leaves_the_due_date()
+    {
+        var service = Service();
+        var rent = (await service.CreateAsync(new PlanDraft("Rent", _clock.Today, 100))).Plan!;
+
+        await service.SnoozeAsync(rent.Id);
+
+        Assert.Equal(_clock.Today.AddDays(1), rent.RemindOn);
+        Assert.Equal(_clock.Today, rent.DueOn);
+        Assert.Single(_reminders.Last!);
+    }
+
+    [Fact]
+    public async Task Still_planned_this_month_counts_open_money_due_by_the_end_of_the_month()
+    {
+        var service = Service();
+        var monthEnd = new DateOnly(_clock.Today.Year, _clock.Today.Month, DateTime.DaysInMonth(_clock.Today.Year, _clock.Today.Month));
+        await service.CreateAsync(new PlanDraft("Rent", monthEnd, 20_000_00));
+        await service.CreateAsync(new PlanDraft("Salary", _clock.Today, 90_000_00, TransactionKind.Credit));
+        await service.CreateAsync(new PlanDraft("Next month", monthEnd.AddDays(1), 5_000_00));
+        await service.CreateAsync(new PlanDraft("Call the bank", _clock.Today));
+
+        var planned = await service.StillPlannedAsync();
+
+        Assert.Equal(20_000_00, planned.OutMinor);
+        Assert.Equal(90_000_00, planned.InMinor);
+        Assert.Equal(3, planned.Count);
+    }
+
+    [Fact]
+    public async Task A_draft_from_a_plan_puts_an_edit_back_and_a_deleted_plan_can_be_restored()
+    {
+        var service = Service();
+        var plan = (await service.CreateAsync(new PlanDraft("SIP", _clock.Today, 5_000_00, Repeat: new RepeatRule(RepeatFrequency.Weekly, 1, RepeatDays.Monday)))).Plan!;
+        var before = PlanDraft.From(plan);
+
+        await service.UpdateAsync(plan.Id, before with { Title = "Changed", AmountMinor = 1 });
+        await service.UpdateAsync(plan.Id, before);
+        await service.DeleteAsync(plan.Id);
+        await service.RestoreAsync(plan.Id);
+
+        Assert.Equal("SIP", plan.Title);
+        Assert.Equal(5_000_00, plan.AmountMinor);
+        Assert.Equal(RepeatDays.Monday, plan.RepeatDays);
+        Assert.Single(await service.OpenAsync());
+    }
+
+    private readonly RecordingReminders _reminders = new();
+
+    private PlanService Service() => new(_plans, _ledger.Transactions, _clock, NSubstitute.Substitute.For<EleFi.Application.Abstractions.IAuditRepository>(), _reminders);
+
+    private sealed class RecordingReminders : EleFi.Application.Abstractions.IReminderSchedule
+    {
+        public IReadOnlyList<PlanReminder>? Last { get; private set; }
+
+        public void Replace(IReadOnlyList<PlanReminder> reminders) => Last = reminders;
+    }
 
     private async Task<Transaction> SpendAsync(long minor)
     {

@@ -70,6 +70,21 @@ public static class AuditTriggers
             ],
             ["Labels"] = ["Name", "Colour", "SortOrder"],
             ["Apps"] = ["Name", "DefaultContainerId", "Colour"],
+
+            // Contacts: a rename, a merge, the notes and the phone link. Usage counts change
+            // on every capture and are not history.
+            ["Parties"] = ["Name", "Notes", "PhoneContactKey", "MergedIntoPartyId"],
+            ["ContactDetails"] = ["PartyId", "Kind", "Label", "Value"],
+            ["ContactLinks"] = ["PartyId", "OtherPartyId", "Relation"],
+
+            // Plans (S41): what was planned, when, and how it was ticked off.
+            ["Plans"] =
+            [
+                "Title", "Note", "AmountMinor", "Direction", "ContainerId", "CounterpartyName",
+                "DestinationContainerId", "DueOn", "DueTime", "RepeatFrequency", "RepeatInterval",
+                "RepeatDays", "AnchorDay", "RepeatUntil", "RepeatCount", "CompletedAt", "TransactionId",
+                "IsSkipped", "RemindOn",
+            ],
         };
 
     /// <summary>Tables whose changes are recorded.</summary>

@@ -4,7 +4,8 @@
 @using EleFi.Domain.Transactions
 @using EleFi.Ui.Services
 @inject EditTransactionService Editing
-@inject ToastService Toasts
+@inject UndoHistory Undo
+@inject EleReactions Ele
 
 @*
     Deleted transactions, and the way back.
@@ -18,10 +19,13 @@
 
 <div class="section-head">
     <h1>Deleted</h1>
-    @if (_deleted.Count > 0)
-    {
-        <button class="btn-ghost" disabled="@_busy" @onclick="RestoreAllAsync">Restore all</button>
-    }
+    <span class="row" style="gap:4px;">
+        <UndoRedo Area="@UndoHistory.Transactions" OnChanged="ReloadAsync" />
+        @if (_deleted.Count > 0)
+        {
+            <button class="btn-ghost restore-all" disabled="@_busy" @onclick="RestoreAllAsync">Restore all</button>
+        }
+    </span>
 </div>
 
 @if (_loading)
@@ -67,8 +71,14 @@ else
         _busy = true;
         try
         {
+            var row = _deleted.FirstOrDefault(t => t.Id == id);
             await Editing.RestoreAsync(id);
-            Toasts.Ok("Restored, flagged for review.");
+            Undo.Push(
+                UndoHistory.Transactions,
+                $"restore of {(row is null ? "the transaction" : Counterparty(row))}",
+                () => Editing.DeleteAsync(id),
+                () => Editing.RestoreAsync(id));
+            Ele.React(EleMoment.Restored, row is null ? null : MoneyText.ToDisplayString(row.SourceAmount), row is null ? null : Counterparty(row));
             _deleted = await Editing.DeletedAsync();
         }
         finally
@@ -82,8 +92,26 @@ else
         _busy = true;
         try
         {
+            var ids = _deleted.Select(t => t.Id).ToList();
             var count = await Editing.RestoreAllAsync();
-            Toasts.Ok($"Restored {count} transactions, each flagged for review.");
+            Undo.Push(
+                UndoHistory.Transactions,
+                $"restore of {count} transactions",
+                async () =>
+                {
+                    foreach (var id in ids)
+                    {
+                        await Editing.DeleteAsync(id);
+                    }
+                },
+                async () =>
+                {
+                    foreach (var id in ids)
+                    {
+                        await Editing.RestoreAsync(id);
+                    }
+                });
+            Ele.React(EleMoment.Restored, about: $"{count} transactions");
             _deleted = await Editing.DeletedAsync();
         }
         finally
@@ -91,6 +119,8 @@ else
             _busy = false;
         }
     }
+
+    private async Task ReloadAsync() => _deleted = await Editing.DeletedAsync();
 
     private static string Counterparty(Transaction row) =>
         row.SourceParty is null || row.DestinationParty is null

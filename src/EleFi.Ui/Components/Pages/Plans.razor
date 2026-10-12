@@ -1,7 +1,10 @@
 @page "/plans"
 @using EleFi.Application.Abstractions
 @using EleFi.Application.Planning
+@using EleFi.Application.Transactions
 @using EleFi.Application.Typeahead
+@using EleFi.Domain.Audit
+@using EleFi.Domain.Labels
 @using EleFi.Domain.Containers
 @using EleFi.Domain.Money
 @using EleFi.Domain.Planning
@@ -10,7 +13,10 @@
 @inject PlanService Planner
 @inject IContainerRepository Containers
 @inject IPartyRepository Parties
-@inject ToastService Toasts
+@inject EleReactions Ele
+@inject UndoHistory Undo
+@inject EleFi.Application.Labels.LabelService LabelList
+@inject IAlertAccess Access
 @inject NavigationManager Nav
 @inject IClock Clock
 
@@ -31,11 +37,18 @@
     <h1>Plans</h1>
     @if (_tab == "plans")
     {
-        <button class="primary" @onclick="StartCreate">New plan</button>
+        <span class="row" style="gap:4px;">
+            <UndoRedo Area="@UndoHistory.Plans" OnChanged="ReloadAsync" />
+            <button class="primary" @onclick="StartCreate">New plan</button>
+        </span>
     }
     else
     {
-        <button class="primary" id="new-goal" @onclick="() => _goalsPanel?.StartCreate()">New goal</button>
+        @* The same place as on Plans: the arrows sit in the page's top bar, beside New. *@
+        <span class="row" style="gap:4px;">
+            <UndoRedo Area="@UndoHistory.Goals" OnChanged="ReloadGoalsAsync" />
+            <button class="primary" id="new-goal" @onclick="() => _goalsPanel?.StartCreate()">New goal</button>
+        </span>
     }
 </div>
 
@@ -109,8 +122,8 @@ else
                         <div class="plan-body">
                             <span class="who">@plan.Title</span>
                             <span class="meta">
-                                Done @plan.CompletedAt?.ToLocalTime().ToString("d MMM")
-                                @(plan.TransactionId is null ? " · no transaction" : " · linked")
+                                @(plan.IsSkipped ? "Skipped" : "Done") @plan.CompletedAt?.ToLocalTime().ToString("d MMM")
+                                @(plan.IsSkipped ? string.Empty : plan.TransactionId is null ? " · no transaction" : " · linked")
                             </span>
                         </div>
                         @if (plan.TransactionId is { } linked)
@@ -162,6 +175,11 @@ else
             <label for="plan-who">@(_direction == TransactionKind.Credit ? "Received from" : "Paid to") <span class="muted small">(optional)</span></label>
             <TypeaheadInput Id="plan-who" Value="@_who" ValueChanged="v => _who = v" Candidates="_partyCandidates" IdleCount="0" />
         </div>
+
+        <div class="field">
+            <label>Labels <span class="muted small">(optional, carried into the transaction)</span></label>
+            <LabelPicker Labels="_labels" Selected="_labelIds" SelectedChanged="ids => _labelIds = ids" />
+        </div>
     }
 
     <div class="row">
@@ -170,15 +188,20 @@ else
             <input id="plan-due" type="date" @bind="_due" />
         </div>
         <div class="field grow">
-            <label for="plan-repeat">Repeat</label>
-            <select id="plan-repeat" @bind="_frequency">
-                <option value="@RepeatFrequency.None">Never</option>
-                <option value="@RepeatFrequency.Daily">Daily</option>
-                <option value="@RepeatFrequency.Weekly">Weekly</option>
-                <option value="@RepeatFrequency.Monthly">Monthly</option>
-                <option value="@RepeatFrequency.Yearly">Yearly</option>
-            </select>
+            <label for="plan-time">At <span class="muted small">(optional)</span></label>
+            <input id="plan-time" type="time" @bind="_dueTime" />
         </div>
+    </div>
+
+    <div class="field">
+        <label for="plan-repeat">Repeat</label>
+        <select id="plan-repeat" @bind="_frequency">
+            <option value="@RepeatFrequency.None">Never</option>
+            <option value="@RepeatFrequency.Daily">Daily</option>
+            <option value="@RepeatFrequency.Weekly">Weekly</option>
+            <option value="@RepeatFrequency.Monthly">Monthly</option>
+            <option value="@RepeatFrequency.Yearly">Yearly</option>
+        </select>
     </div>
 
     @if (_frequency != RepeatFrequency.None)
@@ -187,9 +210,56 @@ else
             <label for="plan-every">Every</label>
             <div class="row">
                 <input id="plan-every" type="number" min="1" max="99" inputmode="numeric" @bind="_interval" style="width:90px;" />
-                <span class="muted small">@(new RepeatRule(_frequency, Math.Max(1, _interval)).Describe().ToLowerInvariant())</span>
+                <span class="muted small">@DraftRule.Describe(_lastDay ? RepeatRule.LastDay : _due.Day).ToLowerInvariant()</span>
             </div>
         </div>
+
+        @if (_frequency == RepeatFrequency.Weekly)
+        {
+            <div class="field">
+                <label>On <span class="muted small">(none chosen means the due date's day)</span></label>
+                <div class="chips weekday-chips" role="group" aria-label="Days of the week">
+                    @foreach (var (day, name) in WeekDays)
+                    {
+                        var on = (_days & day) != 0;
+                        <button type="button" class="chip @(on ? "on" : null)" aria-pressed="@(on ? "true" : "false")"
+                                @onclick="() => _days ^= day">@name</button>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (_frequency == RepeatFrequency.Monthly)
+        {
+            <label class="check-row">
+                <input type="checkbox" id="plan-last-day" checked="@_lastDay" @onchange="e => _lastDay = e.Value is true" />
+                <span class="small">On the last day of every month</span>
+            </label>
+        }
+
+        <div class="field">
+            <label for="plan-ends">Ends</label>
+            <select id="plan-ends" @bind="_ends">
+                <option value="never">Never</option>
+                <option value="date">On a date</option>
+                <option value="count">After a number of times</option>
+            </select>
+        </div>
+
+        @if (_ends == "date")
+        {
+            <div class="field">
+                <label for="plan-until">Last one on or before</label>
+                <input id="plan-until" type="date" @bind="_until" />
+            </div>
+        }
+        else if (_ends == "count")
+        {
+            <div class="field">
+                <label for="plan-count">How many times in all</label>
+                <input id="plan-count" type="number" min="1" max="999" inputmode="numeric" @bind="_count" style="width:110px;" />
+            </div>
+        }
     }
 
     <div class="field">
@@ -197,13 +267,47 @@ else
         <input id="plan-note" @bind="_note" autocomplete="off" />
     </div>
 
+    <p class="muted small">A reminder comes on the due day, at the time set or at 9:00, with Mark done and Snooze to tomorrow.</p>
+
     <button class="primary btn-block" disabled="@_busy" @onclick="SaveAsync">Save</button>
-    @if (_editingId is { } editing)
+    @if (_editingId is { } editing && _open.FirstOrDefault(p => p.Id == editing) is { } current)
     {
-        <button class="btn-ghost btn-block danger" style="margin-top:8px;" @onclick="() => DeleteAsync(editing)">Delete plan</button>
+        <div class="row" style="margin-top:8px;">
+            <button class="btn-ghost grow skip-plan" disabled="@_busy" @onclick="() => SkipAsync(current)">Skip this one</button>
+            <button class="btn-ghost danger grow" disabled="@_busy" @onclick="() => DeleteAsync(editing)">Delete plan</button>
+        </div>
+
+        @if (_history.Count > 0)
+        {
+            <details class="plan-history">
+                <summary>History (@_history.Count)</summary>
+                @foreach (var entry in _history)
+                {
+                    <div class="timeline-entry">
+                        <div class="row between">
+                            <strong>@ActionLabel(entry.Action)</strong>
+                            <span class="meta">@entry.OccurredAt.ToLocalTime().ToString("d MMM yyyy, HH:mm")</span>
+                        </div>
+                        @if (entry.Changes.Count > 0)
+                        {
+                            <ul class="timeline-changes">
+                                @foreach (var change in entry.Changes)
+                                {
+                                    <li>
+                                        <span class="meta">@change.Field</span>
+                                        <span class="was">@change.From</span>
+                                        <span aria-hidden="true">&rarr;</span>
+                                        <span class="now">@change.To</span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                }
+            </details>
+        }
     }
 </Modal>
-
 @* Ticking off a plan with an amount: link what is already there, or record it. *@
 <Modal Open="_ticking is not null" Title="@($"Mark {_ticking?.Title} done")" OnCancel="() => _ticking = null">
     @if (_ticking is { } plan)
@@ -236,20 +340,34 @@ else
         <div class="stack" style="margin-top:12px;">
             <button class="primary btn-block" @onclick="() => RecordNow(plan)">Record it now</button>
             <button class="btn-ghost btn-block" @onclick="() => LinkAsync(plan, null)">Done, no transaction</button>
+            <button class="btn-ghost btn-block skip-plan" @onclick="() => SkipAsync(plan)">Skip this one</button>
         </div>
     }
 </Modal>
 
 @code {
+    private static readonly (RepeatDays Day, string Name)[] WeekDays =
+    [
+        (RepeatDays.Monday, "Mon"), (RepeatDays.Tuesday, "Tue"), (RepeatDays.Wednesday, "Wed"),
+        (RepeatDays.Thursday, "Thu"), (RepeatDays.Friday, "Fri"), (RepeatDays.Saturday, "Sat"),
+        (RepeatDays.Sunday, "Sun"),
+    ];
+
     private string _tab = "plans";
     private GoalsPanel? _goalsPanel;
 
     /// <summary>Which half to open on: "goals" or "plans".</summary>
     [SupplyParameterFromQuery(Name = "tab")]
     public string? TabQuery { get; set; }
+
+    /// <summary>A plan to tick off on arrival, from a reminder's Mark done.</summary>
+    [SupplyParameterFromQuery(Name = "tick")]
+    public Guid? TickQuery { get; set; }
+
     private IReadOnlyList<Plan> _open = [];
     private IReadOnlyList<Plan> _completed = [];
     private IReadOnlyList<Container> _containers = [];
+    private IReadOnlyList<Label> _labels = [];
     private IReadOnlyList<TypeaheadCandidate> _partyCandidates = [];
     private bool _loading = true;
     private bool _busy;
@@ -263,12 +381,25 @@ else
     private Guid _destinationId;
     private string _who = string.Empty;
     private DateTime _due = DateTime.Today;
+    private TimeOnly? _dueTime;
     private RepeatFrequency _frequency = RepeatFrequency.None;
     private int _interval = 1;
+    private RepeatDays _days;
+    private bool _lastDay;
+    private string _ends = "never";
+    private DateTime _until = DateTime.Today;
+    private int _count = 12;
+    private IReadOnlyList<Guid> _labelIds = [];
     private string? _note;
+    private IReadOnlyList<HistoryEntry> _history = [];
 
     private Plan? _ticking;
     private IReadOnlyList<Transaction> _candidates = [];
+
+    private RepeatRule DraftRule => new(
+        _frequency,
+        Math.Max(1, _interval),
+        _frequency == RepeatFrequency.Weekly ? _days : RepeatDays.None);
 
     protected override async Task OnInitializedAsync()
     {
@@ -279,8 +410,23 @@ else
 
         _containers = ContainerGrouping.InPickerOrder(await Containers.ListSelectableAsync());
         _partyCandidates = TypeaheadCandidates.From(await Parties.ListExternalAsync());
+        _labels = await LabelList.ListByUsageAsync();
         await ReloadAsync();
         _loading = false;
+
+        // Mark done on a reminder lands here with the plan to tick.
+        if (TickQuery is { } tick && _open.FirstOrDefault(p => p.Id == tick) is { } plan)
+        {
+            await TickAsync(plan);
+        }
+    }
+
+    private async Task ReloadGoalsAsync()
+    {
+        if (_goalsPanel is not null)
+        {
+            await _goalsPanel.ReloadAsync();
+        }
     }
 
     private async Task ReloadAsync()
@@ -297,18 +443,50 @@ else
         _ => "Later",
     };
 
+    private static string ActionLabel(AuditAction action) => action switch
+    {
+        AuditAction.Created => "Planned",
+        AuditAction.Updated => "Changed",
+        AuditAction.Deleted => "Deleted",
+        AuditAction.Restored => "Restored",
+        _ => action.ToString(),
+    };
+
     private string Describe(Plan plan)
     {
-        var parts = new List<string> { plan.DueOn == Clock.Today ? "Today" : plan.DueOn.ToString("ddd d MMM") };
+        var parts = new List<string>
+        {
+            plan.DueOn == Clock.Today ? "Today" : plan.DueOn.ToString("ddd d MMM"),
+        };
+
+        if (plan.DueTime is { } time)
+        {
+            parts[0] += $" {time:HH\\:mm}";
+        }
 
         if (plan.Repeat.Repeats)
         {
-            parts.Add("↻ " + plan.Repeat.Describe());
+            var repeat = "↻ " + plan.Repeat.Describe(plan.AnchorDay);
+            if (plan.RepeatCount is { } count)
+            {
+                repeat += $", {plan.Occurrence} of {count}";
+            }
+            else if (plan.RepeatUntil is { } until)
+            {
+                repeat += $", until {until:d MMM yyyy}";
+            }
+
+            parts.Add(repeat);
         }
 
         if (plan.ContainerId is { } id && _containers.FirstOrDefault(c => c.Id == id) is { } container)
         {
             parts.Add(container.Name);
+        }
+
+        if (plan.RemindOn is { } remind && remind > Clock.Today)
+        {
+            parts.Add($"reminder {remind:ddd d MMM}");
         }
 
         return string.Join(" · ", parts);
@@ -331,13 +509,21 @@ else
         _destinationId = Guid.Empty;
         _who = string.Empty;
         _due = Clock.Today.ToDateTime(TimeOnly.MinValue);
+        _dueTime = null;
         _frequency = RepeatFrequency.None;
         _interval = 1;
+        _days = RepeatDays.None;
+        _lastDay = false;
+        _ends = "never";
+        _until = Clock.Today.AddYears(1).ToDateTime(TimeOnly.MinValue);
+        _count = 12;
+        _labelIds = [];
         _note = null;
+        _history = [];
         _editing = true;
     }
 
-    private void StartEdit(Plan plan)
+    private async Task StartEdit(Plan plan)
     {
         _editingId = plan.Id;
         _title = plan.Title;
@@ -347,10 +533,20 @@ else
         _destinationId = plan.DestinationContainerId ?? Guid.Empty;
         _who = plan.CounterpartyName ?? string.Empty;
         _due = plan.DueOn.ToDateTime(TimeOnly.MinValue);
+        _dueTime = plan.DueTime;
         _frequency = plan.RepeatFrequency;
         _interval = plan.RepeatInterval;
+        _days = plan.RepeatDays;
+        _lastDay = plan.RepeatFrequency == RepeatFrequency.Monthly && plan.AnchorDay >= RepeatRule.LastDay;
+        _ends = plan.RepeatCount is not null ? "count" : plan.RepeatUntil is not null ? "date" : "never";
+        _until = (plan.RepeatUntil ?? Clock.Today.AddYears(1)).ToDateTime(TimeOnly.MinValue);
+        _count = plan.RepeatCount ?? 12;
+        _labelIds = [.. plan.Labels.Select(l => l.LabelId)];
         _note = plan.Note;
         _editing = true;
+
+        var names = _containers.ToDictionary(c => c.Id, c => c.Name);
+        _history = await Planner.HistoryAsync(plan.Id, names);
     }
 
     private async Task SaveAsync()
@@ -360,13 +556,14 @@ else
         {
             if (!MoneyText.TryParse(_amountText, Currency.Inr, out var parsed) || parsed.Minor <= 0)
             {
-                Toasts.Error("The amount must be a number more than zero, or left empty.");
+                Ele.Problem("The amount must be a number more than zero, or left empty.");
                 return;
             }
 
             amount = parsed.Minor;
         }
 
+        var repeats = _frequency != RepeatFrequency.None;
         var draft = new PlanDraft(
             _title,
             DateOnly.FromDateTime(_due),
@@ -375,21 +572,56 @@ else
             _containerId == Guid.Empty ? null : _containerId,
             _who,
             _destinationId == Guid.Empty ? null : _destinationId,
-            new RepeatRule(_frequency, Math.Max(1, _interval)),
-            Note: _note);
+            DraftRule,
+            _dueTime,
+            _note,
+            LastDayOfMonth: repeats && _frequency == RepeatFrequency.Monthly && _lastDay,
+            RepeatUntil: repeats && _ends == "date" ? DateOnly.FromDateTime(_until) : null,
+            RepeatCount: repeats && _ends == "count" ? _count : null,
+            LabelIds: _direction == TransactionKind.SelfTransfer ? [] : _labelIds);
 
         _busy = true;
         try
         {
+            var previous = _editingId is { } editing && _open.FirstOrDefault(p => p.Id == editing) is { } before
+                ? PlanDraft.From(before)
+                : null;
+
             var result = _editingId is { } id ? await Planner.UpdateAsync(id, draft) : await Planner.CreateAsync(draft);
             if (!result.Succeeded)
             {
-                Toasts.Error(result.Error!);
+                Ele.Problem(result.Error!);
                 return;
             }
 
+            var plan = result.Plan!;
+            if (previous is null)
+            {
+                Undo.Push(
+                    UndoHistory.Plans,
+                    $"planning {plan.Title}",
+                    () => Planner.DeleteAsync(plan.Id),
+                    () => Planner.RestoreAsync(plan.Id));
+                Ele.Say($"Planned {plan.Title}.");
+
+                // Its reminder is a notification, which Android 13 and later must allow first.
+                // Asked here, when there is a reason to, and only once by the system.
+                if (Access.IsSupported)
+                {
+                    await Access.RequestPromptsAsync();
+                }
+            }
+            else
+            {
+                Undo.Push(
+                    UndoHistory.Plans,
+                    $"changes to {plan.Title}",
+                    async () => Checked(await Planner.UpdateAsync(plan.Id, previous)),
+                    async () => Checked(await Planner.UpdateAsync(plan.Id, draft)));
+                Ele.Say($"{plan.Title} updated.");
+            }
+
             _editing = false;
-            Toasts.Ok(_editingId is null ? $"Planned {result.Plan!.Title}." : "Saved.");
             await ReloadAsync();
         }
         finally
@@ -400,13 +632,44 @@ else
 
     private async Task DeleteAsync(Guid id)
     {
+        var title = _title;
         await Planner.DeleteAsync(id);
         _editing = false;
-        Toasts.Ok("Plan deleted.");
+
+        Undo.Push(
+            UndoHistory.Plans,
+            $"deleting {title}",
+            () => Planner.RestoreAsync(id),
+            () => Planner.DeleteAsync(id));
+
+        Ele.Say("Plan deleted.", EleTone.Calm);
         await ReloadAsync();
     }
 
-    // Ticking off: one obvious transaction is linked at once, with Undo. Anything else asks.
+    private async Task SkipAsync(Plan plan)
+    {
+        _ticking = null;
+        _editing = false;
+
+        var result = await Planner.SkipAsync(plan.Id);
+        if (!result.Succeeded)
+        {
+            Ele.Problem(result.Error!);
+            return;
+        }
+
+        var id = plan.Id;
+        Undo.Push(
+            UndoHistory.Plans,
+            $"skipping {plan.Title}",
+            async () => Checked(await Planner.ReopenAsync(id)),
+            async () => Checked(await Planner.SkipAsync(id)));
+
+        Ele.Say(plan.Repeat.Repeats ? $"Skipped this {plan.Title}. The next one is on the list." : $"Skipped {plan.Title}.", EleTone.Calm);
+        await ReloadAsync();
+    }
+
+    // Ticking off: one obvious transaction is linked at once. Anything else asks.
     private async Task TickAsync(Plan plan)
     {
         if (plan.AmountMinor is null)
@@ -432,29 +695,42 @@ else
         var result = await Planner.CompleteAsync(plan.Id, transactionId);
         if (!result.Succeeded)
         {
-            Toasts.Error(result.Error!);
+            Ele.Problem(result.Error!);
             return;
         }
 
-        var message = transactionId is null ? $"{plan.Title} done." : $"{plan.Title} done, linked to its transaction.";
-        Toasts.Ok(message, new ToastAction("Undo", async () =>
-        {
-            await Planner.ReopenAsync(plan.Id);
-            await InvokeAsync(async () =>
-            {
-                await ReloadAsync();
-                StateHasChanged();
-            });
-        }));
+        var id = plan.Id;
+        Undo.Push(
+            UndoHistory.Plans,
+            $"ticking off {plan.Title}",
+            async () => Checked(await Planner.ReopenAsync(id)),
+            async () => Checked(await Planner.CompleteAsync(id, transactionId)));
 
+        Ele.Say(transactionId is null ? $"{plan.Title} done." : $"{plan.Title} done, linked to its transaction.");
         await ReloadAsync();
     }
 
     private async Task ReopenAsync(Plan plan)
     {
-        await Planner.ReopenAsync(plan.Id);
-        Toasts.Info($"{plan.Title} is back on the list.");
+        var (id, transactionId, skipped) = (plan.Id, plan.TransactionId, plan.IsSkipped);
+        Checked(await Planner.ReopenAsync(id));
+
+        Undo.Push(
+            UndoHistory.Plans,
+            $"reopening {plan.Title}",
+            async () => Checked(skipped ? await Planner.SkipAsync(id) : await Planner.CompleteAsync(id, transactionId)),
+            async () => Checked(await Planner.ReopenAsync(id)));
+
+        Ele.Say($"{plan.Title} is back on the list.", EleTone.Calm);
         await ReloadAsync();
+    }
+
+    private static void Checked(PlanResult result)
+    {
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(result.Error);
+        }
     }
 
     // The capture form, filled from the plan. Saving it ticks the plan off against the result.
@@ -488,6 +764,11 @@ else
         if (!string.IsNullOrWhiteSpace(plan.CounterpartyName))
         {
             query.Add("party=" + Uri.EscapeDataString(plan.CounterpartyName));
+        }
+
+        if (plan.Labels.Count > 0)
+        {
+            query.Add("labels=" + string.Join(',', plan.Labels.Select(l => l.LabelId)));
         }
 
         query.Add("note=" + Uri.EscapeDataString(plan.Note ?? plan.Title));

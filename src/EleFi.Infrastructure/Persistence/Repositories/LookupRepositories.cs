@@ -146,6 +146,32 @@ public sealed class ContainerRepository(EleFiDbContext db, IClock clock) : ICont
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    /// <inheritdoc />
+    public async Task RestoreAsync(Guid containerId, CancellationToken cancellationToken = default)
+    {
+        var container = await db.Containers.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c => c.Id == containerId, cancellationToken).ConfigureAwait(false);
+        if (container is null)
+        {
+            return;
+        }
+
+        var now = clock.UtcNow;
+        container.DeletedAt = null;
+        container.UpdatedAt = now;
+
+        // Its party comes back with it (P3), or it could not be either end of a transaction.
+        var party = await db.Parties.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.ContainerId == containerId, cancellationToken).ConfigureAwait(false);
+        if (party is not null)
+        {
+            party.DeletedAt = null;
+            party.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
 }
 
 /// <summary>Reads and writes parties, the one pool feeding both ends of a transaction.</summary>
@@ -211,6 +237,26 @@ public sealed class PartyRepository(EleFiDbContext db, IClock clock) : IPartyRep
             return existing;
         }
 
+        // CT4: a name merged away, or kept from before a rename, is another name for a live
+        // contact. An SMS that keeps writing "RAHUL K" lands on Rahul Kumar rather than
+        // bringing the duplicate back.
+        var aliasOf = await db.Parties
+            .IgnoreQueryFilters()
+            .Where(p => p.Kind == PartyKind.External
+                        && p.MergedIntoPartyId != null
+                        && p.Name != null
+                        && EF.Functions.Collate(p.Name, "NOCASE") == normalised)
+            .OrderByDescending(p => p.UpdatedAt)
+            .Select(p => p.MergedIntoPartyId)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (aliasOf is { } target
+            && await db.Parties.FirstOrDefaultAsync(p => p.Id == target, cancellationToken).ConfigureAwait(false) is { } contact)
+        {
+            return contact;
+        }
+
         var now = clock.UtcNow;
         var party = new Party
         {
@@ -239,6 +285,35 @@ public sealed class PartyRepository(EleFiDbContext db, IClock clock) : IPartyRep
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, string>> NamesAsync(
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var wanted = ids.Distinct().ToList();
+
+        // Deleted rows too, on both tables: a history outlives what it mentions.
+        var named = await db.Parties
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => wanted.Contains(p.Id))
+            .Select(p => new
+            {
+                p.Id,
+                Name = p.Name ?? db.Containers.IgnoreQueryFilters()
+                    .Where(c => c.Id == p.ContainerId)
+                    .Select(c => c.Name)
+                    .FirstOrDefault(),
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return named
+            .Where(p => p.Name is not null)
+            .ToDictionary(p => p.Id, p => p.Name!);
     }
 }
 
@@ -273,25 +348,66 @@ public sealed class LabelRepository(EleFiDbContext db, IClock clock) : ILabelRep
     }
 
     /// <inheritdoc />
-    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Guid>> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var label = await db.Labels.FirstOrDefaultAsync(l => l.Id == id, cancellationToken).ConfigureAwait(false);
+        if (label is null)
+        {
+            return [];
+        }
+
+        // Detach it from every transaction, deleted ones too. No replacement is needed: a
+        // transaction that loses its only label becomes unlabelled, which is a normal state.
+        // Through the tracker, so a transaction already loaded does not go on showing it.
+        var joins = await db.TransactionLabels
+            .Where(tl => tl.LabelId == id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        db.TransactionLabels.RemoveRange(joins);
+
+        // Plans stop carrying it too: a plan would otherwise put a deleted label on its transaction.
+        db.PlanLabels.RemoveRange(await db.PlanLabels.Where(pl => pl.LabelId == id).ToListAsync(cancellationToken).ConfigureAwait(false));
+
+        var now = clock.UtcNow;
+        label.DeletedAt = now;
+        label.UpdatedAt = now;
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var entry in db.ChangeTracker.Entries<Domain.Transactions.Transaction>())
+        {
+            entry.Entity.Labels.RemoveAll(l => l.LabelId == id);
+        }
+
+        return [.. joins.Select(j => j.TransactionId).Distinct()];
+    }
+
+    /// <inheritdoc />
+    public async Task RestoreAsync(Guid id, IReadOnlyCollection<Guid> transactionIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(transactionIds);
+
+        var label = await db.Labels.IgnoreQueryFilters().FirstOrDefaultAsync(l => l.Id == id, cancellationToken).ConfigureAwait(false);
         if (label is null)
         {
             return;
         }
 
-        // Detach it from every transaction. No replacement is needed: a transaction that
-        // loses its only label becomes unlabelled, which is now a normal state, and the
-        // amount is untouched either way.
-        await db.TransactionLabels
-            .Where(tl => tl.LabelId == id)
-            .ExecuteDeleteAsync(cancellationToken)
+        label.DeletedAt = null;
+        label.UpdatedAt = clock.UtcNow;
+
+        var wanted = transactionIds.Distinct().ToList();
+        var already = await db.TransactionLabels
+            .Where(tl => tl.LabelId == id && wanted.Contains(tl.TransactionId))
+            .Select(tl => tl.TransactionId)
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var now = clock.UtcNow;
-        label.DeletedAt = now;
-        label.UpdatedAt = now;
+        foreach (var transactionId in wanted.Except(already))
+        {
+            db.TransactionLabels.Add(new Domain.Transactions.TransactionLabel { TransactionId = transactionId, LabelId = id });
+        }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -397,6 +513,22 @@ public sealed class AppRepository(EleFiDbContext db, IClock clock) : IAppReposit
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, string>> NamesAsync(
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var wanted = ids.Distinct().ToList();
+
+        return await db.Apps
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(a => wanted.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, a => a.Name, cancellationToken)
+            .ConfigureAwait(false);
     }
 }
 

@@ -52,6 +52,8 @@ internal sealed class TestDatabase : IAsyncDisposable
 
     public AppRepository Apps => new(Db, Clock);
 
+    public ContactRepository Contacts => new(Db, Clock);
+
     public CaptureService Capture => new(Transactions, Parties, Apps, Labels, Clock);
 
     public AuditRepository Audit => new(Db);
@@ -60,7 +62,7 @@ internal sealed class TestDatabase : IAsyncDisposable
 
     public LocalBackup Backup => new(Db, Wipe, Clock);
 
-    public EditTransactionService Editing => new(Transactions, Parties, Labels, Audit, Clock);
+    public EditTransactionService Editing => new(Transactions, Parties, Labels, Audit, Clock, Apps);
 
     public ContainerService ContainerService => new(Containers, Transactions, Clock);
 

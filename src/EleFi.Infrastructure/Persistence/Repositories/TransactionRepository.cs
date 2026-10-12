@@ -259,6 +259,27 @@ public sealed class TransactionRepository(EleFiDbContext db, IClock clock) : ITr
     }
 
     /// <inheritdoc />
+    public async Task<ReviewFacts> ReviewFactsAsync(CancellationToken cancellationToken = default)
+    {
+        // Two small reads: the streak never needs the rows themselves.
+        var first = await db.Transactions
+            .AsNoTracking()
+            .OrderBy(t => t.CreatedAt)
+            .Select(t => (DateTimeOffset?)t.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var flagged = await db.Transactions
+            .AsNoTracking()
+            .Where(t => t.NeedsReview)
+            .Select(t => t.OccurredOn)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return new ReviewFacts(first, flagged);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<Transaction>> ListDeletedAsync(CancellationToken cancellationToken = default) =>
         await db.Transactions
             .IgnoreQueryFilters()

@@ -24,10 +24,16 @@
     Notification access for Payment Apps (ADR-0014) needs no line here: it is granted by the
     user in system settings and bound through the service's BIND_NOTIFICATION_LISTENER_SERVICE.
 
-    POST_NOTIFICATIONS is for Suggestion Prompts on Android 13 and later.
+    POST_NOTIFICATIONS is for Alert Prompts and plan reminders on Android 13 and later.
   -->
   <uses-permission android:name="android.permission.RECEIVE_SMS" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+  <!--
+    Plan reminders are alarms, and a restart clears every alarm. This lets EleFi put them back
+    after the phone starts; it does nothing else at boot.
+  -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
   <queries>
     <!--

@@ -44,4 +44,46 @@ public class RepeatRuleTests
     {
         Assert.Equal(words, new RepeatRule(frequency, interval).Describe());
     }
+
+    // 2026-10-05 is a Monday.
+    [Theory]
+    [InlineData(2026, 10, 5, 2026, 10, 8)]
+    [InlineData(2026, 10, 8, 2026, 10, 12)]
+    [InlineData(2026, 10, 6, 2026, 10, 8)]
+    public void Weekly_on_chosen_days_goes_to_the_next_chosen_day(int y, int m, int d, int ny, int nm, int nd)
+    {
+        var mondaysAndThursdays = new RepeatRule(RepeatFrequency.Weekly, 1, RepeatDays.Monday | RepeatDays.Thursday);
+
+        Assert.Equal(new DateOnly(ny, nm, nd), mondaysAndThursdays.NextAfter(new DateOnly(y, m, d), 5));
+    }
+
+    [Fact]
+    public void Every_two_weeks_on_chosen_days_skips_the_week_between()
+    {
+        var fortnightly = new RepeatRule(RepeatFrequency.Weekly, 2, RepeatDays.Monday | RepeatDays.Thursday);
+
+        // Thursday is the last chosen day this week; the next is Monday two weeks on.
+        Assert.Equal(new DateOnly(2026, 10, 19), fortnightly.NextAfter(new DateOnly(2026, 10, 8), 5));
+    }
+
+    [Fact]
+    public void Last_day_of_the_month_lands_on_each_months_last_day()
+    {
+        var monthEnd = new RepeatRule(RepeatFrequency.Monthly);
+
+        var november = monthEnd.NextAfter(new DateOnly(2026, 10, 31), RepeatRule.LastDay)!.Value;
+        var december = monthEnd.NextAfter(november, RepeatRule.LastDay)!.Value;
+        var february = monthEnd.NextAfter(new DateOnly(2027, 1, 31), RepeatRule.LastDay)!.Value;
+
+        Assert.Equal(new DateOnly(2026, 11, 30), november);
+        Assert.Equal(new DateOnly(2026, 12, 31), december);
+        Assert.Equal(new DateOnly(2027, 2, 28), february);
+    }
+
+    [Fact]
+    public void Chosen_days_and_the_last_day_read_as_words()
+    {
+        Assert.Equal("Every week on Mon, Thu", new RepeatRule(RepeatFrequency.Weekly, 1, RepeatDays.Monday | RepeatDays.Thursday).Describe());
+        Assert.Equal("Every month on the last day", new RepeatRule(RepeatFrequency.Monthly).Describe(RepeatRule.LastDay));
+    }
 }

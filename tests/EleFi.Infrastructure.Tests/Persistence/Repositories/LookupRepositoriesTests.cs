@@ -91,6 +91,65 @@ public class LookupRepositoriesTests
         Assert.Empty(counts);
     }
 
+    [Fact]
+    public async Task Names_for_a_history_cover_containers_deleted_parties_and_apps()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var bankParty = await AddContainerAsync(f, "HDFC");
+        var gone = await f.Parties.GetOrCreateExternalAsync("Old Shop");
+        gone.DeletedAt = f.Clock.UtcNow;
+        await f.Db.SaveChangesAsync();
+        var app = await f.Apps.GetOrCreateAsync("GPay");
+        var stranger = Guid.CreateVersion7();
+
+        var parties = await f.Parties.NamesAsync([bankParty, gone.Id, stranger]);
+        var apps = await f.Apps.NamesAsync([app.Id, stranger]);
+
+        // A container's party has no name of its own; the container's is the one people know.
+        Assert.Equal("HDFC", parties[bankParty]);
+
+        // Deleted, but the history of a payment to it still has to say who it was.
+        Assert.Equal("Old Shop", parties[gone.Id]);
+        Assert.False(parties.ContainsKey(stranger));
+        Assert.Equal("GPay", apps[app.Id]);
+    }
+
+    [Fact]
+    public async Task A_deleted_container_comes_back_with_its_party_for_undo()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var party = await AddContainerAsync(f, "Paytm Wallet");
+        var container = (await f.Containers.ListAsync()).Single();
+
+        await f.Containers.SoftDeleteAsync(container.Id);
+        Assert.Empty(await f.Containers.ListAsync());
+
+        await f.Containers.RestoreAsync(container.Id);
+
+        Assert.Single(await f.Containers.ListAsync());
+        Assert.Equal(party, (await f.Containers.PartyForAsync(container.Id))!.Id);
+    }
+
+    [Fact]
+    public async Task A_deleted_label_comes_back_on_the_transactions_that_carried_it()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var bankParty = await AddContainerAsync(f, "HDFC");
+        var shop = await f.Parties.GetOrCreateExternalAsync("Big Bazaar");
+        var food = (await f.Labels.ListAsync()).Single(l => l.Name == "Food");
+        var spent = await SpendAsync(f, bankParty, shop.Id, [food.Id]);
+
+        var detached = await f.Labels.DeleteAsync(food.Id);
+        Assert.Equal([spent.Transaction!.Id], detached);
+
+        await f.Labels.RestoreAsync(food.Id, detached);
+        f.Db.ChangeTracker.Clear();
+
+        Assert.Contains(await f.Labels.ListAsync(), l => l.Id == food.Id);
+        var again = await f.Transactions.FindAsync(spent.Transaction.Id);
+        Assert.Contains(again!.Labels, l => l.LabelId == food.Id);
+    }
+
     private static async Task<Guid> AddContainerAsync(TestDatabase f, string name)
     {
         var result = await f.ContainerService.CreateAsync(

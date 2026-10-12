@@ -17,6 +17,21 @@ backup now holds everything, and a Safety Copy is taken before any update change
 schema. Back works everywhere, the app hides from the recent-apps view (part of S11), and
 labels take any colour. See [the decision log](prompts/2026-10-05-data-safety-goals-and-polish.md).
 
+**Status 2026-10-12.** Ele is now the only messenger (no toasts, no inline errors), with a
+tone per message and a short sound, and every page that changes things has Undo and Redo
+arrows. The Planner (S41) is complete: chosen weekdays, last day of the month, end date or
+count, labels, skip, history, and reminders with Mark done and Snooze. The Steady ledger
+(S42) is counted. Goals show a projected finish and can be chosen on capture. Containers
+have one list, on their own tab; Home's tiles open what makes them up. Contacts' duplicates
+moved to their own page. See [the decision log](prompts/2026-10-12-ele-undo-and-planner.md).
+
+**Status 2026-10-11.** Contacts (most of S16): every payee and payer in one list, with
+details, notes, links, likely duplicates, and merges that leave the old name as an alias so
+alerts stop recreating it. Ele now pops up, out of the way, when a transaction is recorded,
+changed or removed. Alerts take their arrival time and can find an account by name; the
+history shows names rather than ids. Fixed: back on Quick, unreadable picker buttons, Mark
+all read. See [the decision log](prompts/2026-10-11-contacts-ele-and-fixes.md).
+
 **Status 2026-10-05, later.** S41 Planner has its first cut: a Plans tab with repeats,
 completion that links or records a transaction, and alerts that tick a matching plan. Undo
 after an edit or delete closes the main gap in S8. Home has a Notifications bell and a
@@ -340,7 +355,10 @@ Merge duplicate parties and apps with transaction reassignment; privacy mode; ma
 due-date reminders. Full JSON export moved forward into S11b and is done.
 **FR-10.10-10.11, FR-1.13-1.14**
 
-> Privacy mode is done (hide amounts, 2026-10-05). Merge and reminders are not.
+> Privacy mode is done (hide amounts, 2026-10-05). Merging parties is done as **Contacts**
+> (2026-10-11, [ADR-0016](adr/0016-contacts-merge-with-aliases.md)): list, details, notes,
+> links, duplicate suggestions, merge with aliases and undo, phone contacts. Merging Apps and
+> the maturity and due-date reminders are not.
 
 ### S41 · Planner
 **Blocked by:** S5, S8 · *added 2026-10-05; absorbs S32 (recurring transactions)*
@@ -375,6 +393,8 @@ optional amount, and the transaction it should become.
   done" (link or record) and "Snooze to tomorrow".
 - **Audited** like transactions, soft-deleted like transactions.
 
+> Complete 2026-10-12. Plan amount tolerance is still exact only.
+
 *Demoable:* create a monthly SIP plan from SBI to the mutual fund; the SIP's SMS arrives and
 the plan ticks itself; next month the SMS does not come, the plan is overdue on the 6th, one
 tap records the transaction and rolls the plan to the following month.
@@ -383,8 +403,11 @@ tap records the transaction and rolls the plan to the following month.
 > SM2's old worry in a new form: money recorded with nobody checking. A plan that ticks
 > itself only when a real transaction appears, and otherwise asks, keeps the ledger honest.
 
-### S42 · Steady ledger (consistency streak) - proposed
-**Blocked by:** S9, S41 · *proposed 2026-10-05, not yet agreed*
+### S42 · Steady ledger (consistency streak)
+**Blocked by:** S9, S41 · *proposed 2026-10-05, built 2026-10-12*
+
+> Counted from the ledger on every read, with freezes and milestones; the monthly balance
+> check is not built.
 
 Duolingo's habit loop without asking for a transaction a day. The unit is the **week**, and
 the habit is **keeping the ledger true**, which takes about a minute because alerts record

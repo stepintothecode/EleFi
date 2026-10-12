@@ -29,6 +29,10 @@ public class GoalsPanelTests : Bunit.TestContext
         repository.FindAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(call => _goals.Find(g => g.Id == call.Arg<Guid>()));
         repository.When(r => r.AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>())).Do(call => _goals.Add(call.Arg<Goal>()));
         repository.ContributionsAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<Transaction>());
+        repository.When(r => r.DeleteAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()))
+            .Do(call => _goals.Find(g => g.Id == call.Arg<Guid>())!.DeletedAt = DateTimeOffset.UnixEpoch);
+        repository.When(r => r.RestoreAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()))
+            .Do(call => _goals.Find(g => g.Id == call.Arg<Guid>())!.DeletedAt = null);
 
         var ledger = Substitute.For<ITransactionRepository>();
         ledger.BalancesAsync(Arg.Any<CancellationToken>()).Returns(
@@ -40,7 +44,7 @@ public class GoalsPanelTests : Bunit.TestContext
         Services.AddSingleton<IClock>(_clock);
         Services.AddSingleton(new GoalService(repository, ledger, _clock));
         Services.AddSingleton(containers);
-        Services.AddSingleton(new ToastService());
+        Services.AddEleAndUndo();
     }
 
     [Fact]
@@ -76,7 +80,9 @@ public class GoalsPanelTests : Bunit.TestContext
         panel.Find("[role=dialog] button.primary").Click();
 
         Assert.Empty(_goals);
-        Assert.Contains("container", panel.Find("[role=alert]").TextContent, StringComparison.Ordinal);
+        var ele = Services.GetRequiredService<EleReactions>().Current!;
+        Assert.Equal(EleTone.Cross, ele.Tone);
+        Assert.Contains("container", ele.Line, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -84,7 +90,10 @@ public class GoalsPanelTests : Bunit.TestContext
     {
         _goals.Add(new Goal
         {
-            Name = "Trip", TargetAmountMinor = 50_000_00, StartDate = _clock.Today, TargetDate = _clock.Today.AddMonths(6),
+            Name = "Trip",
+            TargetAmountMinor = 50_000_00,
+            StartDate = _clock.Today,
+            TargetDate = _clock.Today.AddMonths(6),
             FundingMode = FundingMode.TracksContributions,
         });
         var panel = RenderComponent<GoalsPanel>();
@@ -93,5 +102,47 @@ public class GoalsPanelTests : Bunit.TestContext
 
         var uri = Services.GetRequiredService<NavigationManager>().Uri;
         Assert.Contains($"capture?goal={_goals[0].Id}", uri, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_goal_with_a_planned_monthly_amount_says_when_it_will_be_done()
+    {
+        _goals.Add(new Goal
+        {
+            Name = "Laptop",
+            TargetAmountMinor = 1_20_000_00,
+            TargetDate = _clock.Today.AddYears(2),
+            FundingMode = FundingMode.TracksContributions,
+            MonthlyContributionMinor = 10_000_00,
+            StartDate = _clock.Today,
+        });
+
+        var panel = RenderComponent<GoalsPanel>();
+
+        var line = panel.Find(".goal-projection").TextContent;
+        Assert.StartsWith("At your planned ₹10,000.00 a month, done by", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Deleting_a_goal_can_be_undone_from_the_arrow()
+    {
+        _goals.Add(new Goal { Name = "Trip", TargetAmountMinor = 50_000_00, TargetDate = _clock.Today.AddYears(1), StartDate = _clock.Today });
+        var panel = RenderComponent<GoalsPanel>();
+
+        panel.Find("button[aria-label='Edit Trip']").Click();
+        panel.Find("[role=dialog] button.danger").Click();
+        panel.WaitForAssertion(() => Assert.Empty(panel.FindAll("button[aria-label='Edit Trip']")));
+
+        // The arrows live in the Plans page's top bar; here the step they would run is checked.
+        var undo = Services.GetRequiredService<UndoHistory>();
+        Assert.True(undo.CanUndo(UndoHistory.Goals));
+        panel.InvokeAsync(async () =>
+        {
+            await undo.UndoAsync(UndoHistory.Goals);
+            await panel.Instance.ReloadAsync();
+        });
+
+        panel.WaitForAssertion(() => Assert.NotNull(panel.Find("button[aria-label='Edit Trip']")));
+        Assert.Empty(panel.FindAll(".goals-head button.undo"));
     }
 }

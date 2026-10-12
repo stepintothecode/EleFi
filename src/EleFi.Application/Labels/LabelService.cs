@@ -6,7 +6,8 @@ namespace EleFi.Application.Labels;
 /// <summary>The outcome of a label change.</summary>
 /// <param name="Label">The saved label, when it succeeded.</param>
 /// <param name="Error">Why it was refused, when it failed.</param>
-public readonly record struct LabelResult(Label? Label, string? Error)
+/// <param name="DetachedFrom">For a delete, the transactions it was taken off, so undo can put it back.</param>
+public readonly record struct LabelResult(Label? Label, string? Error, IReadOnlyList<Guid>? DetachedFrom = null)
 {
     /// <summary>True when the change was saved.</summary>
     public bool Succeeded => Error is null;
@@ -142,7 +143,14 @@ public sealed class LabelService(ILabelRepository labels, IClock clock)
             return new LabelResult(null, "That label no longer exists.");
         }
 
-        await labels.DeleteAsync(id, cancellationToken).ConfigureAwait(false);
-        return new LabelResult(label, null);
+        var detached = await labels.DeleteAsync(id, cancellationToken).ConfigureAwait(false);
+        return new LabelResult(label, null, detached);
     }
+
+    /// <summary>Brings a deleted label back, on the transactions it was taken off. For undo.</summary>
+    /// <param name="id">The label.</param>
+    /// <param name="transactionIds">The transactions its delete reported.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    public Task RestoreAsync(Guid id, IReadOnlyList<Guid>? transactionIds, CancellationToken cancellationToken = default) =>
+        labels.RestoreAsync(id, transactionIds ?? [], cancellationToken);
 }

@@ -12,14 +12,17 @@ public partial class MainPage : ContentPage
         InitializeComponent();
 
         // Once the WebView exists, so our back handler is registered after its own and runs
-        // first. See SystemBackCallback for why there must be only one.
-        blazorWebView.BlazorWebViewInitialized += (_, _) =>
+        // first. See SystemBackCallback for why there must be only one, and WebViewBackKey for
+        // the presses that a focused WebView used to keep for itself.
+        blazorWebView.BlazorWebViewInitialized += (_, e) =>
         {
 #if ANDROID
             if (blazorWebView.Handler?.MauiContext?.Services.GetService<ISystemBack>() is MauiSystemBack back)
             {
                 SystemBackCallback.Install(back);
             }
+
+            WebViewBackKey.Install(e.WebView);
 #endif
         };
     }

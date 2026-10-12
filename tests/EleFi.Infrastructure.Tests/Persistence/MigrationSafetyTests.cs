@@ -152,6 +152,103 @@ public class MigrationSafetyTests
     }
 
     [Fact]
+    public async Task Adding_contacts_keeps_every_party_and_transaction_as_it_was()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"elefi-contacts-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            await using (var db = Open(path))
+            {
+                await db.Database.GetService<IMigrator>().MigrateAsync("Goals");
+
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT INTO Containers
+                        (Id, Name, Kind, CurrencyCode, OpeningBalanceMinor, OpeningBalanceAsOf,
+                         IsArchived, SortOrder, CreatedAt, UpdatedAt)
+                    VALUES (@container, 'HDFC', 0, 'INR', 0, '2026-01-01', 0, 0, 1000, 1000);
+
+                    INSERT INTO Parties (Id, Kind, ContainerId, UsageCount, CreatedAt, UpdatedAt)
+                    VALUES (@containerParty, 0, @container, 0, 1000, 1000);
+
+                    INSERT INTO Parties (Id, Kind, Name, UsageCount, CreatedAt, UpdatedAt)
+                    VALUES (@rahul, 1, 'Rahul', 7, 1000, 1000);
+
+                    INSERT INTO Transactions
+                        (Id, SourcePartyId, DestinationPartyId, SourceAmountMinor, SourceCurrencyCode,
+                         DestinationAmountMinor, DestinationCurrencyCode, OccurredOn,
+                         NeedsReview, CaptureSource, CreatedAt, UpdatedAt)
+                    VALUES (@txn, @containerParty, @rahul, 45000, 'INR', 45000, 'INR', '2026-08-30', 0, 0, 1000, 1000);
+                    """,
+                    new SqliteParameter("@container", Guid.CreateVersion7().ToString()),
+                    new SqliteParameter("@containerParty", Guid.CreateVersion7().ToString()),
+                    new SqliteParameter("@rahul", Guid.CreateVersion7().ToString()),
+                    new SqliteParameter("@txn", Guid.CreateVersion7().ToString()));
+            }
+
+            await using (var db = Open(path))
+            {
+                await db.Database.MigrateAsync();
+
+                var rahul = await db.Parties.SingleAsync(p => p.Name == "Rahul");
+                Assert.Equal(7, rahul.UsageCount);
+                Assert.Null(rahul.Notes);
+                Assert.Null(rahul.MergedIntoPartyId);
+
+                var lunch = await db.Transactions.SingleAsync();
+                Assert.Equal(rahul.Id, lunch.DestinationPartyId);
+                Assert.Equal(45000, lunch.SourceAmountMinor);
+                Assert.Empty(await db.ContactDetails.ToListAsync());
+            }
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
+    public async Task The_planner_migration_keeps_every_plan_with_sensible_defaults_for_the_new_fields()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"elefi-planner-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            await using (var db = Open(path))
+            {
+                await db.Database.GetService<IMigrator>().MigrateAsync("Contacts");
+
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT INTO Plans
+                        (Id, Title, AmountMinor, CurrencyCode, Direction, DueOn, RepeatFrequency,
+                         RepeatInterval, AnchorDay, SeriesId, CreatedAt, UpdatedAt)
+                    VALUES (@id, 'SIP', 500000, 'INR', 0, '2026-10-05', 3, 1, 5, @id, 1000, 1000);
+                    """,
+                    new SqliteParameter("@id", Guid.CreateVersion7().ToString()));
+            }
+
+            await using (var db = Open(path))
+            {
+                await db.Database.MigrateAsync();
+
+                var sip = await db.Plans.Include(p => p.Labels).SingleAsync();
+                Assert.Equal("SIP", sip.Title);
+                Assert.Equal(500000, sip.AmountMinor);
+                Assert.Equal(1, sip.Occurrence);
+                Assert.False(sip.IsSkipped);
+                Assert.Null(sip.RepeatUntil);
+                Assert.Empty(sip.Labels);
+            }
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Fact]
     public async Task The_index_is_case_insensitive_so_the_database_agrees_with_the_service()
     {
         await using var fixture = await TestDatabase.CreateAsync();

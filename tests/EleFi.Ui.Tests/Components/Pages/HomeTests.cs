@@ -1,12 +1,13 @@
 using Bunit;
 using EleFi.Application.Abstractions;
 using EleFi.Application.Containers;
-using EleFi.Ui.Components.Pages;
-using EleFi.Ui.Tests.Support;
-using Microsoft.Extensions.DependencyInjection;
 using EleFi.Domain.Balances;
 using EleFi.Domain.Containers;
 using EleFi.Domain.Money;
+using EleFi.Ui.Components.Pages;
+using EleFi.Ui.Tests.Support;
+using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace EleFi.Ui.Tests.Components.Pages;
 
@@ -167,13 +168,63 @@ public class HomeTests : Bunit.TestContext
     }
 
     [Fact]
-    public void A_containers_bank_and_last_four_sit_under_its_name()
+    public void Containers_are_not_listed_on_home_any_more()
     {
-        Register(balances: [new ContainerBalance(Guid.NewGuid(), "Savings", ContainerKind.BankAccount, Money.FromMinor(100, Currency.Inr), "HDFC Bank ••4417")]);
+        Register(balances: [new ContainerBalance(Guid.NewGuid(), "Savings", ContainerKind.BankAccount, Money.FromMinor(100, Currency.Inr))]);
 
         var component = RenderComponent<Home>();
 
-        Assert.Equal("HDFC Bank ••4417", component.Find(".txn .detail").TextContent);
+        // The Containers tab shows the list; Home shows the figures it adds up to.
+        Assert.DoesNotContain("<h2>Containers</h2>", component.Markup, StringComparison.Ordinal);
+        Assert.Empty(component.FindAll(".txn"));
+    }
+
+    [Fact]
+    public void Tapping_liquid_lists_the_containers_that_make_it_up_and_nothing_else()
+    {
+        Register(balances:
+        [
+            new ContainerBalance(Guid.NewGuid(), "Savings", ContainerKind.BankAccount, Money.FromMinor(100_00, Currency.Inr), "HDFC Bank ••4417"),
+            new ContainerBalance(Guid.NewGuid(), "FD", ContainerKind.FixedDeposit, Money.FromMinor(5_000_00, Currency.Inr)),
+            new ContainerBalance(Guid.NewGuid(), "Card", ContainerKind.CreditCard, Money.SignedMinor(-300_00, Currency.Inr)),
+        ]);
+        var component = RenderComponent<Home>();
+
+        component.Find("button.tile[aria-label^='Liquid']").Click();
+
+        var sheet = component.Find("[role=dialog]");
+        Assert.Equal(["Savings"], sheet.QuerySelectorAll(".who").Select(w => w.TextContent));
+        Assert.Equal("HDFC Bank ••4417", sheet.QuerySelector(".detail")!.TextContent);
+    }
+
+    [Fact]
+    public void Tapping_owed_lists_the_cards()
+    {
+        Register(balances:
+        [
+            new ContainerBalance(Guid.NewGuid(), "Savings", ContainerKind.BankAccount, Money.FromMinor(100_00, Currency.Inr)),
+            new ContainerBalance(Guid.NewGuid(), "Card", ContainerKind.CreditCard, Money.SignedMinor(-300_00, Currency.Inr)),
+        ]);
+        var component = RenderComponent<Home>();
+
+        component.Find("button.tile[aria-label^='Owed']").Click();
+
+        Assert.Equal(["Card"], component.Find("[role=dialog]").QuerySelectorAll(".who").Select(w => w.TextContent));
+    }
+
+    [Fact]
+    public void Still_planned_this_month_shows_what_is_left_to_pay()
+    {
+        Register(open:
+        [
+            new EleFi.Domain.Planning.Plan { Title = "Rent", DueOn = new DateOnly(2026, 8, 31), AmountMinor = 25_000_00, Direction = EleFi.Domain.Transactions.TransactionKind.Debit },
+        ]);
+
+        var component = RenderComponent<Home>();
+
+        var card = component.Find("a.still-planned");
+        Assert.Contains("₹25,000.00", card.TextContent, StringComparison.Ordinal);
+        Assert.Contains("1 plan", card.TextContent, StringComparison.Ordinal);
     }
 
     private readonly EleFi.Ui.Services.PrivacyMode _privacy = new(new Fakes.MemorySettings());
@@ -202,10 +253,31 @@ public class HomeTests : Bunit.TestContext
 
         Assert.Equal("Steady ledger", component.Find("[role=dialog]").GetAttribute("aria-label"));
         Assert.Contains("Sunday night", component.Find("[role=dialog]").TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("not being counted", component.Find("[role=dialog]").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_streak_is_counted_and_says_what_this_week_still_needs()
+    {
+        // Started three weeks ago with nothing to review: two clean weeks and a tidy one so far.
+        Register(startedAt: new DateTimeOffset(2026, 8, 10, 9, 0, 0, TimeSpan.Zero), reviewOn: [new DateOnly(2026, 8, 28)]);
+        var component = RenderComponent<Home>();
+
+        // 30 Aug is a Sunday: the weeks of 10 and 17 Aug were clean, and this one has a review left.
+        Assert.Contains("2 weeks", component.Find(".streak-chip").TextContent, StringComparison.Ordinal);
+
+        component.Find(".streak-chip").Click();
+        Assert.Contains("review 1 transaction", component.Find(".streak-now").TextContent, StringComparison.Ordinal);
     }
     private Fakes.EmptyTransactions _transactions = new();
 
-    private void Register(SpendBreakdown? spend = null, int needsReview = 0, IReadOnlyList<ContainerBalance>? balances = null)
+    private void Register(
+        SpendBreakdown? spend = null,
+        int needsReview = 0,
+        IReadOnlyList<ContainerBalance>? balances = null,
+        IReadOnlyList<EleFi.Domain.Planning.Plan>? open = null,
+        DateTimeOffset? startedAt = null,
+        IReadOnlyList<DateOnly>? reviewOn = null)
     {
         var clock = new Fakes.StoppedClock();
         var containers = new Fakes.EmptyContainers();
@@ -214,7 +286,19 @@ public class HomeTests : Bunit.TestContext
             Spend = spend ?? new SpendBreakdown([], 0),
             NeedsReviewCount = needsReview,
             Balances = balances ?? [],
+            Facts = new ReviewFacts(startedAt, reviewOn ?? []),
         };
+
+        var plans = Substitute.For<IPlanRepository>();
+        plans.ListOpenAsync(Arg.Any<CancellationToken>()).Returns(open ?? []);
+        var goals = Substitute.For<IGoalRepository>();
+        goals.ListAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<EleFi.Domain.Goals.Goal>());
+
+        Services.AddSingleton<ISettingsStore>(new Fakes.MemorySettings());
+        Services.AddEleAndUndo();
+        Services.AddSingleton(new EleFi.Application.Streaks.SteadyLedgerService(_transactions, plans, clock));
+        Services.AddSingleton(new EleFi.Application.Planning.PlanService(plans, _transactions, clock, Substitute.For<IAuditRepository>(), Substitute.For<IReminderSchedule>()));
+        Services.AddSingleton(new EleFi.Application.Goals.GoalService(goals, _transactions, clock));
 
         Services.AddSingleton(_privacy);
         Services.AddSingleton(_notices);

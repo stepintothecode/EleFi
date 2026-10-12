@@ -54,10 +54,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISystemBack, MauiSystemBack>();
         builder.Services.AddSingleton<IAlertPromptSurface, AndroidAlertPrompts>();
         builder.Services.AddSingleton<IAlertAccess, AndroidAlertAccess>();
+        builder.Services.AddSingleton<IContactPicker, AndroidContactPicker>();
+        builder.Services.AddSingleton<IReminderSchedule, AndroidReminderSchedule>();
 
-        // Scoped, matching the WebView's lifetime, so a message raised on one page is still
-        // on screen after navigating to another.
-        builder.Services.AddScoped<EleFi.Ui.Services.ToastService>();
+        // Scoped, matching the WebView's lifetime, so what Ele says on one page is still on
+        // screen after navigating to another, and undo reaches back across pages.
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddScoped<EleFi.Ui.Services.EleReactions>();
+        builder.Services.AddScoped<ISoundCue, WebAudioSoundCue>();
+        builder.Services.AddScoped<EleFi.Ui.Services.UndoHistory>();
 
         // Scoped for the same reason: one history per WebView, kept across page changes.
         builder.Services.AddScoped<EleFi.Ui.Services.BackNavigator>();
@@ -104,6 +109,26 @@ public static class MauiProgram
 
             await initialiser.InitialiseAsync().ConfigureAwait(false);
         }).GetAwaiter().GetResult();
+
+        // Plan reminders are rebuilt from the plans on every start, so an alarm lost to an app
+        // update or a cleared alarm list comes back. In the background: nothing waits on it.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = services.CreateScope();
+                await scope.ServiceProvider.GetRequiredService<EleFi.Application.Planning.PlanService>()
+                    .RescheduleAsync().ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // A reminder that is not rebuilt must never stop the app opening.
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                services.GetService<ILoggerFactory>()
+                    ?.CreateLogger("EleFi.Plans")
+                    .LogError("Rescheduling plan reminders failed with {ExceptionType}.", ex.GetType().Name);
+            }
+        });
     }
 }
 

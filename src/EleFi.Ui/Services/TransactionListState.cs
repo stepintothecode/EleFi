@@ -25,6 +25,24 @@ public sealed class TransactionListState
     /// <summary>The row the user opened, to scroll back to and mark on return.</summary>
     public Guid? ReturnTo { get; set; }
 
+    /// <summary>
+    /// Who the filter's contacts are, in words ("Rahul and 1 linked"), for the chip that
+    /// clears them. Set by the contact page that asked for the list.
+    /// </summary>
+    public string? PartyLabel { get; set; }
+
+    /// <summary>Opens the list on one contact's transactions, everything else cleared.</summary>
+    /// <param name="filter">The contact's filter.</param>
+    /// <param name="label">Who they are, in words.</param>
+    public void ShowContact(TransactionFilter filter, string label)
+    {
+        Filter = filter;
+        Preset = DatePreset.AllTime;
+        Loaded = 0;
+        ReturnTo = null;
+        PartyLabel = label;
+    }
+
     /// <summary>Forgets the row to return to, once it has been shown.</summary>
     /// <returns>The row that was remembered, if any.</returns>
     public Guid? TakeReturnTo()

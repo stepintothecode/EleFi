@@ -294,4 +294,10 @@ public sealed class ContainerService(
         await containers.SoftDeleteAsync(id, cancellationToken).ConfigureAwait(false);
         return new ContainerResult(container, null);
     }
+
+    /// <summary>Brings a deleted container back, for undo.</summary>
+    /// <param name="id">The container.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    public Task RestoreAsync(Guid id, CancellationToken cancellationToken = default) =>
+        containers.RestoreAsync(id, cancellationToken);
 }

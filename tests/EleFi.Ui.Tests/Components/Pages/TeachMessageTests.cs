@@ -35,13 +35,13 @@ public class TeachMessageTests : Bunit.TestContext
         var transactions = new Fakes.EmptyTransactions();
         var labels = new Fakes.SeededLabels();
         var capture = new CaptureService(transactions, parties, apps, labels, clock);
-        var editing = new EditTransactionService(transactions, parties, labels, Substitute.For<IAuditRepository>(), clock);
+        var editing = new EditTransactionService(transactions, parties, labels, Substitute.For<IAuditRepository>(), clock, apps);
 
         Services.AddSingleton<IClock>(clock);
         Services.AddSingleton(new AlertCaptureService(
             suggestions, new AlertPartyResolver(containers, parties, apps, transactions), apps, capture, editing, clock));
         Services.AddSingleton(new ParseRuleService(ruleRepository, clock));
-        Services.AddSingleton(new ToastService());
+        Services.AddEleAndUndo();
     }
 
     [Fact]
@@ -75,6 +75,26 @@ public class TeachMessageTests : Bunit.TestContext
     }
 
     [Fact]
+    public void A_message_with_no_account_digits_can_be_taught_the_account_by_name()
+    {
+        const string kotak = "Rs 1,250.00 spent from your Kotak Bank account at AMAZON";
+        var page = Read("VM-KOTAKB", kotak);
+
+        page.Find("#t-amount").Change("1,250.00");
+        page.Find("#t-who").Change("AMAZON");
+        page.Find("#t-account").Change("Kotak Bank");
+        page.FindAll("button.primary")[^1].Click();
+
+        page.WaitForAssertion(() =>
+        {
+            Assert.Single(_rules);
+
+            // Shown back as the account, where the last four digits would have been.
+            Assert.Contains("Kotak Bank", page.Find("dl.facts").TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void A_value_not_in_the_message_is_explained_and_nothing_is_saved()
     {
         var page = Read("VM-AMEXIN", Unknown);
@@ -83,7 +103,9 @@ public class TeachMessageTests : Bunit.TestContext
         page.FindAll("button.primary")[^1].Click();
 
         Assert.Empty(_rules);
-        Assert.Contains("999.00", page.Find(".notice.error[role=alert]").TextContent, StringComparison.Ordinal);
+        var ele = Services.GetRequiredService<EleReactions>().Current!;
+        Assert.Equal(EleTone.Cross, ele.Tone);
+        Assert.Contains("999.00", ele.Line, StringComparison.Ordinal);
     }
 
     private IRenderedComponent<TeachMessage> Read(string sender, string message)

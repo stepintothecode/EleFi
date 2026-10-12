@@ -56,6 +56,9 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
     /// <summary>Plans: money the user expects to move.</summary>
     public DbSet<Domain.Planning.Plan> Plans => Set<Domain.Planning.Plan>();
 
+    /// <summary>The labels each plan carries into its transaction.</summary>
+    public DbSet<Domain.Planning.PlanLabel> PlanLabels => Set<Domain.Planning.PlanLabel>();
+
     /// <summary>The in-app notification list.</summary>
     public DbSet<Domain.Notices.Notice> Notices => Set<Domain.Notices.Notice>();
 
@@ -64,6 +67,12 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
 
     /// <summary>The containers linked to each goal.</summary>
     public DbSet<Domain.Goals.GoalContainer> GoalContainers => Set<Domain.Goals.GoalContainer>();
+
+    /// <summary>Contacts' phone numbers, emails and addresses.</summary>
+    public DbSet<ContactDetail> ContactDetails => Set<ContactDetail>();
+
+    /// <summary>Links between contacts.</summary>
+    public DbSet<ContactLink> ContactLinks => Set<ContactLink>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -136,9 +145,48 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
             e.Property(p => p.UpdatedAt).HasConversion(instant);
             e.Property(p => p.DeletedAt).HasConversion(nullableInstant);
             e.Property(p => p.LastUsedAt).HasConversion(nullableInstant);
+            e.Property(p => p.Notes).HasMaxLength(2000);
+            e.Property(p => p.PhoneContactKey).HasMaxLength(200);
+            e.Ignore(p => p.IsAlias);
             e.HasQueryFilter(p => p.DeletedAt == null);
             e.HasIndex(p => p.ContainerId);
             e.HasIndex(p => p.Name);
+
+            // An index, not a foreign key: adding a key to Parties would rebuild the table
+            // every transaction points at. The repository keeps aliases pointing somewhere live.
+            e.HasIndex(p => p.MergedIntoPartyId);
+        });
+
+        modelBuilder.Entity<ContactDetail>(e =>
+        {
+            e.ToTable("ContactDetails");
+            e.HasKey(d => d.Id);
+            e.Property(d => d.Value).IsRequired().HasMaxLength(ContactDetail.MaxValueLength);
+            e.Property(d => d.Label).HasMaxLength(ContactDetail.MaxLabelLength);
+            e.Property(d => d.CreatedAt).HasConversion(instant);
+            e.Property(d => d.UpdatedAt).HasConversion(instant);
+            e.Property(d => d.DeletedAt).HasConversion(nullableInstant);
+            e.HasOne<Party>().WithMany().HasForeignKey(d => d.PartyId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(d => d.DeletedAt == null);
+            e.HasIndex(d => d.PartyId);
+        });
+
+        modelBuilder.Entity<ContactLink>(e =>
+        {
+            e.ToTable("ContactLinks");
+            e.HasKey(l => l.Id);
+            e.Property(l => l.CreatedAt).HasConversion(instant);
+            e.Property(l => l.UpdatedAt).HasConversion(instant);
+            e.Property(l => l.DeletedAt).HasConversion(nullableInstant);
+            e.HasOne<Party>().WithMany().HasForeignKey(l => l.PartyId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Party>().WithMany().HasForeignKey(l => l.OtherPartyId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(l => l.DeletedAt == null);
+
+            // CT3 in the schema: two ends, never the same, and one live link per pair. The ends
+            // are stored in a fixed order, so the pair is the same whichever way it was made.
+            e.HasIndex(l => new { l.PartyId, l.OtherPartyId }).IsUnique().HasFilter("DeletedAt IS NULL");
+            e.HasIndex(l => l.OtherPartyId);
+            e.ToTable(t => t.HasCheckConstraint("CK_ContactLinks_DistinctEnds", "PartyId <> OtherPartyId"));
         });
 
         modelBuilder.Entity<Transaction>(e =>
@@ -282,7 +330,11 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
             e.Property(p => p.CreatedAt).HasConversion(instant);
             e.Property(p => p.UpdatedAt).HasConversion(instant);
             e.Property(p => p.DeletedAt).HasConversion(nullableInstant);
+            e.Property(p => p.RepeatUntil).HasConversion(nullableDateOnly);
+            e.Property(p => p.RemindOn).HasConversion(nullableDateOnly);
+            e.Property(p => p.Occurrence).HasDefaultValue(1);
             e.Ignore(p => p.Repeat);
+            e.HasMany(p => p.Labels).WithOne().HasForeignKey(l => l.PlanId).OnDelete(DeleteBehavior.Cascade);
 
             // A plan is never money (D2): no foreign key ties it to a balance, only to the
             // transaction it was ticked off against.
@@ -290,6 +342,14 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
             e.HasIndex(p => p.DueOn);
             e.HasIndex(p => p.TransactionId);
             e.HasIndex(p => p.SeriesId);
+        });
+
+        modelBuilder.Entity<Domain.Planning.PlanLabel>(e =>
+        {
+            e.ToTable("PlanLabels");
+            e.HasKey(l => new { l.PlanId, l.LabelId });
+            e.HasOne<Label>().WithMany().HasForeignKey(l => l.LabelId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(l => l.LabelId);
         });
 
         modelBuilder.Entity<Domain.Notices.Notice>(e =>

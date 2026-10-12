@@ -1,0 +1,117 @@
+@using EleFi.Application.Abstractions
+@using EleFi.Ui.Services
+@implements IDisposable
+@inject EleReactions Ele
+@inject ISoundCue Sound
+
+@*
+    Ele, popping up to say what just happened, and never in the way.
+
+    The only messenger the app has: there are no toasts. Pleased when something worked, calm
+    for a deletion or an undo, cross when something needs fixing.
+
+    The stage covers the screen but takes no taps: pointer-events is off on it and on Ele, so
+    the list, the form and the tab bar all keep working underneath while it floats. Only the
+    cross takes a tap. The rules are inline rather than in the stylesheet so the component's
+    own test can see them, because "the app stays usable" is the requirement that matters
+    most here. It sits above sheets too, so a problem in a sheet is still seen; it blocks
+    nothing there either.
+
+    When a new reaction arrives while one is showing, the old one slides down and fades as the
+    new one comes in, so the two never stack.
+*@
+
+@if (Ele.Current is not null || Ele.Leaving is not null)
+{
+    <div class="ele-stage" style="pointer-events: none;" aria-live="polite">
+        @if (Ele.Leaving is { } leaving)
+        {
+            @Pop(leaving, isLeaving: true)
+        }
+        @if (Ele.Current is { } current)
+        {
+            @Pop(current, isLeaving: false)
+        }
+    </div>
+}
+
+@code {
+    private Guid? _sounded;
+
+    protected override void OnInitialized() => Ele.Changed += OnChanged;
+
+    public void Dispose() => Ele.Changed -= OnChanged;
+
+    // The timers fire off the renderer's thread.
+    private void OnChanged() => InvokeAsync(async () =>
+    {
+        StateHasChanged();
+        await SoundOnceAsync();
+    });
+
+    // One cue per reaction, as it arrives. Never for one leaving, never twice.
+    private async Task SoundOnceAsync()
+    {
+        if (Ele.Current is not { } current || _sounded == current.Id)
+        {
+            return;
+        }
+
+        _sounded = current.Id;
+        if (!Ele.SoundEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            await Sound.PlayAsync(current.Tone switch
+            {
+                EleTone.Cross => SoundCue.Cross,
+                EleTone.Calm => SoundCue.Calm,
+                _ => SoundCue.Pleased,
+            });
+        }
+        catch (Exception)
+        {
+            // A sound is decoration. It never matters that it did not play.
+        }
+    }
+
+    private RenderFragment Pop(EleReaction reaction, bool isLeaving) => __builder =>
+    {
+        var classes = $"ele-pop ele-{reaction.Tone.ToString().ToLowerInvariant()}"
+            + (reaction.Moment is { } moment ? $" ele-{moment.ToString().ToLowerInvariant()}" : string.Empty)
+            + (isLeaving ? " ele-leaving" : string.Empty);
+
+        <div class="@classes" @key="reaction.Id" style="pointer-events: none;" aria-hidden="@(isLeaving ? "true" : null)">
+            <div class="ele-figure">
+                <MascotViewer Mood="reaction.Mood" />
+            </div>
+            <div class="ele-bubble" role="@(isLeaving ? null : "status")">
+                <span class="ele-line">@reaction.Line</span>
+                @if (reaction.Amount is not null || reaction.About is not null)
+                {
+                    <span class="ele-about">
+                        @if (reaction.Amount is { } amount)
+                        {
+                            <span class="amount">@amount</span>
+                        }
+                        @if (reaction.About is { } about)
+                        {
+                            <span>@(reaction.Amount is null ? about : $" · {about}")</span>
+                        }
+                    </span>
+                }
+            </div>
+            @if (!isLeaving)
+            {
+                <button type="button" class="ele-close" style="pointer-events: auto;" aria-label="Close Ele" @onclick="Ele.Dismiss">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+                        <path d="M7 7l10 10M17 7L7 17" />
+                    </svg>
+                </button>
+            }
+        </div>
+    };
+}

@@ -25,9 +25,12 @@ public class DeletedTransactionsTests : Bunit.TestContext
 
         var clock = new Fakes.StoppedClock();
         Services.AddSingleton(new EditTransactionService(
-            _ledger, Substitute.For<IPartyRepository>(), new Fakes.SeededLabels(), Substitute.For<IAuditRepository>(), clock));
-        Services.AddSingleton(new ToastService());
+            _ledger, Substitute.For<IPartyRepository>(), new Fakes.SeededLabels(), Substitute.For<IAuditRepository>(), clock, Substitute.For<IAppRepository>()));
+        Services.AddSingleton(_ele);
+        Services.AddEleAndUndo();
     }
+
+    private readonly EleReactions _ele = new(new Fakes.MemorySettings(), new ManualTime());
 
     [Fact]
     public void Each_deleted_transaction_has_a_restore_button_and_restoring_removes_it_from_here()
@@ -42,13 +45,40 @@ public class DeletedTransactionsTests : Bunit.TestContext
     }
 
     [Fact]
+    public void Restoring_brings_ele_on_to_welcome_it_back()
+    {
+        _deleted.Add(Spend("Zomato"));
+        var page = RenderComponent<DeletedTransactions>();
+
+        page.Find("button[aria-label='Restore Zomato']").Click();
+
+        page.WaitForAssertion(() => Assert.Equal(EleMoment.Restored, _ele.Current!.Moment));
+        Assert.Equal("Zomato", _ele.Current!.About);
+    }
+
+    [Fact]
+    public void A_restore_can_be_undone_from_the_arrow_at_the_top()
+    {
+        var zomato = Spend("Zomato");
+        _deleted.Add(zomato);
+        var page = RenderComponent<DeletedTransactions>();
+
+        page.Find("button[aria-label='Restore Zomato']").Click();
+        page.WaitForAssertion(() => Assert.False(page.Find(".section-head button.undo").HasAttribute("disabled")));
+
+        page.Find(".section-head button.undo").Click();
+
+        page.WaitForAssertion(() => _ledger.Received(1).SoftDeleteAsync(zomato.Id, Arg.Any<CancellationToken>()));
+    }
+
+    [Fact]
     public void Restore_all_brings_every_one_back()
     {
         _deleted.Add(Spend("Zomato"));
         _deleted.Add(Spend("Swiggy"));
         var page = RenderComponent<DeletedTransactions>();
 
-        page.Find(".section-head button").Click();
+        page.Find(".section-head button.restore-all").Click();
 
         page.WaitForAssertion(() => Assert.Empty(_deleted));
     }
@@ -59,7 +89,7 @@ public class DeletedTransactionsTests : Bunit.TestContext
         var page = RenderComponent<DeletedTransactions>();
 
         Assert.Contains("Nothing deleted", page.Markup, StringComparison.Ordinal);
-        Assert.Empty(page.FindAll(".section-head button"));
+        Assert.Empty(page.FindAll(".section-head button.restore-all"));
     }
 
     private static Transaction Spend(string payee)

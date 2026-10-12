@@ -1,0 +1,74 @@
+@using EleFi.Ui.Services
+@implements IDisposable
+@inject UndoHistory History
+@inject EleReactions Ele
+
+@*
+    Undo and redo, as two arrows at the top of a page.
+
+    Each page passes its area, so its arrows reach only its own changes. They are greyed out,
+    and do nothing, when there is nothing to undo or redo. Ele says what was undone, calmly,
+    and the page is told so it can reload what it shows.
+*@
+
+<span class="undo-redo" role="group" aria-label="Undo and redo">
+    <button type="button" class="icon-btn undo" disabled="@(!History.CanUndo(Area) || _busy)"
+            aria-label="@(History.NextUndo(Area) is { } u ? $"Undo {u}" : "Nothing to undo")"
+            @onclick="UndoAsync">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+        </svg>
+    </button>
+    <button type="button" class="icon-btn redo" disabled="@(!History.CanRedo(Area) || _busy)"
+            aria-label="@(History.NextRedo(Area) is { } r ? $"Redo {r}" : "Nothing to redo")"
+            @onclick="RedoAsync">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+        </svg>
+    </button>
+</span>
+
+@code {
+    private bool _busy;
+
+    /// <summary>Which history these arrows work on, such as <see cref="UndoHistory.Transactions"/>.</summary>
+    [Parameter, EditorRequired]
+    public string Area { get; set; } = UndoHistory.Transactions;
+
+    /// <summary>Raised after an undo or redo, so the page can reload.</summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    protected override void OnInitialized() => History.Changed += OnHistoryChanged;
+
+    public void Dispose() => History.Changed -= OnHistoryChanged;
+
+    private void OnHistoryChanged() => InvokeAsync(StateHasChanged);
+
+    private Task UndoAsync() => RunAsync(History.UndoAsync, "Undone");
+
+    private Task RedoAsync() => RunAsync(History.RedoAsync, "Redone");
+
+    private async Task RunAsync(Func<string, Task<UndoOutcome>> move, string verb)
+    {
+        _busy = true;
+        try
+        {
+            var outcome = await move(Area);
+            if (outcome.Error is { } error)
+            {
+                Ele.Problem($"That could not be {verb.ToLowerInvariant()}: {error}");
+            }
+            else if (outcome.Done)
+            {
+                Ele.Say($"{verb}: {outcome.Description}.", EleTone.Calm);
+            }
+
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

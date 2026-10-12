@@ -105,6 +105,84 @@ public interface IMascotService : IAsyncDisposable
 }
 
 /// <summary>
+/// The phone's alarms for plan reminders.
+/// </summary>
+/// <remarks>
+/// The whole set is replaced every time a plan changes, rather than patched, so a deleted or
+/// done plan can never leave a stray alarm behind. Android posts the reminder with "Mark done"
+/// and "Snooze to tomorrow" (S41).
+/// </remarks>
+public interface IReminderSchedule
+{
+    /// <summary>Cancels every scheduled reminder and schedules these instead.</summary>
+    /// <param name="reminders">The reminders still to come.</param>
+    void Replace(IReadOnlyList<Domain.Planning.PlanReminder> reminders);
+}
+
+/// <summary>Which of Ele's sounds to play.</summary>
+public enum SoundCue
+{
+    /// <summary>Something worked, happy face: a short, jolly elephant trumpet.</summary>
+    Pleased = 0,
+
+    /// <summary>Something neutral, calm face: a soft, low, contented hum.</summary>
+    Calm = 1,
+
+    /// <summary>Something needs fixing, cross face: a short grumpy snort. Never a buzzer.</summary>
+    Cross = 2,
+}
+
+/// <summary>
+/// Ele's sounds: a short cue when it pops up, the way a habit app chimes.
+/// </summary>
+/// <remarks>
+/// Synthesised on the device, so there is no audio file to ship and nothing to download.
+/// Like the mascot, it is decoration: every call is safe to ignore and safe to fail, and it is
+/// never on the path of a save (NFR-2.7). The user can switch it off in Settings.
+/// </remarks>
+public interface ISoundCue : IAsyncDisposable
+{
+    /// <summary>Plays a cue, quietly. Returns at once; the sound plays on.</summary>
+    /// <param name="cue">Which one.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task PlayAsync(SoundCue cue, CancellationToken cancellationToken = default);
+}
+
+/// <summary>A contact the user picked from the phone's own Contacts.</summary>
+/// <param name="Name">Their name as the phone has it.</param>
+/// <param name="Phone">The one number the user picked, if any.</param>
+/// <param name="LookupKey">The phone's key for the contact, so it can be opened again later.</param>
+public sealed record PickedContact(string Name, string? Phone, string? LookupKey);
+
+/// <summary>
+/// The phone's own Contacts: pick one, or open one already linked.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Picking goes through the system picker, which hands back only the one contact and number
+/// the user chose. EleFi asks for no permission to read the address book and never sees the
+/// rest of it.
+/// </para>
+/// <para>
+/// What is picked is copied in, not kept in step: change the number on the phone and the
+/// contact here keeps the old one until it is changed here too.
+/// </para>
+/// </remarks>
+public interface IContactPicker
+{
+    /// <summary>True on a platform with a contacts picker.</summary>
+    bool IsSupported { get; }
+
+    /// <summary>Shows the system picker. Null when the user backed out.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<PickedContact?> PickAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Opens a linked contact in the phone's Contacts app.</summary>
+    /// <param name="lookupKey">The key <see cref="PickAsync"/> returned.</param>
+    void Open(string lookupKey);
+}
+
+/// <summary>
 /// Which screen the app was asked to open, when it was opened by something other than the
 /// launcher icon.
 /// </summary>

@@ -135,22 +135,45 @@ public static class BalanceMath
 
         foreach (var balance in balances)
         {
-            if (balance.IsLiability)
+            switch (PartOf(balance))
             {
-                // Signed, not absolute. An overpaid card reduces what is owed rather than
-                // adding to it, and net worth is Liquid + Locked - Owed either way.
-                owed += balance.AmountOwed;
-            }
-            else if (balance.Kind.IsLiquid())
-            {
-                liquid += balance.Balance;
-            }
-            else
-            {
-                locked += balance.Balance;
+                case NetWorthPart.Owed:
+                    // Signed, not absolute. An overpaid card reduces what is owed rather than
+                    // adding to it, and net worth is Liquid + Locked - Owed either way.
+                    owed += balance.AmountOwed;
+                    break;
+                case NetWorthPart.Liquid:
+                    liquid += balance.Balance;
+                    break;
+                default:
+                    locked += balance.Balance;
+                    break;
             }
         }
 
         return new NetWorth(liquid, locked, owed);
     }
+
+    /// <summary>Which of Liquid, Locked and Owed a container's balance counts toward.</summary>
+    /// <remarks>
+    /// The one rule, so the dashboard's list of what makes up a figure can never disagree
+    /// with the figure.
+    /// </remarks>
+    /// <param name="balance">The container's balance.</param>
+    public static NetWorthPart PartOf(ContainerBalance balance) => balance.IsLiability
+        ? NetWorthPart.Owed
+        : balance.Kind.IsLiquid() ? NetWorthPart.Liquid : NetWorthPart.Locked;
+}
+
+/// <summary>The three parts net worth is shown in.</summary>
+public enum NetWorthPart
+{
+    /// <summary>Assets spendable this week.</summary>
+    Liquid,
+
+    /// <summary>Assets that are real wealth but not spendable on demand.</summary>
+    Locked,
+
+    /// <summary>Liabilities.</summary>
+    Owed,
 }

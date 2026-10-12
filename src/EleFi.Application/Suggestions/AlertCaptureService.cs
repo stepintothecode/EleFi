@@ -84,15 +84,7 @@ public sealed class AlertCaptureService(
                 "EleFi could not read that message. Nothing was recorded, and the text was not kept.");
         }
 
-        var alert = parsed.Value;
-
-        // An app notification is raised as the payment completes, so its time is the
-        // payment's. An SMS's is only when the bank noticed, and is not kept.
-        if (channel == AlertChannel.PaymentApp)
-        {
-            alert = alert with { OccurredAtTime = TimeOnly.FromDateTime(receivedAt.ToLocalTime().DateTime) };
-        }
-
+        var alert = WithArrivalTime(parsed.Value, receivedAt);
         var fingerprint = CaptureSuggestion.ComputeFingerprint(sender, receivedAt, alert.AmountMinor, alert.Last4);
 
         // SM6: one payment, one transaction, however many times its alert arrives.
@@ -103,7 +95,9 @@ public sealed class AlertCaptureService(
 
         await suggestions.PurgeExpiredAsync(clock.UtcNow, cancellationToken).ConfigureAwait(false);
 
-        var containerId = await resolver.MatchLast4Async(alert.Last4, cancellationToken).ConfigureAwait(false);
+        var containerId = await resolver
+            .MatchAccountAsync(alert.Last4, alert.AccountName, channel == AlertChannel.Sms ? sender : null, cancellationToken)
+            .ConfigureAwait(false);
 
         var recent = await suggestions
             .ListSinceAsync(receivedAt - AlertCorroboration.Window, cancellationToken)
@@ -151,6 +145,29 @@ public sealed class AlertCaptureService(
 
         // The body enters an SmsBody here and cannot leave this statement (SM1).
         return AlertParser.Parse(channel, sender, new SmsBody(messageBody), compiled, homeCurrency);
+    }
+
+    /// <summary>
+    /// Gives an alert the time it arrived, as the time the money moved.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A payment app posts its notification as the payment completes, and a bank's SMS
+    /// follows within seconds: either way, arrival is the best time there is, and a
+    /// transaction with no time at all sorts and filters worse than one a minute out.
+    /// </para>
+    /// <para>
+    /// Except when the message dates the payment to another day. Arriving at noon on the 1st
+    /// says nothing about the hour on the 25th, so then no time is given rather than one made up.
+    /// </para>
+    /// </remarks>
+    private static ParsedAlert WithArrivalTime(ParsedAlert alert, DateTimeOffset receivedAt)
+    {
+        var local = receivedAt.ToLocalTime().DateTime;
+
+        return alert.OccurredOn is { } day && day != DateOnly.FromDateTime(local)
+            ? alert
+            : alert with { OccurredAtTime = TimeOnly.FromDateTime(local) };
     }
 
     private async Task<AlertCaptureResult> RecordAsync(CaptureSuggestion suggestion, CancellationToken cancellationToken)

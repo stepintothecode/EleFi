@@ -92,4 +92,41 @@ public class GoalMathTests
         DestinationAmountMinor = minor,
         OccurredOn = new DateOnly(2027, 1, 1),
     };
+
+    [Fact]
+    public void The_recent_pace_is_what_went_in_over_the_last_three_months_as_a_monthly_figure()
+    {
+        var today = new DateOnly(2026, 12, 1);
+        DateOnly[] when = [today.AddDays(-10), today.AddDays(-40), today.AddDays(-70), today.AddDays(-200)];
+
+        // 30,000 in the last 90 days is 10,000 a month; the old one is outside the window.
+        var pace = GoalMath.MonthlyPace(when.Zip(new long[] { 10_000_00, 10_000_00, 10_000_00, 50_000_00 }), Ring.StartDate, today);
+
+        Assert.Equal(10_000_00, pace);
+    }
+
+    [Fact]
+    public void A_goal_started_recently_is_paced_over_the_time_since_it_started_not_ninety_days()
+    {
+        var today = Ring.StartDate.AddDays(30);
+
+        Assert.Equal(6_000_00, GoalMath.MonthlyPace([(today.AddDays(-5), 6_000_00)], Ring.StartDate, today));
+    }
+
+    [Fact]
+    public void At_ten_thousand_a_month_the_remaining_ninety_thousand_takes_nine_months()
+    {
+        var today = new DateOnly(2027, 3, 15);
+
+        Assert.Equal(new DateOnly(2027, 12, 15), GoalMath.ProjectedFinish(2_10_000_00, 3_00_000_00, 10_000_00, today));
+    }
+
+    [Fact]
+    public void Nothing_going_in_means_no_projection_and_a_reached_goal_is_done_today()
+    {
+        var today = new DateOnly(2027, 3, 15);
+
+        Assert.Null(GoalMath.ProjectedFinish(1_00_000_00, 3_00_000_00, 0, today));
+        Assert.Equal(today, GoalMath.ProjectedFinish(3_00_000_00, 3_00_000_00, 0, today));
+    }
 }

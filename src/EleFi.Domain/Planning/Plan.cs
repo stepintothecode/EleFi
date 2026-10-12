@@ -72,8 +72,20 @@ public class Plan : Entity
     /// <summary>Every how many of <see cref="RepeatFrequency"/>.</summary>
     public int RepeatInterval { get; set; } = 1;
 
-    /// <summary>The day of the month a monthly or yearly series keeps to.</summary>
+    /// <summary>For a weekly plan, the days it falls on; none for the weekday it was first due.</summary>
+    public RepeatDays RepeatDays { get; set; }
+
+    /// <summary>The day of the month a monthly or yearly series keeps to. 31 is the last day.</summary>
     public int AnchorDay { get; set; } = 1;
+
+    /// <summary>The last date an occurrence may fall on, or null for no end.</summary>
+    public DateOnly? RepeatUntil { get; set; }
+
+    /// <summary>How many occurrences the series has in all, or null for no limit.</summary>
+    public int? RepeatCount { get; set; }
+
+    /// <summary>Which occurrence of its series this is, from one.</summary>
+    public int Occurrence { get; set; } = 1;
 
     /// <summary>Shared by every occurrence of one repeating plan.</summary>
     public Guid SeriesId { get; set; }
@@ -84,19 +96,36 @@ public class Plan : Entity
     /// <summary>The transaction it became, when there was one.</summary>
     public Guid? TransactionId { get; set; }
 
+    /// <summary>True when this occurrence was skipped rather than done.</summary>
+    public bool IsSkipped { get; set; }
+
+    /// <summary>
+    /// The day its reminder fires, when snoozed; otherwise the reminder fires on the due date.
+    /// </summary>
+    public DateOnly? RemindOn { get; set; }
+
+    /// <summary>
+    /// Labels to carry into the transaction it becomes. Any number, as on a transaction.
+    /// </summary>
+    public List<PlanLabel> Labels { get; init; } = [];
+
     /// <summary>The repeat rule, as a value.</summary>
     public RepeatRule Repeat
     {
-        get => new(RepeatFrequency, RepeatInterval);
+        get => new(RepeatFrequency, RepeatInterval, RepeatDays);
         set
         {
             RepeatFrequency = value.Frequency;
             RepeatInterval = Math.Max(1, value.Interval);
+            RepeatDays = value.Frequency == RepeatFrequency.Weekly ? value.Days : RepeatDays.None;
         }
     }
 
-    /// <summary>True once ticked off.</summary>
+    /// <summary>True once ticked off, or skipped.</summary>
     public bool IsDone => CompletedAt is not null;
+
+    /// <summary>The day its reminder should fire: the snoozed day, or the due date.</summary>
+    public DateOnly ReminderDay => RemindOn ?? DueOn;
 
     /// <summary>Where an open plan belongs in the list, as of today.</summary>
     /// <param name="today">Today, from the device clock.</param>
@@ -118,12 +147,12 @@ public class Plan : Entity
         TransactionId = transactionId;
         UpdatedAt = now;
 
-        if (Repeat.NextAfter(DueOn, AnchorDay) is not { } next)
+        if (NextDue() is not { } next)
         {
             return null;
         }
 
-        return new Plan
+        var following = new Plan
         {
             Title = Title,
             Note = Note,
@@ -137,10 +166,57 @@ public class Plan : Entity
             DueTime = DueTime,
             RepeatFrequency = RepeatFrequency,
             RepeatInterval = RepeatInterval,
+            RepeatDays = RepeatDays,
             AnchorDay = AnchorDay,
+            RepeatUntil = RepeatUntil,
+            RepeatCount = RepeatCount,
+            Occurrence = Occurrence + 1,
             SeriesId = SeriesId,
             CreatedAt = now,
             UpdatedAt = now,
         };
+
+        following.Labels.AddRange(Labels.Select(l => new PlanLabel { PlanId = following.Id, LabelId = l.LabelId }));
+        return following;
     }
+
+    /// <summary>
+    /// Skips this occurrence: it is put away without a transaction, and the series rolls on.
+    /// </summary>
+    /// <param name="now">The instant.</param>
+    /// <returns>The next occurrence, not yet saved, or null.</returns>
+    public Plan? Skip(DateTimeOffset now)
+    {
+        IsSkipped = true;
+        return Complete(now, null);
+    }
+
+    /// <summary>
+    /// When the next occurrence is due, or null when this one is the last: it does not repeat,
+    /// the next would fall after its end date, or its count is used up.
+    /// </summary>
+    public DateOnly? NextDue()
+    {
+        if (Repeat.NextAfter(DueOn, AnchorDay) is not { } next)
+        {
+            return null;
+        }
+
+        if (RepeatUntil is { } until && next > until)
+        {
+            return null;
+        }
+
+        return RepeatCount is { } count && Occurrence >= count ? null : next;
+    }
+}
+
+/// <summary>Joins a plan to a label it carries into its transaction.</summary>
+public class PlanLabel
+{
+    /// <summary>The plan.</summary>
+    public Guid PlanId { get; set; }
+
+    /// <summary>The label.</summary>
+    public Guid LabelId { get; set; }
 }

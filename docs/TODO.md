@@ -8,25 +8,25 @@ Priorities as of 2026-10-05: multi-currency is **low** priority.
 
 ## Now
 
-- [ ] **Planner, the rest of S41**
-  - [ ] Weekly on chosen days, last day of the month, an end date or a count for repeats
-  - [ ] Reminder notification on the due date with "Mark done" and "Snooze to tomorrow"
-  - [ ] Labels on a plan, carried into the transaction it records
-  - [ ] "Still planned this month" on the dashboard
-  - [ ] Plans in the audit trail
-  - [ ] Skip an occurrence of a repeating plan
-- [ ] **Steady ledger streak (S42)**: count clean weeks, freezes, milestones, Ele's mood. The
-      chip and its explanation exist; nothing is counted yet
-- [ ] **Goals, the rest of S14**: goal choice on the capture form and quick capture, goal
-      progress on the dashboard (FR-5.8), projected completion date (FR-6.13), goals in the
-      audit trail
-- [ ] **Undo, the rest of S8**: undo for "Looks right", label changes from the Labels page,
-      and container edits
+- [ ] **Goals, the rest of S14**: goal choice in quick capture, goals in the audit trail
+- [ ] **Planner leftovers**: an amount tolerance for matching (exact only today); verify a
+      reminder firing, Mark done and Snooze on the phone with a real plan
+- [ ] **Steady ledger leftovers (S42)**: the optional monthly balance check (S20); Ele asking
+      for the tidy at the start of a week
+- [ ] **Undo leftovers**: undo is per session (it does not survive closing the app); linking
+      a phone contact and creating a contact have no undo
 - [ ] **Notifications, the rest**: clear old read notices after a while, a notice for a plan
       that falls due
 - [ ] One source for the app version: the project file says 0.1.0, About and Settings 0.3.0
 - [ ] Settings > Safety copies: list the copies taken before each update, and restore one
 - [ ] Note suggestions in quick capture's finish step
+- [ ] **Contacts, the rest (S16)**: a contact's own history on its page (the triggers already
+      record it); call, message and email buttons on a detail; remove an alias; refresh a
+      phone-linked contact's number; "Contact" from the payee field on the capture form
+- [ ] Merge duplicate Apps the way contacts merge (S16)
+- [ ] Ele reacts to alerts recorded in the background, the next time the app is opened
+- [ ] Verify on the phone: back on Quick with the keyboard up and down, the date and time
+      picker buttons in light and dark, picking a phone contact
 
 ## v1.0 - daily driver
 
@@ -45,8 +45,10 @@ Priorities as of 2026-10-05: multi-currency is **low** priority.
 ## SMS and payment apps
 
 - [ ] Verify the SMS receiver on a real SMS, and payment-app capture on a real GPay,
-      PhonePe, Paytm, Amazon Pay and CRED payment
-- [ ] Add real notification samples from each Payment App to the corpus tests
+      PhonePe, Paytm, Amazon Pay, PayZapp and CRED payment. CRED's notifications are turned
+      off in Android settings on the test phone, so EleFi cannot see them until they are on
+- [ ] Add real notification samples from each Payment App to the corpus tests (the rules
+      were widened on 2026-10-12 from published wordings, not from captured samples)
 - [ ] Built-in rules for credit-card spend SMS ("spent on Card xx1234 at ...") for the
       major issuers
 - [ ] **Parse Rule management (S39)**: edit a taught rule; enable or disable built-in rules
@@ -56,8 +58,7 @@ Priorities as of 2026-10-05: multi-currency is **low** priority.
 
 ## v1.1 - tidy
 
-- [ ] **Merge and tidy (S16)**: merge duplicate parties and apps; maturity and card due-date
-      reminders
+- [ ] **Merge and tidy (S16)**: maturity and card due-date reminders (contacts done 2026-10-11)
 
 ## v1.2 - reporting (multi-currency is low priority)
 
@@ -76,6 +77,20 @@ Priorities as of 2026-10-05: multi-currency is **low** priority.
 - [ ] Budgets per label (S33), attachments (S34), voice capture (S35), statement import (S36)
 
 ## Done recently
+
+- [x] Contacts (ADR-0016): list, add by name or from phone contacts, details, notes, links,
+      likely duplicates, merge with aliases and undo, rename keeping the old name,
+      transactions per contact; all in the backup, 2026-10-11
+- [x] Ele pops up for a few seconds when a transaction is recorded, edited, deleted, restored
+      or confirmed; taps go through; a cross and a Settings switch, 2026-10-11
+- [x] History shows names, money, dates and words instead of ids and numbers, 2026-10-11
+- [x] Alerts take their arrival time; teaching takes an account name when there are no last
+      four digits, and the sender's bank picks the account otherwise (SM18, SM19), 2026-10-11
+- [x] Fixed: back on Quick closed the app (the focused WebView handled back itself); date and
+      time picker buttons invisible (Material draws them in colorPrimary); Mark all read did
+      nothing (bulk update skipped the change tracker; the same bug in deleting a goal),
+      2026-10-11
+- [x] "Recorded" and "Updated" instead of "Saved"; In and Out on lines of their own, 2026-10-11
 
 - [x] Goals (S14): both funding modes, progress against a straight line to the date, On
       track / Behind / Achieved, the monthly amount still needed, archive, over-allocation
@@ -106,3 +121,15 @@ Priorities as of 2026-10-05: multi-currency is **low** priority.
 - [x] Alerts recorded as Needs Review, Teach EleFi a message (ADR-0015), 2026-10-05
 - [x] Hide amounts (privacy mode, part of S16), 2026-10-05
 - [x] SMS receiver and Payment App capture (S38, S40), 2026-10-04
+
+## Done 2026-10-12
+
+- [x] Ele is the only messenger; toasts and inline error banners removed; tones, sound
+- [x] Undo and Redo arrows on every page that changes things
+- [x] Planner: chosen weekdays, last day, end date or count, labels, skip, history, reminders
+      with Mark done and Snooze, rescheduled after a restart
+- [x] Still planned this month, goals summary and the counted streak on Home
+- [x] Goal choice on the capture form; projected finish date
+- [x] Containers listed only on their tab, opened by tapping; Home's tiles list their containers
+- [x] Possible duplicates on their own page with Merge, Same and Different
+- [x] PayZapp added to the payment apps read

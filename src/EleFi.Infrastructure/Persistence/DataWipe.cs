@@ -29,12 +29,15 @@ public sealed class DataWipe(EleFiDbContext db, DatabaseInitialiser initialiser)
         // Child rows first: foreign keys are on, so a container cannot go before the
         // transactions naming it.
         await db.TransactionLabels.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await db.PlanLabels.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.Plans.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.GoalContainers.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.Goals.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.Notices.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.Transactions.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.CaptureSuggestions.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await db.ContactLinks.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await db.ContactDetails.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.Parties.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.Containers.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.Apps.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);

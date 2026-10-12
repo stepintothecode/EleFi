@@ -24,6 +24,7 @@ ways.
 | [0013](0013-multiple-flat-labels.md) | Any number of flat Labels per transaction; Tags removed, reversing 0007 | accepted |
 | [0014](0014-payment-app-notification-ingest.md) | Allow-listed Payment App notifications as a second alert channel, merged with SMS | accepted, **SM2 parts superseded by 0015** |
 | [0015](0015-record-alerts-as-needs-review.md) | Parsed alerts are recorded straight away as Needs Review transactions, reversing SM2 | accepted |
+| [0016](0016-contacts-merge-with-aliases.md) | Contacts are external Parties; a merge leaves the old name as an alias | accepted |
 
 ## The load-bearing ones
 

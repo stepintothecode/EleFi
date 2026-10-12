@@ -7,7 +7,7 @@
 @using EleFi.Ui.Services
 @inject AlertCaptureService Alerts
 @inject ParseRuleService Rules
-@inject ToastService Toasts
+@inject EleReactions Ele
 @inject NavigationManager Nav
 @inject IClock Clock
 
@@ -34,6 +34,11 @@
             If it cannot, copy each value out of the message exactly as it appears: the amount,
             who was paid, the account's last four digits, the date. EleFi learns the message's
             shape from that one example and reads every later message like it automatically.
+        </p>
+        <p class="muted small">
+            No last four digits? Copy the account's name instead ("Kotak Bank"). EleFi then
+            records the payment against your container with that name, or with the bank the
+            message came from, as long as only one of your containers fits.
         </p>
         <p class="muted small">
             The message itself is never stored. Only the pattern is kept, and you can switch it
@@ -63,7 +68,7 @@
             <dt>Amount</dt><dd class="amount">@MoneyText.ToDisplayString(Money.FromMinor(read.AmountMinor, Currency.Of(read.CurrencyCode)))</dd>
             <dt>Money</dt><dd>@(read.Direction == TransactionKind.Credit ? "arrived" : "left")</dd>
             <dt>@(read.Direction == TransactionKind.Credit ? "From" : "To")</dt><dd>@(read.Counterparty ?? "not in the message")</dd>
-            <dt>Account</dt><dd>@(read.Last4 is { } l ? $"••{l}" : "not in the message")</dd>
+            <dt>Account</dt><dd>@AccountText(read)</dd>
             <dt>Date</dt><dd>@(read.OccurredOn?.ToString("d MMM yyyy") ?? "today")</dd>
         </dl>
         <div class="row">
@@ -106,15 +111,17 @@ else if (_couldNotRead)
                 <input id="t-date" @bind="_date" placeholder="30-08-26" autocomplete="off" />
             </div>
         </div>
+        @* For the many messages that name the account in words and give no digits. EleFi then
+           finds the container by that name, or by the bank in the sender (SM18). *@
+        <div class="field">
+            <label for="t-account">Account name <span class="muted small">(optional, if there are no last 4 digits)</span></label>
+            <input id="t-account" @bind="_accountName" placeholder="Kotak Bank" autocomplete="off" />
+        </div>
         <div class="field">
             <label for="t-note">Note <span class="muted small">(optional)</span></label>
             <input id="t-note" @bind="_note" autocomplete="off" />
         </div>
 
-        @if (_teachError is not null)
-        {
-            <p class="notice error small" role="alert">@_teachError</p>
-        }
 
         <button class="primary btn-block" disabled="@_busy" @onclick="TeachAsync">Teach EleFi</button>
     </div>
@@ -156,7 +163,12 @@ else if (_couldNotRead)
     private string? _last4;
     private string? _date;
     private string? _note;
-    private string? _teachError;
+    private string? _accountName;
+
+    // The digits when the message has them; otherwise the name it gives the account.
+    private static string AccountText(ParsedAlert read) =>
+        read.Last4 is { } last4 ? $"••{last4}"
+        : read.AccountName ?? "not in the message";
 
     private IReadOnlyList<ParseRule> _taught = [];
 
@@ -185,11 +197,11 @@ else if (_couldNotRead)
             var result = await Alerts.IngestAsync(AlertChannel.Sms, _sender.Trim(), _message, Clock.UtcNow, Currency.Inr);
             if (result.Transaction is not { } transaction)
             {
-                Toasts.Error(result.Reason ?? "Nothing was recorded.");
+                Ele.Problem(result.Reason ?? "Nothing was recorded.");
                 return;
             }
 
-            Toasts.Ok("Recorded, flagged for review.");
+            Ele.React(EleMoment.Recorded, MoneyText.ToDisplayString(transaction.SourceAmount));
             Nav.NavigateTo($"transactions/{transaction.Id}");
         }
         finally
@@ -201,19 +213,18 @@ else if (_couldNotRead)
     private async Task TeachAsync()
     {
         _busy = true;
-        _teachError = null;
         try
         {
             var taught = await Rules.TeachAsync(new TeachingExample(
-                _sender, _message, _direction, _amount, _who, _last4, _date, _note));
+                _sender, _message, _direction, _amount, _who, _last4, _date, _note, _accountName));
 
             if (!taught.Succeeded)
             {
-                _teachError = taught.Error;
+                Ele.Problem(taught.Error!);
                 return;
             }
 
-            Toasts.Ok("Learned. Messages like this one are now read automatically.");
+            Ele.Say("Learned. Messages like this one are now read automatically.");
             _teaching = false;
             _taught = await Rules.TaughtAsync();
 
@@ -236,7 +247,7 @@ else if (_couldNotRead)
     private async Task ForgetAsync(ParseRule rule)
     {
         await Rules.ForgetAsync(rule.Id);
-        Toasts.Ok($"Forgot {rule.Name}.");
+        Ele.Say($"Forgot {rule.Name}.", EleTone.Calm);
         _taught = await Rules.TaughtAsync();
     }
 }

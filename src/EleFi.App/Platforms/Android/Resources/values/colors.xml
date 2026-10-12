@@ -8,6 +8,13 @@
          The template's indigo vanished on the dark dialog; this is the ele-accent-strong token. -->
     <color name="colorAccent">#4E3F9E</color>
 
+    <!-- Native dialogs (date and time pickers, alerts) draw their Set, Clear and Cancel buttons and
+         their header in the theme's colorPrimary, which above is the window's ground: white
+         buttons on a white dialog. MainActivity overlays these for dialogs only. ele-accent-strong
+         on white, white on it. -->
+    <color name="dialogAccent">#4E3F9E</color>
+    <color name="dialogOnAccent">#FFFFFF</color>
+
     <!-- Ele on the start-up window (drawable/boot_ele.xml), the ele-mascot tokens in app.css. -->
     <color name="ele_mascot_hide">#B9A5D8</color>
     <color name="ele_mascot_hide_dark">#8E77B4</color>

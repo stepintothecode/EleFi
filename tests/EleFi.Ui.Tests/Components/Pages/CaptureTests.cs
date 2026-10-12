@@ -102,6 +102,66 @@ public class CaptureTests : Bunit.TestContext
         Assert.StartsWith("21:40", page.Find("#time").GetAttribute("value"), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Recording_says_recorded_never_saved_and_ele_comes_on()
+    {
+        Register();
+        var cardParty = new Party { Kind = PartyKind.Container, ContainerId = _card.Id };
+        var zomato = new Party { Kind = PartyKind.External, Name = "Zomato" };
+        var containers = Services.GetRequiredService<IContainerRepository>();
+        containers.PartyForAsync(_card.Id, Arg.Any<CancellationToken>()).Returns(cardParty);
+        var parties = Services.GetRequiredService<IPartyRepository>();
+        parties.GetOrCreateExternalAsync("Zomato", Arg.Any<CancellationToken>()).Returns(zomato);
+        parties.FindAsync(cardParty.Id, Arg.Any<CancellationToken>()).Returns(cardParty);
+        parties.FindAsync(zomato.Id, Arg.Any<CancellationToken>()).Returns(zomato);
+
+        var page = RenderComponent<Capture>();
+        page.Find("#amount").Input("450");
+        page.Find("#party").Input("Zomato");
+        page.FindAll("button").First(b => b.TextContent.Trim() == "Record").Click();
+
+        page.WaitForAssertion(() =>
+        {
+            // Ele is the only confirmation, and it never says "saved".
+            var ele = Services.GetRequiredService<EleReactions>().Current!;
+            Assert.Equal(EleMoment.Recorded, ele.Moment);
+            Assert.Equal("₹450.00", ele.Amount);
+            Assert.DoesNotContain("saved", ele.Line, StringComparison.OrdinalIgnoreCase);
+        });
+
+        Assert.DoesNotContain(page.FindAll("button"), b => b.TextContent.Contains("Save", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_goal_that_counts_what_is_put_in_can_be_chosen_here()
+    {
+        _goals.Add(new EleFi.Domain.Goals.Goal
+        {
+            Name = "Ring",
+            TargetAmountMinor = 3_00_000_00,
+            FundingMode = EleFi.Domain.Goals.FundingMode.TracksContributions,
+        });
+        Register();
+
+        var page = RenderComponent<Capture>();
+
+        Assert.Equal(["No goal", "Ring"], page.FindAll("#goal option").Select(o => o.TextContent));
+    }
+
+    [Fact]
+    public void Arriving_from_a_goal_preselects_it()
+    {
+        var ring = new EleFi.Domain.Goals.Goal { Name = "Ring", TargetAmountMinor = 3_00_000_00, FundingMode = EleFi.Domain.Goals.FundingMode.TracksContributions };
+        _goals.Add(ring);
+        Register();
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"capture?goal={ring.Id}&kind=transfer");
+
+        var page = RenderComponent<Capture>();
+
+        Assert.Equal(ring.Id.ToString(), page.Find("#goal").GetAttribute("value"));
+    }
+
+    private readonly List<EleFi.Domain.Goals.Goal> _goals = [];
     private void Register()
     {
         var now = new DateTimeOffset(2026, 8, 30, 9, 0, 0, TimeSpan.Zero);
@@ -129,8 +189,10 @@ public class CaptureTests : Bunit.TestContext
         Services.AddSingleton(apps);
         Services.AddSingleton(new LabelService(labels, clock));
         Services.AddSingleton(new CaptureService(Substitute.For<ITransactionRepository>(), parties, apps, labels, clock));
-        Services.AddSingleton(new ToastService());
-        Services.AddSingleton(new EleFi.Application.Planning.PlanService(Substitute.For<IPlanRepository>(), Substitute.For<ITransactionRepository>(), clock));
+        Services.AddSingleton(new EditTransactionService(_ledger, parties, labels, Substitute.For<IAuditRepository>(), clock, apps));
+        Services.AddSingleton(new EleReactions(new Fakes.MemorySettings(), new ManualTime()));
+        Services.AddEleAndUndo();
+        Services.AddSingleton(new EleFi.Application.Planning.PlanService(Substitute.For<IPlanRepository>(), Substitute.For<ITransactionRepository>(), clock, Substitute.For<IAuditRepository>(), Substitute.For<IReminderSchedule>()));
 
         _ledger.NotesForPartyAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<TypeaheadCandidate>());
         _ledger.NotesForPartyAsync("Rahul", Arg.Any<CancellationToken>()).Returns(
@@ -138,7 +200,7 @@ public class CaptureTests : Bunit.TestContext
         Services.AddSingleton(_ledger);
 
         var goals = Substitute.For<IGoalRepository>();
-        goals.ListAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<EleFi.Domain.Goals.Goal>());
+        goals.ListAsync(Arg.Any<CancellationToken>()).Returns(_ => _goals.ToList());
         Services.AddSingleton(new EleFi.Application.Goals.GoalService(goals, _ledger, clock));
     }
 }

@@ -216,5 +216,8 @@ public class CsvExporterTests
 
         public Task<IReadOnlyList<EleFi.Application.Typeahead.TypeaheadCandidate>> NotesForPartyAsync(string partyName, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<EleFi.Application.Typeahead.TypeaheadCandidate>>([]);
+
+        public Task<ReviewFacts> ReviewFactsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ReviewFacts(null, []));
     }
 }

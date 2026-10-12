@@ -21,6 +21,10 @@ namespace EleFi.Domain.Alerts;
 /// <param name="Last4">The account or card's last four digits as written. Optional.</param>
 /// <param name="OccurredOn">The date as written: "30-08-26". Optional.</param>
 /// <param name="Note">A note or remark, as written. Optional.</param>
+/// <param name="AccountName">
+/// The account or bank as the message names it, for a message with no last four digits:
+/// "Kotak Bank". Optional (SM18).
+/// </param>
 public sealed record TeachingExample(
     string Sender,
     string Message,
@@ -29,7 +33,8 @@ public sealed record TeachingExample(
     string? Counterparty = null,
     string? Last4 = null,
     string? OccurredOn = null,
-    string? Note = null);
+    string? Note = null,
+    string? AccountName = null);
 
 /// <summary>The rule built from an example, or why one could not be.</summary>
 /// <param name="Rule">The rule, ready to save. Null when <paramref name="Error"/> is set.</param>
@@ -80,6 +85,7 @@ public static class RuleInducer
         Last4,
         OccurredOn,
         Note,
+        Account,
     }
 
     /// <summary>Builds and checks a rule from an example.</summary>
@@ -186,6 +192,11 @@ public static class RuleInducer
         {
             yield return (Field.Note, example.Note.Trim());
         }
+
+        if (!string.IsNullOrWhiteSpace(example.AccountName))
+        {
+            yield return (Field.Account, example.AccountName.Trim());
+        }
     }
 
     private static string BuildBody(TeachingExample example, List<(Field Field, int Start, int Length)> marks)
@@ -207,7 +218,7 @@ public static class RuleInducer
             {
                 pattern.Append(Segment(message[after..marks[i + 1].Start]));
             }
-            else if (field is Field.Counterparty or Field.Note)
+            else if (field is Field.Counterparty or Field.Note or Field.Account)
             {
                 // An open-ended value needs to know where it stops. The next token of the
                 // message does that; everything after it is the bank's tail and is dropped.
@@ -224,6 +235,7 @@ public static class RuleInducer
         Field.Last4 => @"(?<last4>\d{4})",
         Field.OccurredOn => $"(?<occurredOn>{DateShape(sample)})",
         Field.Note => @"(?<note>[^\n]+?)",
+        Field.Account => @"(?<account>[^\n]+?)",
         _ => @"(?<counterparty>[^\n]+?)",
     };
 
@@ -372,6 +384,7 @@ public static class RuleInducer
         return Same(alert.Counterparty, example.Counterparty)
             && Same(alert.Last4, example.Last4)
             && Same(alert.Note, example.Note)
+            && Same(alert.AccountName, example.AccountName)
             && (string.IsNullOrWhiteSpace(example.OccurredOn) || alert.OccurredOn is not null);
     }
 

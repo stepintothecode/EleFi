@@ -8,7 +8,9 @@
 @using EleFi.Domain.Money
 @using EleFi.Domain.Transactions
 @using EleFi.Ui.Services
-@inject ToastService Toasts
+@inject UndoHistory Undo
+@inject EditTransactionService Editing
+@inject EleReactions Ele
 @inject CaptureService Capturing
 @inject IContainerRepository Containers
 @inject LabelService LabelList
@@ -34,7 +36,10 @@
 
 <PageTitle>Capture</PageTitle>
 
-<h1>Record a transaction</h1>
+<div class="section-head">
+    <h1>Record a transaction</h1>
+    <UndoRedo Area="@UndoHistory.Transactions" />
+</div>
 
 @*
     The blocker is stated here, before anything is typed, rather than after Save.
@@ -147,9 +152,24 @@
                         EnterKeyHint="done" PanelLabel="Notes used before" Placeholder="What was it for?" />
     </div>
 
+    @if (_goals.Count > 0)
+    {
+        <div class="field">
+            <label for="goal">Counts toward <span class="muted small">(optional)</span></label>
+            <select id="goal" @bind="_goalId">
+                <option value="">No goal</option>
+                @foreach (var goal in _goals)
+                {
+                    <option value="@goal.Id">@goal.Name</option>
+                }
+            </select>
+        </div>
+    }
+
+    @* "Record", not "Save": next to an amount, "Save ₹450" reads as putting money aside. *@
     <div class="stack">
-        <button class="primary btn-block" disabled="@_busy" @onclick="() => SaveAsync(false)">Save</button>
-        <button class="btn-ghost btn-block" disabled="@_busy" @onclick="() => SaveAsync(true)">Save and add another</button>
+        <button class="primary btn-block" disabled="@_busy" @onclick="() => SaveAsync(false)">Record</button>
+        <button class="btn-ghost btn-block" disabled="@_busy" @onclick="() => SaveAsync(true)">Record and add another</button>
     </div>
 </div>
 
@@ -197,6 +217,12 @@
     [SupplyParameterFromQuery(Name = "time")]
     public string? TimeQuery { get; set; }
 
+    /// <summary>Label ids, comma separated, handed over by a plan.</summary>
+    [SupplyParameterFromQuery(Name = "labels")]
+    public string? LabelsQuery { get; set; }
+
+    private IReadOnlyList<EleFi.Domain.Goals.Goal> _goals = [];
+    private Guid? _goalId;
 
     private IReadOnlyList<Container> _containers = [];
     private IReadOnlyList<Label> _labels = [];
@@ -270,6 +296,20 @@
 
         await LoadNoteCandidatesAsync();
 
+        // A plan's labels, so the transaction carries them without picking them again.
+        _labelIds = (LabelsQuery ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(text => Guid.TryParse(text, out var id) ? id : Guid.Empty)
+            .Where(id => id != Guid.Empty && _labels.Any(l => l.Id == id))
+            .Distinct()
+            .ToList();
+
+        _goals = await Goals.AttributableAsync();
+        if (GoalQuery is { } goalId && _goals.Any(g => g.Id == goalId))
+        {
+            _goalId = goalId;
+        }
+
         _loading = false;
     }
 
@@ -288,13 +328,13 @@
     {
         if (_containers.Count == 0)
         {
-            Toasts.Error("Add a container first. EleFi needs somewhere for the money to come from or go to.");
+            Ele.Problem("Add a container first. EleFi needs somewhere for the money to come from or go to.");
             return;
         }
 
         if (!MoneyText.TryParse(_amountText, Currency.Inr, out var amount) || amount.Minor <= 0)
         {
-            Toasts.Error("Enter an amount greater than zero.");
+            Ele.Problem("Enter an amount greater than zero.");
             return;
         }
 
@@ -304,7 +344,7 @@
             var containerParty = await Containers.PartyForAsync(_containerId);
             if (containerParty is null)
             {
-                Toasts.Error("That container no longer exists.");
+                Ele.Problem("That container no longer exists. Pick another one.");
                 return;
             }
 
@@ -316,7 +356,7 @@
                 var destinationParty = await Containers.PartyForAsync(_destinationContainerId);
                 if (destinationParty is null)
                 {
-                    Toasts.Error("That destination container no longer exists.");
+                    Ele.Problem("That destination container no longer exists. Pick another one.");
                     return;
                 }
 
@@ -326,7 +366,7 @@
             {
                 if (string.IsNullOrWhiteSpace(_partyName))
                 {
-                    Toasts.Error(_kind == TransactionKind.Debit
+                    Ele.Problem(_kind == TransactionKind.Debit
                         ? "Who was it paid to?"
                         : "Who was it received from?");
                     return;
@@ -371,44 +411,79 @@
 
             if (!result.Succeeded)
             {
-                Toasts.Error(result.Error!);
+                Ele.Problem(result.Error!);
                 return;
             }
 
-            // Recorded for a plan: tick the plan off against what was just saved, and go back
-            // to the plans, which is where the user came from.
-            if (PlanQuery is { } planId)
+            // "Recorded", never "Saved": beside an amount, saved reads as money put aside.
+            var shown = MoneyText.ToDisplayString(amount);
+            var about = _kind == TransactionKind.SelfTransfer ? null : _partyName.Trim();
+            var id = result.Transaction!.Id;
+            var planId = PlanQuery;
+            var goalId = _goalId;
+
+            if (planId is { } plan)
             {
-                await Planner.CompleteAsync(planId, result.Transaction!.Id);
-                Toasts.Ok($"Saved {MoneyText.ToDisplayString(amount)}, plan done.");
+                await Planner.CompleteAsync(plan, id);
+            }
+
+            string? goalProblem = null;
+            if (goalId is { } goal)
+            {
+                goalProblem = await Goals.AttributeAsync(id, goal);
+            }
+
+            // Undo takes the whole thing back: the transaction, and the plan it ticked off.
+            Undo.Push(
+                UndoHistory.Transactions,
+                $"recording {shown}{(about is null ? string.Empty : $" to {about}")}",
+                async () =>
+                {
+                    if (planId is { } p)
+                    {
+                        await Planner.ReopenAsync(p);
+                    }
+
+                    await Editing.DeleteAsync(id);
+                },
+                async () =>
+                {
+                    await Editing.RestoreAsync(id, flagForReview: false);
+                    if (planId is { } p)
+                    {
+                        await Planner.CompleteAsync(p, id);
+                    }
+                });
+
+            if (goalProblem is not null)
+            {
+                Ele.Problem($"Recorded, but not added to the goal: {goalProblem}");
+            }
+            else
+            {
+                Ele.React(EleMoment.Recorded, shown, about);
+            }
+
+            // Recorded for a plan or a goal: go back to where the user came from.
+            if (planId is not null)
+            {
                 Nav.NavigateTo("plans");
                 return;
             }
 
-            // Money put toward a goal: attribute it, and go back to the goals.
-            if (GoalQuery is { } goalId)
+            if (GoalQuery is not null)
             {
-                var problem = await Goals.AttributeAsync(result.Transaction!.Id, goalId);
-                if (problem is null)
-                {
-                    Toasts.Ok($"Saved {MoneyText.ToDisplayString(amount)} toward the goal.");
-                }
-                else
-                {
-                    Toasts.Error($"Saved, but not added to the goal: {problem}");
-                }
-
                 Nav.NavigateTo("plans?tab=goals");
                 return;
             }
 
-            Toasts.Ok($"Saved {MoneyText.ToDisplayString(amount)}.");
             _amountText = string.Empty;
             _description = null;
 
             if (!addAnother)
             {
                 _partyName = string.Empty;
+                _goalId = null;
             }
 
             // Usage changed, so the ranking did too.
@@ -420,7 +495,6 @@
             _busy = false;
         }
     }
-
     private IReadOnlyList<TypeaheadCandidate> _noteCandidates = [];
 
     // The note offers what was written with this payee before ("Gift" for Mom), once "Paid

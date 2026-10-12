@@ -32,6 +32,8 @@ public class MainActivity : MauiAppCompatActivity
     private static readonly object Gate = new();
     private static string? _requestedRoute;
     private static MainActivity? _booting;
+    private static AndroidX.Activity.Result.ActivityResultLauncher? _pickContact;
+    private static TaskCompletionSource<Android.Net.Uri?>? _picking;
     private AnimatedVectorDrawable? _bootEle;
 
     /// <summary>Raised when a running app is asked for a screen.</summary>
@@ -66,6 +68,13 @@ public class MainActivity : MauiAppCompatActivity
         // crashed on every launch until its data was cleared. MAUI rebuilds the page from
         // scratch anyway, and nothing on screen lives in that bundle.
         base.OnCreate(null);
+
+        // After MAUI has put its main theme on: native dialogs draw their buttons in the
+        // theme's colorPrimary, and ours is the window's ground. See EleFi.NativeDialogs.
+        Theme?.ApplyStyle(Resource.Style.EleFi_NativeDialogs, true);
+
+        // Registered here because Android only allows it before the activity starts.
+        RegisterContactPicker();
 
         // Between the system splash and the WebView's first paint, the window itself shows Ele
         // floating on the app's ground, and index.html's boot screen then takes over in place.
@@ -138,6 +147,39 @@ public class MainActivity : MauiAppCompatActivity
         }
     }
 
+    /// <summary>
+    /// Shows the system's own picker for one phone number and waits for the answer.
+    /// </summary>
+    /// <remarks>
+    /// The picker hands back a link to just the row the user chose, readable without the
+    /// contacts permission, so EleFi never asks to read the address book.
+    /// </remarks>
+    /// <returns>The picked number's row, or null when the user backed out.</returns>
+    public static Task<Android.Net.Uri?> PickContactAsync()
+    {
+        if (_pickContact is null)
+        {
+            return Task.FromResult<Android.Net.Uri?>(null);
+        }
+
+        _picking?.TrySetResult(null);
+        _picking = new TaskCompletionSource<Android.Net.Uri?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        using var intent = new Intent(Intent.ActionPick);
+        intent.SetType("vnd.android.cursor.dir/phone_v2");
+        _pickContact.Launch(intent);
+        return _picking.Task;
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Owned by the activity's result registry, which drops both when the activity is destroyed.")]
+    private void RegisterContactPicker() =>
+        _pickContact = RegisterForActivityResult(
+            new AndroidX.Activity.Result.Contract.ActivityResultContracts.StartActivityForResult(),
+            new ContactPicked());
+
     private static bool Remember(Intent? intent)
     {
         var route = intent?.GetBooleanExtra(QuickCaptureExtra, false) == true
@@ -155,5 +197,14 @@ public class MainActivity : MauiAppCompatActivity
         }
 
         return true;
+    }
+
+    private sealed class ContactPicked : Java.Lang.Object, AndroidX.Activity.Result.IActivityResultCallback
+    {
+        public void OnActivityResult(Java.Lang.Object? result)
+        {
+            var picked = result as AndroidX.Activity.Result.ActivityResult;
+            _picking?.TrySetResult(picked?.ResultCode == (int)Result.Ok ? picked.Data?.Data : null);
+        }
     }
 }

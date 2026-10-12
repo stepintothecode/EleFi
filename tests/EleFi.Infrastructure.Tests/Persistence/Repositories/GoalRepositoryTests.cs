@@ -56,6 +56,40 @@ public class GoalRepositoryTests
         Assert.All(all, t => Assert.Null(t.GoalId));
     }
 
+    [Fact]
+    public async Task GL6_a_transaction_already_on_screen_stops_naming_the_deleted_goal()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var sbi = await AddAsync(f, "SBI");
+        var repository = new GoalRepository(f.Db, f.Clock);
+        var goal = NewGoal(f);
+        await repository.AddAsync(goal);
+        var spent = await SpendAsync(f, sbi, 500_00);
+        await repository.SetGoalAsync(spent, goal.Id);
+
+        // Loaded through the same context, as the edit page would have it.
+        var open = await f.Transactions.FindAsync(spent);
+        Assert.Equal(goal.Id, open!.GoalId);
+
+        await repository.DeleteAsync(goal.Id);
+
+        Assert.Null((await f.Transactions.FindAsync(spent))!.GoalId);
+    }
+
+    [Fact]
+    public async Task A_deleted_goal_comes_back_for_undo()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var repository = new GoalRepository(f.Db, f.Clock);
+        var goal = NewGoal(f);
+        await repository.AddAsync(goal);
+        await repository.DeleteAsync(goal.Id);
+
+        await repository.RestoreAsync(goal.Id);
+
+        Assert.Single(await repository.ListAsync());
+    }
+
     private static Goal NewGoal(TestDatabase f) => new()
     {
         Name = "Ring",

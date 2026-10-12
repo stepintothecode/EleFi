@@ -6,7 +6,8 @@
 @using EleFi.Ui.Services
 @inject GoalService Goals
 @inject IContainerRepository Containers
-@inject ToastService Toasts
+@inject EleReactions Ele
+@inject UndoHistory Undo
 @inject NavigationManager Nav
 @inject IClock Clock
 
@@ -127,11 +128,6 @@ else
         <input id="goal-monthly" class="amount-input" type="text" inputmode="decimal" @bind="_monthlyText" placeholder="0.00" autocomplete="off" />
     </div>
 
-    @if (_error is not null)
-    {
-        <p class="notice error" role="alert">@_error</p>
-    }
-
     <button class="primary btn-block" @onclick="SaveAsync">Save</button>
 
     @if (_editingId is { } id)
@@ -159,13 +155,19 @@ else
     private HashSet<Guid> _picked = [];
     private string _openingText = string.Empty;
     private string _monthlyText = string.Empty;
-    private string? _error;
 
     /// <inheritdoc />
     protected override async Task OnInitializedAsync()
     {
         _containers = await Containers.ListSelectableAsync();
         await LoadAsync();
+    }
+
+    /// <summary>Loads the goals again. Called by the page's undo arrows.</summary>
+    public async Task ReloadAsync()
+    {
+        await LoadAsync();
+        StateHasChanged();
     }
 
     private async Task LoadAsync()
@@ -214,6 +216,10 @@ else
                         }
                     }
                 </span>
+                @if (Projection(view, currency) is { } projection)
+                {
+                    <span class="meta goal-projection">@projection</span>
+                }
                 <span class="meta">@Describe(view)</span>
             </button>
             @if (goal.FundingMode == FundingMode.TracksContributions && !goal.IsArchived)
@@ -255,7 +261,6 @@ else
         _picked = [];
         _openingText = string.Empty;
         _monthlyText = string.Empty;
-        _error = null;
         _editing = true;
         StateHasChanged();
     }
@@ -272,7 +277,6 @@ else
         _picked = [.. goal.Containers.Select(c => c.ContainerId)];
         _openingText = goal.OpeningAllocationMinor > 0 ? MoneyText.ToBareDecimal(Money.FromMinor(goal.OpeningAllocationMinor, currency)) : string.Empty;
         _monthlyText = goal.MonthlyContributionMinor is { } monthly ? MoneyText.ToBareDecimal(Money.FromMinor(monthly, currency)) : string.Empty;
-        _error = null;
         _editing = true;
     }
 
@@ -288,7 +292,7 @@ else
     {
         if (!MoneyText.TryParse(_targetText, Currency.Inr, out var target))
         {
-            _error = "Enter the target as an amount, like 300000.";
+            Ele.Problem("Enter the target as an amount, like 300000.");
             return;
         }
 
@@ -297,7 +301,7 @@ else
         {
             if (!MoneyText.TryParse(_openingText, Currency.Inr, out var openingMoney))
             {
-                _error = "Enter what is already saved as an amount.";
+                Ele.Problem("Enter what is already saved as an amount.");
                 return;
             }
 
@@ -309,7 +313,7 @@ else
         {
             if (!MoneyText.TryParse(_monthlyText, Currency.Inr, out var monthlyMoney))
             {
-                _error = "Enter the monthly amount as an amount.";
+                Ele.Problem("Enter the monthly amount as an amount.");
                 return;
             }
 
@@ -317,32 +321,89 @@ else
         }
 
         var draft = new GoalDraft(_name, target.Minor, _targetDate, _mode, [.. _picked], opening, monthly);
+        var before = _editingId is { } editing ? _views.FirstOrDefault(v => v.Goal.Id == editing)?.Goal : null;
+        var previous = before is null ? null : GoalDraft.From(before);
+
         var result = _editingId is { } id ? await Goals.UpdateAsync(id, draft) : await Goals.CreateAsync(draft);
         if (!result.Succeeded)
         {
-            _error = result.Error;
+            Ele.Problem(result.Error!);
             return;
         }
 
+        var goal = result.Goal!;
+        if (previous is null)
+        {
+            Undo.Push(
+                UndoHistory.Goals,
+                $"adding {goal.Name}",
+                () => Goals.DeleteAsync(goal.Id),
+                () => Goals.RestoreAsync(goal.Id, []));
+            Ele.Say($"{goal.Name} added. Good luck with it.");
+        }
+        else
+        {
+            Undo.Push(
+                UndoHistory.Goals,
+                $"changes to {goal.Name}",
+                async () => Checked(await Goals.UpdateAsync(goal.Id, previous)),
+                async () => Checked(await Goals.UpdateAsync(goal.Id, draft)));
+            Ele.Say($"{goal.Name} updated.");
+        }
+
         _editing = false;
-        Toasts.Ok(_editingId is null ? $"{result.Goal!.Name} added." : "Saved.");
         await LoadAsync();
     }
 
     private async Task ArchiveAsync(Guid id)
     {
-        await Goals.ArchiveAsync(id, !_editingArchived);
+        var archive = !_editingArchived;
+        await Goals.ArchiveAsync(id, archive);
         _editing = false;
-        Toasts.Ok(_editingArchived ? "Back among your goals." : "Archived. Its transactions are kept.");
+        Undo.Push(
+            UndoHistory.Goals,
+            archive ? "archiving the goal" : "bringing the goal back",
+            () => Goals.ArchiveAsync(id, !archive),
+            () => Goals.ArchiveAsync(id, archive));
+        Ele.Say(archive ? "Archived. Its transactions are kept." : "Back among your goals.", EleTone.Calm);
         await LoadAsync();
     }
 
     private async Task DeleteAsync(Guid id)
     {
-        await Goals.DeleteAsync(id);
+        var name = _name;
+        var contributions = await Goals.DeleteAsync(id);
         _editing = false;
-        Toasts.Ok("Goal deleted. Its transactions are untouched.");
+
+        // Undo brings it back with the same transactions counted toward it.
+        Undo.Push(
+            UndoHistory.Goals,
+            $"deleting {name}",
+            () => Goals.RestoreAsync(id, contributions),
+            () => Goals.DeleteAsync(id));
+        Ele.Say("Goal deleted. Its transactions are untouched.", EleTone.Calm);
         await LoadAsync();
+    }
+
+    private static void Checked(GoalResult result)
+    {
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(result.Error);
+        }
+    }
+
+    private static string? Projection(GoalView view, Currency currency)
+    {
+        if (view.ProjectedFinish is not { } finish || view.Standing.Status == GoalStatus.Achieved)
+        {
+            return null;
+        }
+
+        var pace = MoneyText.ToDisplayString(Money.FromMinor(view.PaceMinor, currency));
+        return view.PaceIsPlanned
+            ? $"At your planned {pace} a month, done by {finish:d MMM yyyy}."
+            : $"At this pace ({pace} a month), done by {finish:d MMM yyyy}.";
     }
 
     // Money put toward a goal is real money moving, so it is recorded as a transaction and

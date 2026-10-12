@@ -8,6 +8,7 @@ using EleFi.Domain.Filters;
 using EleFi.Domain.Goals;
 using EleFi.Domain.Money;
 using EleFi.Domain.Notices;
+using EleFi.Domain.Parties;
 using EleFi.Domain.Planning;
 using EleFi.Infrastructure.Persistence;
 using EleFi.Infrastructure.Persistence.Repositories;
@@ -191,25 +192,47 @@ public class LocalBackupTests
         await f.Db.SaveChangesAsync();
 
         // A plan, a notice, and a goal with a contribution.
-        await new PlanRepository(f.Db, f.Clock).AddAsync(new Plan
+        var sip = new Plan
         {
-            Title = "SIP", AmountMinor = 5_000_00, DueOn = Today, CreatedAt = f.Clock.UtcNow, UpdatedAt = f.Clock.UtcNow,
-        });
+            Title = "SIP",
+            AmountMinor = 5_000_00,
+            DueOn = Today,
+            CreatedAt = f.Clock.UtcNow,
+            UpdatedAt = f.Clock.UtcNow,
+        };
+        sip.Labels.Add(new PlanLabel { PlanId = sip.Id, LabelId = label.Id });
+        await new PlanRepository(f.Db, f.Clock).AddAsync(sip);
         await new NoticeRepository(f.Db, f.Clock).UpsertAsync(new Notice
         {
-            Title = "₹450 to Zomato", Body = "Recorded, needs review.", Route = "transactions/1",
-            CreatedAt = f.Clock.UtcNow, UpdatedAt = f.Clock.UtcNow,
+            Title = "₹450 to Zomato",
+            Body = "Recorded, needs review.",
+            Route = "transactions/1",
+            CreatedAt = f.Clock.UtcNow,
+            UpdatedAt = f.Clock.UtcNow,
         });
         var goals = new GoalRepository(f.Db, f.Clock);
         var ring = new Goal
         {
-            Name = "Ring", TargetAmountMinor = 3_00_000_00, StartDate = Today, TargetDate = Today.AddYears(2),
-            FundingMode = FundingMode.TracksContributions, OpeningAllocationMinor = 20_000_00,
-            CreatedAt = f.Clock.UtcNow, UpdatedAt = f.Clock.UtcNow,
+            Name = "Ring",
+            TargetAmountMinor = 3_00_000_00,
+            StartDate = Today,
+            TargetDate = Today.AddYears(2),
+            FundingMode = FundingMode.TracksContributions,
+            OpeningAllocationMinor = 20_000_00,
+            CreatedAt = f.Clock.UtcNow,
+            UpdatedAt = f.Clock.UtcNow,
         };
         ring.Containers.Add(new GoalContainer { GoalId = ring.Id, ContainerId = bank.Container.Id });
         await goals.AddAsync(ring);
         await goals.SetGoalAsync(kept.Transaction!.Id, ring.Id);
+
+        // A contact with a detail, a link, notes and an alias.
+        var mom = await f.Contacts.AddAsync("Mom");
+        mom.Notes = "Birthday 12 March";
+        await f.Contacts.UpdateAsync(mom);
+        await f.Contacts.AddDetailAsync(ContactDetail.Create(mom.Id, ContactDetailKind.Phone, "98765 43210", "Mobile", f.Clock.UtcNow));
+        await f.Contacts.AddLinkAsync(ContactLink.Between(mom.Id, shop.Id, ContactRelation.NotTheSame, f.Clock.UtcNow));
+        await f.Contacts.AddAliasAsync(mom.Id, "Amma");
 
         f.Db.ChangeTracker.Clear();
     }

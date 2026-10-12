@@ -5,6 +5,7 @@ using EleFi.Domain.Containers;
 using EleFi.Domain.Parties;
 using EleFi.Domain.Transactions;
 using EleFi.Ui.Components.Pages;
+using EleFi.Ui.Services;
 using EleFi.Ui.Tests.Support;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -76,6 +77,39 @@ public class QuickCaptureTests : Bunit.TestContext
     }
 
     [Fact]
+    public void Done_says_the_transaction_was_recorded_and_ele_comes_on_to_say_so()
+    {
+        Register();
+        var page = ToTheLastQuestion();
+
+        page.Find(".quick-done-button").Click();
+
+        // Ele is the only confirmation: no banner under the form as well.
+        Assert.Empty(page.FindAll(".quick-done"));
+
+        var ele = Services.GetRequiredService<EleReactions>().Current;
+        Assert.Equal(EleMoment.Recorded, ele!.Moment);
+        Assert.Equal("Zomato", ele.About);
+
+        // "Saved" read as money put aside. It is the transaction that was kept.
+        Assert.DoesNotContain("saved", ele.Line, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void A_quick_capture_can_be_undone_from_the_arrow_at_the_top()
+    {
+        Register();
+        var page = ToTheLastQuestion();
+        Assert.True(page.Find(".quick-top button.undo").HasAttribute("disabled"));
+
+        page.Find(".quick-done-button").Click();
+        var saved = Assert.Single(_transactions.Added);
+        page.Find(".quick-top button.undo").Click();
+
+        page.WaitForAssertion(() => Assert.Contains(saved.Id, _transactions.Deleted));
+    }
+
+    [Fact]
     public void Add_other_details_opens_the_full_form_filled_in_and_saves_nothing()
     {
         Register();
@@ -144,6 +178,9 @@ public class QuickCaptureTests : Bunit.TestContext
         Services.AddSingleton(parties);
         Services.AddSingleton<IMascotService>(new Fakes.SilentMascot());
         Services.AddSingleton(new CaptureService(_transactions, parties, apps, labels, clock));
+        Services.AddSingleton(new EditTransactionService(_transactions, parties, labels, Substitute.For<IAuditRepository>(), clock, apps));
+        Services.AddSingleton(new EleReactions(new Fakes.MemorySettings(), new ManualTime()));
+        Services.AddEleAndUndo();
     }
 
     private sealed class RecordingTransactions : ITransactionRepository
@@ -171,7 +208,13 @@ public class QuickCaptureTests : Bunit.TestContext
         public Task UpdateAsync(Transaction transaction, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
-        public Task SoftDeleteAsync(Guid id, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public List<Guid> Deleted { get; } = [];
+
+        public Task SoftDeleteAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            Deleted.Add(id);
+            return Task.CompletedTask;
+        }
 
         public Task RestoreAsync(Guid id, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
@@ -190,5 +233,8 @@ public class QuickCaptureTests : Bunit.TestContext
 
         public Task<IReadOnlyList<EleFi.Application.Typeahead.TypeaheadCandidate>> NotesForPartyAsync(string partyName, CancellationToken cancellationToken = default) =>
             _empty.NotesForPartyAsync(partyName, cancellationToken);
+
+        public Task<ReviewFacts> ReviewFactsAsync(CancellationToken cancellationToken = default) =>
+            _empty.ReviewFactsAsync(cancellationToken);
     }
 }

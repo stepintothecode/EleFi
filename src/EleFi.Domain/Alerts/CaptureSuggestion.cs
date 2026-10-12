@@ -110,8 +110,8 @@ public class CaptureSuggestion
     public string? CorroboratingFingerprint { get; set; }
 
     /// <summary>
-    /// The time of day the payment happened, when a Payment App reported it. Null for an SMS
-    /// alone, whose timestamp is when the bank noticed rather than when the money moved.
+    /// The time of day the payment happened: when the first alert about it arrived. Null when
+    /// the message dated the payment to an earlier day, whose hour the arrival says nothing about.
     /// </summary>
     public TimeOnly? OccurredAtTime { get; set; }
 

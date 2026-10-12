@@ -57,6 +57,42 @@ public sealed class AlertPartyResolver(
         return matches.Count == 1 ? matches[0].Id : null;
     }
 
+    /// <summary>
+    /// The container an alert names: by its last four digits (SM11), or failing that by the
+    /// account it names in words or the bank in its sender (SM18).
+    /// </summary>
+    /// <remarks>
+    /// Digits first, because they are exact. When they match nothing, or a message has none,
+    /// the name is tried among every selectable container; when they match several, among
+    /// those. Either way exactly one has to fit, or the answer is null and the usual guess
+    /// takes over, flagged for review like any other.
+    /// </remarks>
+    /// <param name="last4">The digits the alert carried, if any.</param>
+    /// <param name="accountName">The account as the message names it, if a rule captured it.</param>
+    /// <param name="sender">The SMS sender, or null for a Payment App, whose package names no bank.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    public async Task<Guid?> MatchAccountAsync(
+        string? last4,
+        string? accountName,
+        string? sender,
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Container> byDigits = string.IsNullOrEmpty(last4)
+            ? []
+            : await containers.FindByLast4Async(last4, cancellationToken).ConfigureAwait(false);
+
+        if (byDigits.Count == 1)
+        {
+            return byDigits[0].Id;
+        }
+
+        var candidates = byDigits.Count > 1
+            ? byDigits
+            : await containers.ListSelectableAsync(cancellationToken).ConfigureAwait(false);
+
+        return AccountNameMatch.Find(candidates, accountName, sender)?.Id;
+    }
+
     /// <summary>Works out both ends, or null when there is no container to record against.</summary>
     /// <param name="suggestion">What the alerts said.</param>
     /// <param name="cancellationToken">Cancellation.</param>

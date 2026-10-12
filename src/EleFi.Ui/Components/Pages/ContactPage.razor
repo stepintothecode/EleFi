@@ -1,0 +1,558 @@
+@page "/contacts/{Id:guid}"
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Contacts
+@using EleFi.Domain.Money
+@using EleFi.Domain.Parties
+@using EleFi.Ui.Services
+@inject ContactService Contacts
+@inject IContactPicker Picker
+@inject EleReactions Ele
+@inject UndoHistory Undo
+@inject TransactionListState List
+@inject NavigationManager Nav
+
+@*
+    One contact, everything EleFi knows about them, and the way to their transactions.
+
+    The money first, because that is usually why the page was opened: what went to them, what
+    came from them. Then how to reach them, what the user has noted, the other names they go
+    by, and the contacts linked to them. Merging another contact in lives here too, for the
+    duplicate the suggestions did not catch.
+*@
+
+<PageTitle>Contact</PageTitle>
+
+@if (_loading)
+{
+    <div class="card"><div class="skeleton" style="width:70%;"></div></div>
+}
+else if (_profile is null)
+{
+    <h1>Not found</h1>
+    <p class="muted">That contact is gone, perhaps merged into another.</p>
+    <a class="btn btn-ghost btn-block" href="settings/contacts">All contacts</a>
+}
+else
+{
+    var contact = _profile.Contact;
+
+    <div class="section-head">
+        <h1>@contact.Name</h1>
+        <span class="row" style="gap:4px;">
+            <UndoRedo Area="@UndoHistory.Contacts" OnChanged="ReloadAfterUndoAsync" />
+            <button class="btn-ghost rename" @onclick="StartRename">Rename</button>
+        </span>
+    </div>
+
+    <div class="card contact-money">
+        <div class="row between">
+            <div>
+                <div class="meta">Paid to them</div>
+                <div class="amount out">@Show(_profile.Totals.OutMinor)</div>
+            </div>
+            <div style="text-align:right;">
+                <div class="meta">Received from them</div>
+                <div class="amount in">@Show(_profile.Totals.InMinor)</div>
+            </div>
+        </div>
+        <div class="meta" style="margin-top:8px;">
+            @(_profile.TransactionCount == 1 ? "1 transaction" : $"{_profile.TransactionCount} transactions")
+        </div>
+        <button class="primary btn-block show-transactions" style="margin-top:12px;" @onclick="ShowTransactionsAsync">
+            Show transactions@(_profile.Linked.Count > 0 ? ", with linked" : null)
+        </button>
+    </div>
+
+    <div class="field-head section-gap">
+        <h2 style="margin:0;">Details</h2>
+        <button class="btn-ghost add-detail" @onclick="StartDetail">Add</button>
+    </div>
+    <div class="card contact-details">
+        @if (Picker.IsSupported || contact.PhoneContactKey is not null)
+        {
+            <div class="row between" style="margin-bottom:@(_profile.Details.Count > 0 ? "12px" : "0");">
+                <div class="grow">
+                    <div class="who">Phone contact</div>
+                    <div class="meta">@(contact.PhoneContactKey is null ? "Not linked" : "Linked to a contact on this phone")</div>
+                </div>
+                @if (contact.PhoneContactKey is { } key)
+                {
+                    <button class="btn-ghost open-phone-contact" @onclick="() => Picker.Open(key)">Open</button>
+                }
+                @if (Picker.IsSupported)
+                {
+                    <button class="btn-ghost link-phone-contact" disabled="@_busy" @onclick="LinkPhoneAsync">
+                        @(contact.PhoneContactKey is null ? "Link" : "Change")
+                    </button>
+                }
+            </div>
+        }
+
+        @if (_profile.Details.Count == 0)
+        {
+            <p class="muted small" style="margin:0;">No phone numbers, emails or addresses yet.</p>
+        }
+        @foreach (var detail in _profile.Details)
+        {
+            <div class="txn" @key="detail.Id">
+                <div class="grow">
+                    <div class="meta">@KindName(detail.Kind)@(detail.Label is { } l ? $" · {l}" : null)</div>
+                    <div class="contact-value">@detail.Value</div>
+                </div>
+                <button class="btn-ghost btn-icon danger" aria-label="Remove @detail.Value" @onclick="() => RemoveDetailAsync(detail)">Remove</button>
+            </div>
+        }
+    </div>
+
+    <h2 class="section-gap">Notes</h2>
+    <div class="card">
+        <textarea id="contact-notes" rows="3" placeholder="Anything worth remembering about them"
+                  value="@_notes" @onchange="NotesChangedAsync"></textarea>
+    </div>
+
+    @if (_profile.Aliases.Count > 0)
+    {
+        <h2 class="section-gap">Also known as</h2>
+        <div class="card contact-aliases">
+            <div class="chips">
+                @foreach (var alias in _profile.Aliases)
+                {
+                    <span class="chip">@alias</span>
+                }
+            </div>
+            <p class="muted small" style="margin-bottom:0;">Anything recorded under these names lands here.</p>
+        </div>
+    }
+
+    <div class="field-head section-gap">
+        <h2 style="margin:0;">Linked contacts</h2>
+        <button class="btn-ghost add-link" disabled="@(Others.Count == 0)" @onclick="StartLink">Link</button>
+    </div>
+    <div class="card contact-links">
+        @if (_profile.Linked.Count == 0)
+        {
+            <p class="muted small" style="margin:0;">None. Link another contact that is the same person, or another account of theirs.</p>
+        }
+        @foreach (var link in _profile.Linked)
+        {
+            <div class="txn" @key="link.LinkId">
+                <a class="grow txn-link" href="contacts/@link.ContactId">
+                    <div class="meta">@link.Relation.DisplayName()</div>
+                    <div class="who">@link.Name</div>
+                </a>
+                <button class="btn-ghost btn-icon" aria-label="Unlink @link.Name" @onclick="() => UnlinkAsync(link)">Unlink</button>
+            </div>
+        }
+    </div>
+
+    <h2 class="section-gap">Tidy up</h2>
+    <div class="card">
+        <p class="small muted" style="margin-top:0;">
+            The same person twice under different names? Merge the other into this one: its
+            transactions and details move here, and its name becomes one of this contact's.
+        </p>
+        <button class="btn-ghost btn-block merge-into" disabled="@(Others.Count == 0)" @onclick="StartMerge">Merge another contact into this one</button>
+    </div>
+}
+
+<Modal Open="_renaming" Title="Rename" OnCancel="() => _renaming = false">
+    <div class="field">
+        <label for="contact-name">Name</label>
+        <input id="contact-name" value="@_newName" @oninput="e => _newName = e.Value?.ToString() ?? string.Empty" autocomplete="off" />
+    </div>
+    <label class="row" style="gap:10px; align-items:center; margin-bottom:12px;">
+        <input type="checkbox" checked="@_keepOldName" @onchange="e => _keepOldName = e.Value is true" />
+        <span class="small">Keep "@_profile?.Contact.Name" as another name, so alerts that still use it land here</span>
+    </label>
+    <button class="primary btn-block" disabled="@_busy" @onclick="RenameAsync">Rename</button>
+</Modal>
+
+<Modal Open="_addingDetail" Title="Add a detail" OnCancel="() => _addingDetail = false">
+    <div class="chips" role="group" aria-label="Kind" style="margin-bottom:12px;">
+        @foreach (var kind in Enum.GetValues<ContactDetailKind>())
+        {
+            <button class="chip @(_detailKind == kind ? "on" : null)" @onclick="() => _detailKind = kind">@KindName(kind)</button>
+        }
+    </div>
+    <div class="field">
+        <label for="detail-value">@KindName(_detailKind)</label>
+        @if (_detailKind == ContactDetailKind.Address)
+        {
+            <textarea id="detail-value" rows="3" value="@_detailValue" @oninput="e => _detailValue = e.Value?.ToString() ?? string.Empty"></textarea>
+        }
+        else
+        {
+            <input id="detail-value" value="@_detailValue" @oninput="e => _detailValue = e.Value?.ToString() ?? string.Empty"
+                   inputmode="@(_detailKind == ContactDetailKind.Phone ? "tel" : _detailKind == ContactDetailKind.Email ? "email" : "text")"
+                   autocomplete="off" />
+        }
+    </div>
+    <div class="field">
+        <label for="detail-label">Label <span class="muted small">(optional)</span></label>
+        <input id="detail-label" value="@_detailLabel" @oninput="e => _detailLabel = e.Value?.ToString()" placeholder="Mobile, Work, Home" autocomplete="off" />
+    </div>
+    <button class="primary btn-block" disabled="@_busy" @onclick="AddDetailAsync">Add</button>
+</Modal>
+
+<Modal Open="_linking" Title="Link a contact" OnCancel="() => _linking = false">
+    <div class="field">
+        <label for="link-other">Contact</label>
+        <select id="link-other" @onchange="e => _otherId = Guid.TryParse(e.Value?.ToString(), out var g) ? g : null">
+            <option value="">Choose one</option>
+            @foreach (var other in Others)
+            {
+                <option value="@other.Id" selected="@(_otherId == other.Id)">@other.Name</option>
+            }
+        </select>
+    </div>
+    <div class="chips" role="group" aria-label="How they are related" style="margin-bottom:12px;">
+        @foreach (var relation in new[] { ContactRelation.SameAs, ContactRelation.AnotherAccountOf })
+        {
+            <button class="chip @(_relation == relation ? "on" : null)" @onclick="() => _relation = relation">@relation.DisplayName()</button>
+        }
+    </div>
+    <button class="primary btn-block" disabled="@(_busy || _otherId is null)" @onclick="LinkAsync">Link</button>
+</Modal>
+
+<Modal Open="_merging" Title="Merge into this contact" OnCancel="() => _merging = false">
+    <div class="field">
+        <label for="merge-other">Contact to fold in</label>
+        <select id="merge-other" @onchange="e => _otherId = Guid.TryParse(e.Value?.ToString(), out var g) ? g : null">
+            <option value="">Choose one</option>
+            @foreach (var other in Others)
+            {
+                <option value="@other.Id">@other.Name</option>
+            }
+        </select>
+    </div>
+    <p class="muted small">
+        Its transactions, details and links move here, and its name is kept as another name for
+        @_profile?.Contact.Name. Nothing is deleted, and you can undo it straight after.
+    </p>
+    <button class="primary btn-block" disabled="@(_busy || _otherId is null)" @onclick="MergeAsync">Merge</button>
+</Modal>
+
+@code {
+    /// <summary>The contact.</summary>
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private ContactProfile? _profile;
+    private IReadOnlyList<ContactSummary> _everyone = [];
+    private string? _notes;
+    private bool _loading = true;
+    private bool _busy;
+
+    private bool _renaming;
+    private string _newName = string.Empty;
+    private bool _keepOldName = true;
+
+    private bool _addingDetail;
+    private ContactDetailKind _detailKind = ContactDetailKind.Phone;
+    private string _detailValue = string.Empty;
+    private string? _detailLabel;
+
+    private bool _linking;
+    private bool _merging;
+    private Guid? _otherId;
+    private ContactRelation _relation = ContactRelation.SameAs;
+
+    // Everyone this contact could be linked to or merged with: not itself, not already linked.
+    private IReadOnlyList<ContactSummary> Others => [.. _everyone
+        .Where(c => c.Id != Id && _profile?.Linked.All(l => l.ContactId != c.Id) != false)];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        await LoadAsync();
+        _loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        _profile = await Contacts.ProfileAsync(Id);
+        _everyone = await Contacts.ListAsync();
+        _notes = _profile?.Contact.Notes;
+    }
+
+    private static string Show(long minor) => MoneyText.ToDisplayString(Money.SignedMinor(minor, Currency.Inr));
+
+    private static string KindName(ContactDetailKind kind) => kind switch
+    {
+        ContactDetailKind.Phone => "Phone",
+        ContactDetailKind.Email => "Email",
+        ContactDetailKind.Address => "Address",
+        _ => "Other",
+    };
+
+    private async Task ShowTransactionsAsync()
+    {
+        var withLinked = _profile!.Linked.Count > 0;
+        var filter = await Contacts.FilterForAsync(Id, withLinked);
+        var label = withLinked
+            ? $"{_profile.Contact.Name} and {_profile.Linked.Count} linked"
+            : _profile.Contact.Name!;
+
+        List.ShowContact(filter, label);
+        Nav.NavigateTo("transactions");
+    }
+
+    private void StartRename()
+    {
+        _newName = _profile?.Contact.Name ?? string.Empty;
+        _keepOldName = true;
+        _renaming = true;
+    }
+
+    // After an undo or redo, show the contact as it now is. A merge undone can bring back a
+    // contact this page was not showing, so a missing one is not an error.
+    private async Task ReloadAfterUndoAsync() => await LoadAsync();
+
+    private async Task RenameAsync()
+    {
+        _busy = true;
+        try
+        {
+            var id = Id;
+            var (oldName, newName, keep) = (_profile?.Contact.Name ?? string.Empty, _newName, _keepOldName);
+            var result = await Contacts.RenameAsync(id, newName, keep);
+            if (!result.Succeeded)
+            {
+                Ele.Problem(result.Error!);
+                return;
+            }
+
+            Undo.Push(
+                UndoHistory.Contacts,
+                $"renaming {oldName}",
+                async () => Checked(await Contacts.RenameAsync(id, oldName, keepOldName: false)),
+                async () => Checked(await Contacts.RenameAsync(id, newName, keep)));
+
+            _renaming = false;
+            Ele.Say($"Renamed to {result.Contact!.Name}.");
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task NotesChangedAsync(ChangeEventArgs e)
+    {
+        var id = Id;
+        var before = _profile?.Contact.Notes;
+        var after = e.Value?.ToString();
+        _notes = after;
+        await Contacts.SetNotesAsync(id, after);
+
+        Undo.Push(
+            UndoHistory.Contacts,
+            "the notes",
+            () => Contacts.SetNotesAsync(id, before),
+            () => Contacts.SetNotesAsync(id, after));
+
+        Ele.Say("Notes updated.", EleTone.Calm);
+        await LoadAsync();
+    }
+
+    private void StartDetail()
+    {
+        _detailKind = ContactDetailKind.Phone;
+        _detailValue = string.Empty;
+        _detailLabel = null;
+        _addingDetail = true;
+    }
+
+    private async Task AddDetailAsync()
+    {
+        _busy = true;
+        try
+        {
+            var id = Id;
+            var (kind, value, label) = (_detailKind, _detailValue, _detailLabel);
+            var result = await Contacts.AddDetailAsync(id, kind, value, label);
+            if (result.Error is { } problem)
+            {
+                Ele.Problem(problem);
+                return;
+            }
+
+            // Adding again makes a new detail, so each step remembers the latest one.
+            var added = result.Detail!.Id;
+            Undo.Push(
+                UndoHistory.Contacts,
+                $"adding {value}",
+                () => Contacts.RemoveDetailAsync(added),
+                async () => added = Checked(await Contacts.AddDetailAsync(id, kind, value, label)));
+
+            _addingDetail = false;
+            Ele.Say($"Added {result.Detail.Value}.");
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveDetailAsync(ContactDetail detail)
+    {
+        var id = Id;
+        var current = detail.Id;
+        await Contacts.RemoveDetailAsync(current);
+
+        Undo.Push(
+            UndoHistory.Contacts,
+            $"removing {detail.Value}",
+            async () => current = Checked(await Contacts.AddDetailAsync(id, detail.Kind, detail.Value, detail.Label)),
+            () => Contacts.RemoveDetailAsync(current));
+
+        Ele.Say($"Removed {detail.Value}.", EleTone.Calm);
+        await LoadAsync();
+    }
+
+    private async Task LinkPhoneAsync()
+    {
+        _busy = true;
+        try
+        {
+            if (await Picker.PickAsync() is not { } picked)
+            {
+                return;
+            }
+
+            await Contacts.LinkPhoneContactAsync(Id, picked);
+            Ele.Say($"Linked to {picked.Name} on your phone.");
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void StartLink()
+    {
+        _otherId = null;
+        _relation = ContactRelation.SameAs;
+        _linking = true;
+    }
+
+    private async Task LinkAsync()
+    {
+        if (_otherId is not { } other)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var id = Id;
+            var relation = _relation;
+            if (await Contacts.LinkAsync(id, other, relation) is { } problem)
+            {
+                Ele.Problem(problem);
+                return;
+            }
+
+            var name = _everyone.FirstOrDefault(c => c.Id == other)?.Name ?? "that contact";
+            Undo.Push(
+                UndoHistory.Contacts,
+                $"linking {name}",
+                () => Contacts.UnlinkBetweenAsync(id, other),
+                async () => CheckedLink(await Contacts.LinkAsync(id, other, relation)));
+
+            _linking = false;
+            Ele.Say($"Linked {name}.");
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task UnlinkAsync(LinkedContact link)
+    {
+        var id = Id;
+        await Contacts.UnlinkAsync(link.LinkId);
+
+        Undo.Push(
+            UndoHistory.Contacts,
+            $"unlinking {link.Name}",
+            async () => CheckedLink(await Contacts.LinkAsync(id, link.ContactId, link.Relation)),
+            () => Contacts.UnlinkBetweenAsync(id, link.ContactId));
+
+        Ele.Say($"Unlinked {link.Name}.", EleTone.Calm);
+        await LoadAsync();
+    }
+
+    private void StartMerge()
+    {
+        _otherId = null;
+        _merging = true;
+    }
+
+    private async Task MergeAsync()
+    {
+        if (_otherId is not { } other)
+        {
+            return;
+        }
+
+        var name = _everyone.FirstOrDefault(c => c.Id == other)?.Name ?? "That contact";
+
+        _busy = true;
+        try
+        {
+            var id = Id;
+            var result = await Contacts.MergeAsync(id, other);
+            if (result.Error is { } error)
+            {
+                Ele.Problem(error);
+                return;
+            }
+
+            // Redo merges again, which makes a fresh record; undo always reverses the latest.
+            var merge = result.Merge!;
+            Undo.Push(
+                UndoHistory.Contacts,
+                $"merging {name} into {_profile!.Contact.Name}",
+                () => Contacts.UndoMergeAsync(merge),
+                async () =>
+                {
+                    var again = await Contacts.MergeAsync(id, other);
+                    merge = again.Merge ?? throw new InvalidOperationException(again.Error);
+                });
+
+            _merging = false;
+            Ele.Say($"Merged {name} into {_profile!.Contact.Name}.");
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static void Checked(ContactResult result)
+    {
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(result.Error);
+        }
+    }
+
+    private static Guid Checked(DetailResult result) =>
+        result.Detail?.Id ?? throw new InvalidOperationException(result.Error);
+
+    private static void CheckedLink(string? problem)
+    {
+        if (problem is not null)
+        {
+            throw new InvalidOperationException(problem);
+        }
+    }
+}

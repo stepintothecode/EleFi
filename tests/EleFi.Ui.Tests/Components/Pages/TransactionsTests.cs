@@ -57,7 +57,7 @@ public class TransactionsTests : Bunit.TestContext
         Services.AddSingleton<ILabelRepository>(new Fakes.SeededLabels());
         Services.AddSingleton(new CsvExporter(_ledger, clock));
         Services.AddSingleton(Substitute.For<IFileShare>());
-        Services.AddSingleton(new ToastService());
+        Services.AddEleAndUndo();
         Services.AddSingleton(_state);
     }
 
@@ -67,7 +67,7 @@ public class TransactionsTests : Bunit.TestContext
         var page = RenderComponent<Transactions>();
         Assert.Empty(page.FindAll("[role=dialog]"));
 
-        page.Find(".section-head button").Click();
+        page.Find(".section-head button.open-filters").Click();
 
         Assert.Equal("Filters", page.Find("[role=dialog]").GetAttribute("aria-label"));
     }
@@ -76,7 +76,7 @@ public class TransactionsTests : Bunit.TestContext
     public void Today_and_this_week_are_offered_and_containers_are_in_picker_order()
     {
         var page = RenderComponent<Transactions>();
-        page.Find(".section-head button").Click();
+        page.Find(".section-head button.open-filters").Click();
 
         var chips = page.FindAll("[role=dialog] .chip").Select(c => c.TextContent.Trim()).ToList();
 
@@ -91,7 +91,7 @@ public class TransactionsTests : Bunit.TestContext
     public void Choosing_today_filters_to_today()
     {
         var page = RenderComponent<Transactions>();
-        page.Find(".section-head button").Click();
+        page.Find(".section-head button.open-filters").Click();
 
         page.FindAll("[role=dialog] .chip").First(c => c.TextContent.Trim() == "Today").Click();
 
@@ -111,10 +111,37 @@ public class TransactionsTests : Bunit.TestContext
     }
 
     [Fact]
+    public void Opened_from_a_contact_the_filters_say_whose_transactions_these_are_and_one_tap_clears_it()
+    {
+        _state.ShowContact(new TransactionFilter { PartyIds = [Guid.NewGuid()] }, "Rahul and 1 linked");
+        var page = RenderComponent<Transactions>();
+        page.Find(".section-head button.open-filters").Click();
+
+        var chip = page.FindAll("[role=dialog] .chip").First(c => c.TextContent.Contains("Rahul and 1 linked", StringComparison.Ordinal));
+        chip.Click();
+
+        Assert.Empty(_state.Filter.PartyIds);
+    }
+
+    [Fact]
+    public void In_and_out_each_get_a_line_of_their_own()
+    {
+        var page = RenderComponent<Transactions>();
+
+        var lines = page.FindAll(".list-total .flow-line");
+
+        Assert.Equal(2, lines.Count);
+        Assert.StartsWith("In", lines[0].TextContent.Trim(), StringComparison.Ordinal);
+        Assert.Contains("₹1,000.00", lines[0].TextContent, StringComparison.Ordinal);
+        Assert.StartsWith("Out", lines[1].TextContent.Trim(), StringComparison.Ordinal);
+        Assert.Contains("₹450.00", lines[1].TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Opening_a_row_and_coming_back_keeps_the_filter_and_marks_the_row()
     {
         var first = RenderComponent<Transactions>();
-        first.Find(".section-head button").Click();
+        first.Find(".section-head button.open-filters").Click();
         first.FindAll("[role=dialog] .chip").First(c => c.TextContent.Trim() == "Needs review").Click();
         first.Find("a.txn-link").Click();
 

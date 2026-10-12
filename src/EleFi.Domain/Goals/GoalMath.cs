@@ -84,6 +84,56 @@ public static class GoalMath
         return (long)((Int128)goal.TargetAmountMinor * elapsed / total);
     }
 
+    /// <summary>The window the recent pace is measured over.</summary>
+    public const int PaceWindowDays = 90;
+
+    /// <summary>
+    /// What has been going in lately, as a monthly figure: what went in over the last ninety
+    /// days, or since the goal started if that is sooner, spread over thirty-day months.
+    /// </summary>
+    /// <remarks>
+    /// Recent rather than lifetime, so a goal that sped up or slowed down is projected at the
+    /// pace it is going now. Money taken out counts against it.
+    /// </remarks>
+    /// <param name="contributions">Each contribution's day and amount, signed.</param>
+    /// <param name="startDate">When the goal started.</param>
+    /// <param name="today">Today.</param>
+    public static long MonthlyPace(IEnumerable<(DateOnly On, long Minor)> contributions, DateOnly startDate, DateOnly today)
+    {
+        ArgumentNullException.ThrowIfNull(contributions);
+
+        var from = DateOnly.FromDayNumber(Math.Max(startDate.DayNumber, today.DayNumber - PaceWindowDays));
+        var days = Math.Max(30, today.DayNumber - from.DayNumber);
+        var sum = contributions.Where(c => c.On > from && c.On <= today).Sum(c => c.Minor);
+
+        return (long)((Int128)sum * 30 / days);
+    }
+
+    /// <summary>
+    /// When the goal will be reached at a monthly pace, or null when nothing is going in.
+    /// </summary>
+    /// <param name="progressMinor">Progress so far.</param>
+    /// <param name="targetMinor">The target.</param>
+    /// <param name="monthlyPaceMinor">What goes in each month.</param>
+    /// <param name="today">Today.</param>
+    public static DateOnly? ProjectedFinish(long progressMinor, long targetMinor, long monthlyPaceMinor, DateOnly today)
+    {
+        if (progressMinor >= targetMinor)
+        {
+            return today;
+        }
+
+        if (monthlyPaceMinor <= 0)
+        {
+            return null;
+        }
+
+        var months = CeilDivide(targetMinor - progressMinor, monthlyPaceMinor);
+
+        // A pace so slow it would take centuries is no projection at all.
+        return months > 1200 ? null : today.AddMonths((int)months);
+    }
+
     /// <summary>Whole months left until a date, counting a part month as one. At least one.</summary>
     /// <param name="today">Today.</param>
     /// <param name="targetDate">The target date.</param>
@@ -98,6 +148,6 @@ public static class GoalMath
         return Math.Max(1, months);
     }
 
-    private static long CeilDivide(long amount, int parts) =>
+    private static long CeilDivide(long amount, long parts) =>
         amount <= 0 ? 0 : (amount + parts - 1) / parts;
 }

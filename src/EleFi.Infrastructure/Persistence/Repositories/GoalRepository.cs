@@ -72,6 +72,29 @@ public sealed class GoalRepository(EleFiDbContext db, IClock clock) : IGoalRepos
             .ConfigureAwait(false);
 
         await scope.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        // The bulk statement skips the change tracker, so a transaction this context already
+        // holds would go on naming the goal. Bring those in line with what was written.
+        foreach (var entry in db.ChangeTracker.Entries<Transaction>().Where(e => e.Entity.GoalId == id))
+        {
+            var goalId = entry.Property(t => t.GoalId);
+            goalId.CurrentValue = null;
+            goalId.OriginalValue = null;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task RestoreAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var goal = await db.Goals.IgnoreQueryFilters().FirstOrDefaultAsync(g => g.Id == id, cancellationToken).ConfigureAwait(false);
+        if (goal is null)
+        {
+            return;
+        }
+
+        goal.DeletedAt = null;
+        goal.UpdatedAt = clock.UtcNow;
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

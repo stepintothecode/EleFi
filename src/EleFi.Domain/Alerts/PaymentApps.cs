@@ -34,11 +34,14 @@ public static class PaymentApps
     /// <summary>Amazon Pay, which lives inside the Amazon shopping app.</summary>
     public static readonly PaymentApp AmazonPay = new("in.amazon.mShop.android.shopping", "Amazon Pay");
 
-    /// <summary>CRED.</summary>
+    /// <summary>CRED. Its notifications must be switched on in Android's settings, or no listener sees them.</summary>
     public static readonly PaymentApp Cred = new("com.dreamplug.androidapp", "CRED");
 
+    /// <summary>HDFC Bank's PayZapp, under the package it installs as on a phone today.</summary>
+    public static readonly PaymentApp PayZapp = new("com.hdfcbank.payzapp", "PayZapp");
+
     /// <summary>Every app whose notifications may be read.</summary>
-    public static IReadOnlyList<PaymentApp> All { get; } = [GPay, PhonePe, Paytm, AmazonPay, Cred];
+    public static IReadOnlyList<PaymentApp> All { get; } = [GPay, PhonePe, Paytm, AmazonPay, Cred, PayZapp];
 
     /// <summary>The app with this package name, or null when it is not on the list.</summary>
     /// <param name="package">The package that posted a notification.</param>

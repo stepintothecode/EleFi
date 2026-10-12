@@ -50,6 +50,22 @@ public class LabelServiceTests
         Assert.Equal(["Food", "Travel"], ordered.Select(l => l.Name));
     }
 
+    [Fact]
+    public async Task Deleting_says_which_transactions_lost_it_and_restoring_puts_it_back_on_them()
+    {
+        var repository = Substitute.For<ILabelRepository>();
+        var carried = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        repository.FindAsync(Food.Id, Arg.Any<CancellationToken>()).Returns(Food);
+        repository.DeleteAsync(Food.Id, Arg.Any<CancellationToken>()).Returns(carried);
+        var service = new LabelService(repository, Substitute.For<IClock>());
+
+        var deleted = await service.DeleteAsync(Food.Id);
+        await service.RestoreAsync(Food.Id, deleted.DetachedFrom);
+
+        Assert.Equal(carried, deleted.DetachedFrom);
+        await repository.Received(1).RestoreAsync(Food.Id, Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(carried)), Arg.Any<CancellationToken>());
+    }
+
     private static LabelService Service(IReadOnlyList<Label> labels, IReadOnlyDictionary<Guid, int> counts)
     {
         var repository = Substitute.For<ILabelRepository>();

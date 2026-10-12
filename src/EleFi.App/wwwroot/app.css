@@ -249,20 +249,6 @@ html, body {
 .quick-choices { display: flex; flex-wrap: wrap; gap: 8px; }
 .quick-actions { display: flex; gap: var(--ele-gap); margin-top: 18px; }
 
-.quick-done {
-  margin-top: 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #dcfce7;
-  color: #14532d;
-  border-radius: var(--ele-radius);
-  padding: 14px;
-}
-.quick-done .glyph { font-size: 1.8rem; }
-@media (prefers-color-scheme: dark) {
-  .quick-done { background: #14321f; color: #bbf7d0; }
-}
 
 /* Shown by index.html before Blazor has started. */
 .boot {
@@ -351,6 +337,20 @@ h2 { font-size: 1.05rem; margin: 20px 0 10px; color: var(--ele-text-dim); font-w
   min-width: 0;
   overflow: hidden;
 }
+/* A tile is a button: it opens what the figure is made of. */
+button.tile {
+  border: none;
+  color: var(--ele-text);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: auto;
+  font: inherit;
+  transition: transform var(--ele-quick), background var(--ele-quick);
+}
+button.tile:active { transform: scale(0.97); background: color-mix(in srgb, var(--ele-accent) 12%, var(--ele-surface-2)); }
+button.tile:disabled { opacity: 1; }
 .tile .label { font-size: 0.75rem; color: var(--ele-text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
 .tile .value {
   font-variant-numeric: tabular-nums;
@@ -758,15 +758,15 @@ button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owe
 /*
   Hide amounts. The layout puts this class on the whole shell, so every amount on every page
   and sheet is covered at once, and no page can forget to. Blurred rather than replaced, so
-  the layout does not shift when it is switched. Toasts are left readable: they vanish in
-  seconds, and a blurred error message is worse than a briefly visible amount.
+  the layout does not shift when it is switched. Ele's words are left readable: they vanish in
+  seconds, and a blurred problem is worse than a briefly visible amount. Ele's amount is not.
 */
 .amounts-hidden .amount,
 .amounts-hidden .headline,
 .amounts-hidden .tile .value,
 .amounts-hidden .timeline-changes .was,
 .amounts-hidden .timeline-changes .now,
-.amounts-hidden .quick-done .small {
+.amounts-hidden .ele-about .amount {
   filter: blur(9px);
   user-select: none;
   transition: filter var(--ele-settle);
@@ -821,6 +821,18 @@ button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owe
 hr.divider { border: none; border-top: 1px solid var(--ele-line); margin: 16px 0; }
 .section-gap { margin: 22px 0 10px; }
 
+/* Contacts: a letter in a circle for each, duplicates divided by a hairline. */
+.contact-initial {
+  border-radius: 50%;
+  background: var(--ele-accent-soft);
+  color: var(--ele-accent-strong);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.duplicate + .duplicate { border-top: 1px solid var(--ele-line); margin-top: 12px; padding-top: 12px; }
+.contact-value { white-space: pre-line; overflow-wrap: anywhere; }
+.contact-link { color: var(--ele-accent); text-decoration: none; font-weight: 600; }
+
 /* The total under the transaction list, set off by a rule. */
 .list-total {
   display: flex;
@@ -832,6 +844,7 @@ hr.divider { border: none; border-top: 1px solid var(--ele-line); margin: 16px 0
   padding: 14px 4px 2px;
 }
 .list-total > .amount { font-size: 1.15rem; }
+.list-total .flow-line + .flow-line { margin-top: 2px; }
 
 /* The row the user has just come back from: a lavender wash that fades. */
 .txn-link.returned { animation: returned 2.4s ease-out both; }
@@ -1083,77 +1096,134 @@ details.completed summary {
 }
 
 /*
-  Toasts.
+  Ele reacting to a change (EleOverlay).
 
-  Messages used to render at the top of the page. When you are at the Save button with the
-  page scrolled down, a confirmation up there is invisible: you press Save, nothing appears
-  to happen, and you press it again. These float above the tab bar instead, where your
-  thumb already is.
+  The only messenger. Pops in from the right above the tab bar and bobs while it speaks.
+  When it is done, or when a newer one arrives, it is marked leaving and slides down while it
+  fades (EleReactions.LeaveDuration, 420ms). Every tap goes through to the app underneath;
+  pointer-events is set inline on the component so its test can hold it to that, and only the
+  cross takes a tap. Above sheets (80), because a problem inside a sheet has to be seen, and
+  it blocks nothing there either.
+
+  Pleased hops, calm only floats, cross shakes its head.
 */
-.toast-host {
+.ele-stage {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(var(--ele-tabs-height) + var(--ele-safe-bottom) + 10px);
-  z-index: 60;
+  inset: 0;
+  z-index: 90;
+}
+
+.ele-pop {
+  position: absolute;
+  right: calc(12px + var(--ele-safe-right));
+  bottom: calc(var(--ele-tabs-height) + var(--ele-safe-bottom) + 84px);
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: min(80vw, 340px);
+  animation: ele-arrive 560ms cubic-bezier(0.2, 0.9, 0.25, 1.25) both;
+}
+.ele-pop.ele-leaving { animation: ele-leave 420ms ease-in forwards; }
+.ele-pop.ele-leaving .ele-figure,
+.ele-pop.ele-leaving .ele-bubble { animation: none; }
+
+/* Quick capture has no tab bar, so Ele sits lower there. */
+.shell:has(> .page-bare) .ele-pop { bottom: calc(var(--ele-safe-bottom) + 96px); }
+
+.ele-figure {
+  width: 78px;
+  height: 78px;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.2));
+  animation: ele-float 1.7s ease-in-out 560ms infinite;
+}
+.ele-figure .mascot { width: 78px; height: 78px; display: block; }
+
+/* Pleased hops, cross shakes its head, calm just floats; then all settle into the float. */
+.ele-pleased .ele-figure {
+  animation:
+    ele-hop 560ms cubic-bezier(0.3, 1.6, 0.5, 1) 420ms 2,
+    ele-float 1.7s ease-in-out 1540ms infinite;
+}
+.ele-cross .ele-figure {
+  animation:
+    ele-shake 460ms ease-in-out 420ms 2,
+    ele-float 1.7s ease-in-out 1340ms infinite;
+}
+.ele-cross .ele-bubble { border-color: color-mix(in srgb, var(--ele-out) 55%, var(--ele-line)); }
+.ele-cross .ele-line { color: var(--ele-out); }
+
+.ele-bubble {
+  order: -1;
+  position: relative;
+  margin-bottom: 34px;
+  padding: 10px 13px;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--ele-surface);
+  color: var(--ele-text);
+  border: 1px solid var(--ele-line);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 0 calc(16px + var(--ele-safe-left)) 0 calc(16px + var(--ele-safe-right));
-  pointer-events: none;
+  gap: 2px;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  animation: ele-speak 300ms ease-out 200ms both;
+}
+.ele-line { font-weight: 650; }
+.ele-about { color: var(--ele-text-dim); font-size: 0.8rem; }
+
+.ele-close {
+  position: absolute;
+  top: -12px;
+  right: -2px;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--ele-line);
+  background: var(--ele-surface);
+  color: var(--ele-text-dim);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.ele-close svg { width: 14px; height: 14px; }
+
+/* A 30px circle drawn, a 46px target touched (NFR-6.6). */
+.ele-close::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
 }
 
-.toast {
-  pointer-events: auto;
-  max-width: 560px;
-  width: 100%;
-  border-radius: var(--ele-radius);
-  padding: 12px 14px;
-  font-size: 0.92rem;
-  line-height: 1.4;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
-  animation: toast-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-.toast.leaving { animation: toast-out 180ms ease-in both; }
-.toast .glyph { font-size: 1.1rem; line-height: 1.3; flex: 0 0 auto; }
-.toast .body { flex: 1 1 auto; min-width: 0; }
-.toast .close {
-  flex: 0 0 auto;
-  background: none;
-  border: none;
-  color: inherit;
-  opacity: 0.75;
-  min-height: auto;
-  padding: 0 2px;
-  font-size: 1rem;
-}
-
-.toast-action {
-  flex: 0 0 auto;
-  min-height: 32px;
-  padding: 4px 12px;
-  border-radius: 999px;
-  border: none;
-  background: var(--ele-primary);
-  color: var(--ele-on-primary);
-  font-weight: 700;
-  font-size: 0.85rem;
-  align-self: center;
-}
-.toast.ok { background: #14532d; color: #dcfce7; }
-.toast.error { background: #7f1d1d; color: #fee2e2; }
-.toast.info { background: var(--ele-accent-strong); color: #fff; }
-
-@keyframes toast-in {
-  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+@keyframes ele-arrive {
+  from { opacity: 0; transform: translateX(70px) scale(0.55) rotate(10deg); }
+  60% { opacity: 1; transform: translateX(-6px) scale(1.05) rotate(-3deg); }
   to { opacity: 1; transform: none; }
 }
-@keyframes toast-out {
-  to { opacity: 0; transform: translateY(8px) scale(0.98); }
+@keyframes ele-leave {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(46px) scale(0.92); }
+}
+@keyframes ele-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+@keyframes ele-hop {
+  0%, 100% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-18px) scale(1.04, 0.96); }
+  70% { transform: translateY(0) scale(0.96, 1.04); }
+}
+@keyframes ele-shake {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-7deg); }
+  75% { transform: rotate(7deg); }
+}
+@keyframes ele-speak {
+  from { opacity: 0; transform: translateY(6px) scale(0.92); }
+  to { opacity: 1; transform: none; }
 }
 
 /* NFR-2.10: skeletons, never spinners, for anything over 200ms. */
@@ -1478,3 +1548,58 @@ a.about-hero .chev { width: 18px; height: 18px; margin-left: auto; color: var(--
 .goal-pick.on .goal-check { background: var(--ele-primary); border-color: var(--ele-primary); color: var(--ele-on-primary); }
 .goal-pick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mode-card { align-items: flex-start; }
+
+/* Undo and redo: two arrows at the top of a page, greyed out when there is nothing to do. */
+.undo-redo { display: inline-flex; align-items: center; }
+.undo-redo .icon-btn { width: 40px; height: 40px; min-height: 40px; color: var(--ele-text); }
+.undo-redo .icon-btn:disabled { color: var(--ele-text-dim); opacity: 0.35; }
+
+/* Quick capture's top: title, a gap, the arrows, the cross. */
+.quick-top .grow { flex: 1 1 auto; }
+.quick-top .undo-redo { margin-top: 2px; }
+
+/* A whole row that opens something: a container, a contact. */
+.row-button {
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  min-height: auto;
+  border-radius: 0;
+}
+.row-button .who, .row-button .detail, .row-button .meta { display: block; }
+.row-button .chev { color: var(--ele-text-dim); font-size: 1.4rem; line-height: 1; flex: 0 0 auto; }
+.row-button:active { background: var(--ele-surface-2); }
+.card.flat { box-shadow: none; padding: 4px 12px; margin: 0 0 12px; background: var(--ele-surface-2); }
+
+/* The duplicates button beside New, with how many are waiting. */
+.duplicates-link { position: relative; color: var(--ele-text); }
+.duplicate-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.duplicate-actions .merge { color: var(--ele-accent); font-weight: 700; }
+
+/* A checkbox with its words beside it. */
+.check-row { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.check-row input { width: 20px; height: 20px; min-height: auto; }
+.weekday-chips .chip { min-width: 46px; justify-content: center; }
+.plan-history { margin-top: 14px; }
+.plan-history summary { cursor: pointer; font-weight: 650; padding: 6px 0; }
+
+/* The streak sheet: this week, and the recent weeks as dots. */
+.streak-now { border-radius: var(--ele-radius-sm); padding: 10px 12px; margin: 4px 0 12px; font-size: 0.9rem; }
+.streak-now.tidy { background: color-mix(in srgb, var(--ele-in) 14%, var(--ele-surface)); }
+.streak-now.untidy { background: color-mix(in srgb, var(--ele-out) 12%, var(--ele-surface)); }
+.streak-weeks { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.streak-week { width: 18px; height: 18px; border-radius: 50%; background: var(--ele-surface-2); border: 2px solid var(--ele-line); }
+.streak-week.clean { background: var(--ele-in); border-color: var(--ele-in); }
+.streak-week.frozen { background: #7dd3fc; border-color: #38bdf8; }
+.streak-week.missed { background: transparent; border-color: var(--ele-out); }
+.streak-week.now { outline: 2px dashed var(--ele-accent); outline-offset: 2px; }
+
+/* Home: what is still planned this month, and the goals in brief. */
+a.still-planned { display: flex; flex-direction: column; gap: 4px; color: var(--ele-text); text-decoration: none; }
+a.still-planned .chev { color: var(--ele-text-dim); font-size: 1.4rem; line-height: 1; }
+a.home-goal { display: flex; flex-direction: column; gap: 6px; color: var(--ele-text); text-decoration: none; padding: 6px 0; }
+a.home-goal + a.home-goal { border-top: 1px solid var(--ele-line); padding-top: 12px; margin-top: 6px; }
+.goal-projection { color: var(--ele-accent); }

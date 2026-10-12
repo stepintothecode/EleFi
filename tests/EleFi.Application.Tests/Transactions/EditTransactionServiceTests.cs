@@ -79,8 +79,30 @@ public class EditTransactionServiceTests
         Assert.True(spent.NeedsReview);
     }
 
-    private EditTransactionService Service() =>
-        new(_ledger.Transactions, _ledger.Parties, _ledger.Labels, Substitute.For<IAuditRepository>(), new MovableClock());
+    [Fact]
+    public async Task The_history_names_the_payee_and_the_container_rather_than_their_ids()
+    {
+        var spent = await SpendAsync();
+        var swiggy = await _ledger.Parties.GetOrCreateExternalAsync("Swiggy");
+        var bank = _ledger.PartyOf(_ledger.ContainerRows[0]);
+        var audit = Substitute.For<IAuditRepository>();
+        audit.TimelineAsync(EditTransactionService.EntityType, spent.Id, Arg.Any<CancellationToken>())
+            .Returns([new EleFi.Domain.Audit.AuditEvent
+            {
+                Action = EleFi.Domain.Audit.AuditAction.Updated,
+                Changes = $"[{{\"field\":\"DestinationPartyId\",\"from\":\"{spent.DestinationPartyId}\",\"to\":\"{swiggy.Id}\"}},"
+                    + $"{{\"field\":\"SourcePartyId\",\"from\":\"{bank.Id}\",\"to\":\"{bank.Id}\"}}]",
+            }]);
+
+        var history = await Service(audit).HistoryAsync(spent.Id);
+
+        var changes = Assert.Single(history).Changes;
+        Assert.Contains(changes, c => c is { Field: "Paid to", From: "Shop", To: "Swiggy" });
+        Assert.Contains(changes, c => c is { Field: "Paid from", From: "SBI" });
+    }
+
+    private EditTransactionService Service(IAuditRepository? audit = null) =>
+        new(_ledger.Transactions, _ledger.Parties, _ledger.Labels, audit ?? Substitute.For<IAuditRepository>(), new MovableClock(), _ledger.Apps);
 
     private async Task<Transaction> SpendAsync()
     {

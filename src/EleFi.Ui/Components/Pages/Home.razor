@@ -13,6 +13,11 @@
 @inject TransactionListState ListState
 @inject INoticeRepository Notices
 @inject IClock Clock
+@inject EleFi.Application.Streaks.SteadyLedgerService Streaks
+@inject EleFi.Application.Planning.PlanService Planner
+@inject EleFi.Application.Goals.GoalService Goals
+@inject ISettingsStore Settings
+@inject EleReactions Ele
 
 @*
     The dashboard answers one question in three seconds: what do I actually have?
@@ -33,7 +38,7 @@
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M12.6 2.5c.5 3-1 4.6-2.4 6.2C8.7 10.3 7.5 11.8 7.5 14.4A4.6 4.6 0 0 0 12 19c2.6 0 4.6-1.9 4.6-4.6 0-1.6-.6-2.8-1.4-3.9.1 1.3-.4 2.3-1.3 2.8.3-2.8-.4-6.7-1.3-10.8Z" />
         </svg>
-        <span>0 weeks</span>
+        <span>@(_streak is null ? "..." : $"{_streak.Weeks} {(_streak.Weeks == 1 ? "week" : "weeks")}")</span>
     </button>
     <a class="bell" href="notifications" aria-label="@(_unread == 0 ? "Notifications" : $"Notifications, {_unread} unread")">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -60,7 +65,53 @@
         Earn a freeze every four clean weeks, so a holiday does not reset a long streak. Ele
         celebrates at 4, 12, 26 and 52 weeks.
     </p>
-    <p class="notice small" style="background:var(--ele-accent-soft);">Counting starts in a coming update. Your weeks are not being counted yet.</p>
+    @if (_streak is { } streak)
+    {
+        <div class="streak-now @(streak.ThisWeek.IsTidy ? "tidy" : "untidy")" role="status">
+            @if (streak.ThisWeek.IsTidy)
+            {
+                <strong>This week is tidy so far.</strong>
+            }
+            else
+            {
+                <strong>To keep this week:</strong>
+                @if (streak.ThisWeek.ToReview > 0)
+                {
+                    <span> review @streak.ThisWeek.ToReview @(streak.ThisWeek.ToReview == 1 ? "transaction" : "transactions")</span>
+                }
+                @if (streak.ThisWeek.ToReview > 0 && streak.ThisWeek.PlansOpen > 0)
+                {
+                    <span> and</span>
+                }
+                @if (streak.ThisWeek.PlansOpen > 0)
+                {
+                    <span> tick off @streak.ThisWeek.PlansOpen @(streak.ThisWeek.PlansOpen == 1 ? "plan" : "plans")</span>
+                }
+                <span>.</span>
+            }
+        </div>
+
+        @if (streak.Recent.Count > 0)
+        {
+            <div class="streak-weeks" aria-label="Recent weeks">
+                @foreach (var week in streak.Recent)
+                {
+                    <span class="streak-week @week.Result.ToString().ToLowerInvariant()"
+                          title="Week of @week.Monday.ToString("d MMM"): @WeekText(week.Result)"
+                          aria-label="Week of @week.Monday.ToString("d MMM"): @WeekText(week.Result)"></span>
+                }
+                <span class="streak-week now @(streak.ThisWeek.IsTidy ? "clean" : null)" aria-label="This week"></span>
+            </div>
+        }
+
+        <p class="small">
+            @streak.Freezes @(streak.Freezes == 1 ? "freeze" : "freezes") in hand.
+            @if (streak.NextMilestone is { } next)
+            {
+                @($" Next celebration at {next} weeks.")
+            }
+        </p>
+    }
     <button class="primary btn-block" @onclick="() => _streakOpen = false">Got it</button>
 </Modal>
 
@@ -92,21 +143,64 @@
     skeleton is honest, a flash of zero is not.
 *@
 <div class="tiles enter">
-    <div class="tile">
-        <div class="label">Liquid</div>
-        <div class="value">@(_loading ? "..." : Format(_netWorth.Liquid))</div>
-    </div>
-    <div class="tile">
-        <div class="label">Locked</div>
-        <div class="value">@(_loading ? "..." : Format(_netWorth.Locked))</div>
-    </div>
-    <div class="tile">
-        <div class="label">Owed</div>
-        <div class="value @(!_loading && _netWorth.Owed.Minor > 0 ? "owed amount" : string.Empty)">
+    <button type="button" class="tile" aria-label="Liquid: what makes it up" disabled="@_loading" @onclick="() => _part = NetWorthPart.Liquid">
+        <span class="label">Liquid</span>
+        <span class="value">@(_loading ? "..." : Format(_netWorth.Liquid))</span>
+    </button>
+    <button type="button" class="tile" aria-label="Locked: what makes it up" disabled="@_loading" @onclick="() => _part = NetWorthPart.Locked">
+        <span class="label">Locked</span>
+        <span class="value">@(_loading ? "..." : Format(_netWorth.Locked))</span>
+    </button>
+    <button type="button" class="tile" aria-label="Owed: what makes it up" disabled="@_loading" @onclick="() => _part = NetWorthPart.Owed">
+        <span class="label">Owed</span>
+        <span class="value @(!_loading && _netWorth.Owed.Minor > 0 ? "owed amount" : string.Empty)">
             @(_loading ? "..." : Format(_netWorth.Owed))
-        </div>
-    </div>
+        </span>
+    </button>
 </div>
+
+@* What a figure is made of, from the same rule that adds it up. *@
+<Modal Open="_part is not null" Title="@PartTitle" OnCancel="() => _part = null">
+    @if (_part is { } part)
+    {
+        var rows = _balances.Where(b => BalanceMath.PartOf(b) == part).ToList();
+        <p class="muted small">@PartHelp(part)</p>
+        @if (rows.Count == 0)
+        {
+            <p class="small">No container counts toward this yet.</p>
+        }
+        else
+        {
+            <div class="card flat">
+                @foreach (var balance in rows)
+                {
+                    <div class="txn">
+                        <div class="grow">
+                            <div class="who">@balance.Name</div>
+                            @if (balance.Detail is { } detail)
+                            {
+                                <div class="detail">@detail</div>
+                            }
+                            <div class="meta">@balance.Kind.DisplayName()</div>
+                        </div>
+                        <div class="amount @(part == NetWorthPart.Owed ? "owed" : null)">
+                            @Format(part == NetWorthPart.Owed ? balance.AmountOwed : balance.Balance)
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        <a class="btn btn-ghost btn-block" href="containers">All containers</a>
+    }
+</Modal>
+
+@if (!_loading && _balances.Count == 0)
+{
+    <div class="card muted">
+        No containers yet. Add the bank account or wallet you use most and give it the balance it has today.
+        <a class="btn btn-primary btn-block" href="containers" style="margin-top: 12px;">Add a container</a>
+    </div>
+}
 
 @* Recorded from an SMS or a payment app, or captured quickly: real, counted, and worth a
    look. One tap opens the list filtered to just those. *@
@@ -186,36 +280,58 @@ else
     </div>
 }
 
-<h2>Containers</h2>
-@if (_balances.Count == 0 && !_loading)
+@* What is still to come this month: bills not paid yet, money not arrived yet. *@
+@if (_planned is { Count: > 0 } planned)
 {
-    <div class="card muted">
-        No containers yet. Add the bank account or wallet you use most and give it the balance it has today.
-        <a class="btn btn-primary btn-block" href="containers" style="margin-top: 12px;">Add a container</a>
-    </div>
+    <a class="card still-planned" href="plans">
+        <span class="row between">
+            <span class="who">Still planned this month</span>
+            <span class="chev" aria-hidden="true">&rsaquo;</span>
+        </span>
+        <span class="meta">
+            @if (planned.OutMinor > 0)
+            {
+                <span><span class="amount out">@Format(Money.SignedMinor(planned.OutMinor, _home))</span> to pay</span>
+            }
+            @if (planned.OutMinor > 0 && planned.InMinor > 0)
+            {
+                <span> &middot; </span>
+            }
+            @if (planned.InMinor > 0)
+            {
+                <span><span class="amount in">@Format(Money.SignedMinor(planned.InMinor, _home))</span> to come in</span>
+            }
+            <span> &middot; @planned.Count @(planned.Count == 1 ? "plan" : "plans")</span>
+        </span>
+    </a>
 }
-else
+
+@if (_goals.Count > 0)
 {
+    <div class="section-head">
+        <h2>Goals</h2>
+        <a class="btn-ghost small" href="plans?tab=goals">All goals</a>
+    </div>
     <div class="card">
-        @foreach (var balance in _balances)
+        @foreach (var view in _goals)
         {
-            <div class="txn">
-                <div class="grow">
-                    <div class="who">@balance.Name</div>
-                    @if (balance.Detail is { } detail)
-                    {
-                        <div class="detail">@detail</div>
-                    }
-                    <div class="meta">@balance.Kind.DisplayName()@(balance.IsLiability ? " - owed" : string.Empty)</div>
-                </div>
-                <div class="amount @(balance.IsLiability ? "owed" : string.Empty)">
-                    @Format(balance.IsLiability ? balance.AmountOwed : balance.Balance)
-                </div>
-            </div>
+            <a class="home-goal" href="plans?tab=goals">
+                <span class="row between small">
+                    <span class="who">@view.Goal.Name</span>
+                    <span>@view.Standing.Percent%</span>
+                </span>
+                <span class="goal-bar" role="progressbar" aria-label="@view.Goal.Name progress"
+                      aria-valuemin="0" aria-valuemax="100" aria-valuenow="@view.Standing.Percent">
+                    <span class="goal-fill @GoalClass(view.Standing.Status)" style="width:@(view.Standing.Percent)%;"></span>
+                </span>
+                @if (view.ProjectedFinish is { } finish && view.Standing.Status != EleFi.Domain.Goals.GoalStatus.Achieved)
+                {
+                    <span class="meta">At this pace, done by @finish.ToString("MMM yyyy")</span>
+                }
+            </a>
         }
     </div>
 }
-
 @code {
     private bool _loading = true;
     private NetWorth _netWorth;
@@ -228,6 +344,44 @@ else
     private int _needsReview;
     private int _unread;
     private bool _streakOpen;
+    private EleFi.Domain.Streaks.SteadyStreak? _streak;
+    private NetWorthPart? _part;
+    private EleFi.Application.Planning.PlannedTotals? _planned;
+    private IReadOnlyList<EleFi.Application.Goals.GoalView> _goals = [];
+
+    // The streak Ele last celebrated, so a milestone is cheered once, not on every visit.
+    private const string CelebratedKey = "streak.celebrated";
+
+    private const int GoalsShown = 3;
+
+    private string PartTitle => _part switch
+    {
+        NetWorthPart.Liquid => $"Liquid: {Format(_netWorth.Liquid)}",
+        NetWorthPart.Locked => $"Locked: {Format(_netWorth.Locked)}",
+        NetWorthPart.Owed => $"Owed: {Format(_netWorth.Owed)}",
+        _ => string.Empty,
+    };
+
+    private static string PartHelp(NetWorthPart part) => part switch
+    {
+        NetWorthPart.Liquid => "Money you can spend this week: bank accounts, cash and wallets.",
+        NetWorthPart.Locked => "Real wealth you cannot spend on demand: deposits, PPF and investments, at what you put in.",
+        _ => "What your credit cards owe. A card paid ahead shows as a negative amount here.",
+    };
+
+    private static string WeekText(EleFi.Domain.Streaks.WeekResult result) => result switch
+    {
+        EleFi.Domain.Streaks.WeekResult.Clean => "clean",
+        EleFi.Domain.Streaks.WeekResult.Frozen => "kept by a freeze",
+        _ => "missed",
+    };
+
+    private static string GoalClass(EleFi.Domain.Goals.GoalStatus status) => status switch
+    {
+        EleFi.Domain.Goals.GoalStatus.Achieved => "achieved",
+        EleFi.Domain.Goals.GoalStatus.OnTrack => "on-track",
+        _ => "behind",
+    };
 
     private DatePreset _period = DatePreset.ThisMonth;
     private TransactionFilter _range = TransactionFilter.Empty;
@@ -250,13 +404,36 @@ else
         _range = TransactionFilter.Empty.WithPreset(_period, Clock.Today);
         await LoadSpendAsync();
 
+        _streak = await Streaks.CurrentAsync();
+        _planned = await Planner.StillPlannedAsync();
+        _goals = [.. (await Goals.OverviewAsync()).Where(v => !v.Goal.IsArchived).Take(GoalsShown)];
+
         // The mascot reacts, but nothing waits on it (NFR-2.7).
         _mood = _netWorth.Owed.Minor > _netWorth.Liquid.Minor ? MascotMood.Concerned : MascotMood.Idle;
+        CelebrateMilestone();
 
         _loading = false;
     }
 
     public void Dispose() => Privacy.Changed -= OnPrivacyChanged;
+
+    private void CelebrateMilestone()
+    {
+        if (_streak?.MilestoneReached is not { } weeks)
+        {
+            return;
+        }
+
+        var key = weeks.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (Settings.Read(CelebratedKey, string.Empty) == key)
+        {
+            return;
+        }
+
+        Settings.Write(CelebratedKey, key);
+        _mood = MascotMood.Happy;
+        Ele.Say($"{weeks} steady weeks in a row. Your ledger is true, and that is a real habit.");
+    }
 
     private void OnPrivacyChanged() => InvokeAsync(StateHasChanged);
 

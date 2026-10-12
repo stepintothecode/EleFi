@@ -66,6 +66,8 @@ public static class DependencyInjection
         services.AddScoped<IAppRepository, AppRepository>();
         services.AddScoped<ISuggestionRepository, SuggestionRepository>();
         services.AddScoped<IAuditRepository, AuditRepository>();
+        services.AddScoped<IContactRepository, ContactRepository>();
+        services.AddScoped<EleFi.Application.Contacts.ContactService>();
 
         services.AddScoped<ContainerService>();
         services.AddScoped<LabelService>();
@@ -76,6 +78,7 @@ public static class DependencyInjection
         services.AddScoped<IPlanRepository, PlanRepository>();
         services.AddScoped<INoticeRepository, NoticeRepository>();
         services.AddScoped<EleFi.Application.Planning.PlanService>();
+        services.AddScoped<EleFi.Application.Streaks.SteadyLedgerService>();
         services.AddScoped<IGoalRepository, GoalRepository>();
         services.AddScoped<EleFi.Application.Goals.GoalService>();
         services.AddScoped<AlertPartyResolver>();

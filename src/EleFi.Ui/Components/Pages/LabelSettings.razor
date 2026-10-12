@@ -3,7 +3,8 @@
 @using EleFi.Domain.Labels
 @using EleFi.Ui.Services
 @inject LabelService LabelsService
-@inject ToastService Toasts
+@inject EleReactions Ele
+@inject UndoHistory Undo
 
 @*
     Labels, on a page of their own.
@@ -17,7 +18,10 @@
 
 <div class="section-head">
     <h1>Labels</h1>
-    <button class="btn-ghost" @onclick="StartCreate">Add</button>
+    <span class="row" style="gap:4px;">
+        <UndoRedo Area="@UndoHistory.Labels" OnChanged="ReloadAsync" />
+        <button class="btn-ghost add-label" @onclick="StartCreate">Add</button>
+    </span>
 </div>
 
 <div class="card">
@@ -117,18 +121,40 @@
     private async Task SaveAsync()
     {
         var name = _editing ?? string.Empty;
+        var colour = _colour;
+        var previous = _editingId is { } editing ? _labels.FirstOrDefault(l => l.Id == editing) : null;
+        var (oldName, oldColour) = (previous?.Name, previous?.Colour);
 
         var result = _editingId is { } id
-            ? await LabelsService.UpdateAsync(id, name, _colour)
-            : await LabelsService.CreateAsync(name, _colour);
+            ? await LabelsService.UpdateAsync(id, name, colour)
+            : await LabelsService.CreateAsync(name, colour);
 
         if (!result.Succeeded)
         {
-            Toasts.Error(result.Error!);
+            Ele.Problem(result.Error!);
             return;
         }
 
-        Toasts.Ok(_editingId is null ? $"Added {result.Label!.Name}." : $"Renamed to {result.Label!.Name}.");
+        var label = result.Label!;
+        if (_editingId is null)
+        {
+            Undo.Push(
+                UndoHistory.Labels,
+                $"adding {label.Name}",
+                async () => Checked(await LabelsService.DeleteAsync(label.Id)),
+                () => LabelsService.RestoreAsync(label.Id, null));
+            Ele.Say($"Added {label.Name}.");
+        }
+        else
+        {
+            Undo.Push(
+                UndoHistory.Labels,
+                $"renaming {oldName}",
+                async () => Checked(await LabelsService.UpdateAsync(label.Id, oldName!, oldColour)),
+                async () => Checked(await LabelsService.UpdateAsync(label.Id, name, colour)));
+            Ele.Say($"Renamed to {label.Name}.");
+        }
+
         CancelEdit();
         await ReloadAsync();
     }
@@ -153,11 +179,27 @@
 
         if (!result.Succeeded)
         {
-            Toasts.Error(result.Error!);
+            Ele.Problem(result.Error!);
             return;
         }
 
-        Toasts.Ok($"Deleted {label.Name}.");
+        // Undo puts the label back on exactly the transactions it was taken off.
+        var detached = result.DetachedFrom ?? [];
+        Undo.Push(
+            UndoHistory.Labels,
+            $"deleting {label.Name}",
+            () => LabelsService.RestoreAsync(label.Id, detached),
+            async () => Checked(await LabelsService.DeleteAsync(label.Id)));
+
+        Ele.Say($"Deleted {label.Name}.", EleTone.Calm);
         await ReloadAsync();
+    }
+
+    private static void Checked(LabelResult result)
+    {
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(result.Error);
+        }
     }
 }

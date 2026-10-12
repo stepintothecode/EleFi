@@ -1,0 +1,187 @@
+@page "/settings/contacts/duplicates"
+@using EleFi.Application.Contacts
+@using EleFi.Domain.Parties
+@using EleFi.Ui.Services
+@inject ContactService Contacts
+@inject EleReactions Ele
+@inject UndoHistory Undo
+
+@*
+    Possible duplicates, one pair at a time.
+
+    The bank writes "ZOMATO LTD", the app writes "Zomato", and the two need folding into one.
+    Each pair gets three answers: Merge folds them into one, Same keeps both but linked, and
+    Different stops the pair being suggested. Every answer can be undone from the arrows.
+*@
+
+<PageTitle>Possible duplicates</PageTitle>
+
+<div class="section-head">
+    <div class="field-head" style="margin:0;">
+        <h1 style="margin:0;">Possible duplicates</h1>
+        <InfoButton Topic="Merge, Same and Different">
+            <p><strong>Merge</strong> makes them one contact. You choose which name to keep. Every transaction, detail and link of the other moves to it, and the other name is kept as another name for it, so anything recorded under that name later lands in the right place. Nothing is deleted.</p>
+            <p><strong>Same</strong> keeps both contacts as they are, linked as the same person or place. Each one's page shows the other, and its transactions can be seen together. Nothing moves.</p>
+            <p><strong>Different</strong> changes nothing about either contact. The pair is simply never suggested again.</p>
+            <p class="muted small">All three can be undone with the arrows at the top.</p>
+        </InfoButton>
+    </div>
+    <UndoRedo Area="@UndoHistory.Contacts" OnChanged="ReloadAsync" />
+</div>
+
+@if (_loading)
+{
+    <div class="card"><div class="skeleton" style="width:60%;"></div></div>
+}
+else if (_pairs.Count == 0)
+{
+    <div class="card empty-state">
+        <div class="who">Nothing looks doubled</div>
+        <p class="muted small">When two contacts look like the same person or place, they show up here.</p>
+    </div>
+}
+else
+{
+    <div class="card">
+        @foreach (var pair in _pairs)
+        {
+            <div class="duplicate" @key="(pair.First.Id, pair.Second.Id)">
+                <div class="who">@pair.First.Name <span class="muted">and</span> @pair.Second.Name</div>
+                <div class="meta">@pair.Why</div>
+                <div class="duplicate-actions">
+                    <button class="btn-ghost merge" disabled="@_busy" @onclick="() => StartMerge(pair)">Merge</button>
+                    <button class="btn-ghost same" disabled="@_busy" @onclick="() => LinkAsync(pair, ContactRelation.SameAs)">Same</button>
+                    <button class="btn-ghost not-same" disabled="@_busy" @onclick="() => LinkAsync(pair, ContactRelation.NotTheSame)">Different</button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<Modal Open="_merging is not null" Title="Merge into one" OnCancel="() => _merging = null">
+    @if (_merging is { } pair)
+    {
+        <p class="small">Which name do you want to keep?</p>
+        <div class="chips">
+            @foreach (var side in new[] { pair.First, pair.Second })
+            {
+                <button class="chip @(_keep == side.Id ? "on" : null)" @onclick="() => _keep = side.Id">@side.Name</button>
+            }
+        </div>
+        <p class="muted small">
+            The other one's transactions, details and links move to the one you keep, and its name
+            becomes another name for it. Nothing is deleted, and the arrows at the top undo it.
+        </p>
+        <button class="primary btn-block" disabled="@(_busy || _keep is null)" @onclick="MergeAsync">Merge</button>
+    }
+</Modal>
+
+@code {
+    private IReadOnlyList<DuplicateSuggestion> _pairs = [];
+    private bool _loading = true;
+    private bool _busy;
+
+    private DuplicateSuggestion? _merging;
+    private Guid? _keep;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        _loading = false;
+    }
+
+    private async Task ReloadAsync() => _pairs = await Contacts.DuplicatesAsync();
+
+    private void StartMerge(DuplicateSuggestion pair)
+    {
+        _merging = pair;
+
+        // The one used more is usually the name to keep.
+        _keep = pair.First.TransactionCount >= pair.Second.TransactionCount ? pair.First.Id : pair.Second.Id;
+    }
+
+    private async Task MergeAsync()
+    {
+        if (_merging is not { } pair || _keep is not { } keep)
+        {
+            return;
+        }
+
+        var absorb = keep == pair.First.Id ? pair.Second : pair.First;
+        var kept = keep == pair.First.Id ? pair.First : pair.Second;
+
+        _busy = true;
+        try
+        {
+            var result = await Contacts.MergeAsync(keep, absorb.Id);
+            if (result.Error is { } error)
+            {
+                Ele.Problem(error);
+                return;
+            }
+
+            // Redo merges again, which makes a fresh record; undo always reverses the latest.
+            var merge = result.Merge!;
+            Undo.Push(
+                UndoHistory.Contacts,
+                $"merging {absorb.Name} into {kept.Name}",
+                () => Contacts.UndoMergeAsync(merge),
+                async () =>
+                {
+                    var again = await Contacts.MergeAsync(keep, absorb.Id);
+                    merge = again.Merge ?? throw new InvalidOperationException(again.Error);
+                });
+
+            _merging = null;
+            Ele.Say($"Merged {absorb.Name} into {kept.Name}.");
+            await ReloadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task LinkAsync(DuplicateSuggestion pair, ContactRelation relation)
+    {
+        _busy = true;
+        try
+        {
+            if (await Contacts.LinkAsync(pair.First.Id, pair.Second.Id, relation) is { } problem)
+            {
+                Ele.Problem(problem);
+                return;
+            }
+
+            var (first, second) = (pair.First, pair.Second);
+            Undo.Push(
+                UndoHistory.Contacts,
+                relation == ContactRelation.NotTheSame
+                    ? $"marking {first.Name} and {second.Name} different"
+                    : $"linking {first.Name} and {second.Name}",
+                () => Contacts.UnlinkBetweenAsync(first.Id, second.Id),
+                async () =>
+                {
+                    if (await Contacts.LinkAsync(first.Id, second.Id, relation) is { } again)
+                    {
+                        throw new InvalidOperationException(again);
+                    }
+                });
+
+            // Different changes nothing, so Ele is calm about it; linking is a small win.
+            if (relation == ContactRelation.NotTheSame)
+            {
+                Ele.Say($"{first.Name} and {second.Name} will not be suggested again.", EleTone.Calm);
+            }
+            else
+            {
+                Ele.Say($"Linked {first.Name} and {second.Name}.");
+            }
+            await ReloadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

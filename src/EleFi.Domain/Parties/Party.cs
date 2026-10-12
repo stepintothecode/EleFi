@@ -37,8 +37,30 @@ public class Party : Entity
     /// <summary>When it was last used. Ranks suggestions.</summary>
     public DateTimeOffset? LastUsedAt { get; set; }
 
+    /// <summary>What the user has written about this contact. External parties only.</summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// The phone's own key for the contact this one was linked to, so it can be opened in the
+    /// phone's Contacts app. Not a copy of that contact: only what the user picked is kept.
+    /// </summary>
+    public string? PhoneContactKey { get; set; }
+
+    /// <summary>
+    /// The contact this one was merged into, or renamed to, when this row is an
+    /// <see cref="IsAlias">alias</see> (CT4).
+    /// </summary>
+    public Guid? MergedIntoPartyId { get; set; }
+
     /// <summary>True when this party is one of the user's own containers.</summary>
     public bool IsInternal => Kind == PartyKind.Container;
+
+    /// <summary>
+    /// True when this row is only another name for a live contact: one merged away, or a name
+    /// kept from before a rename. It is soft-deleted and appears in no list, but capturing
+    /// with its name lands on the contact it points at.
+    /// </summary>
+    public bool IsAlias => DeletedAt is not null && MergedIntoPartyId is not null;
 
     /// <summary>
     /// Normalises an external party name so "Rahul", "rahul " and "RAHUL" are one party

@@ -83,6 +83,8 @@ internal sealed class InMemoryLedger
             Task.FromResult(0);
 
         public Task SoftDeleteAsync(Guid containerId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task RestoreAsync(Guid containerId, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     internal sealed class PartyStore(InMemoryLedger ledger) : IPartyRepository
@@ -111,6 +113,13 @@ internal sealed class InMemoryLedger
         }
 
         public Task TouchAsync(IEnumerable<Guid> partyIds, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<IReadOnlyDictionary<Guid, string>> NamesAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, string>>(ledger.PartyRows
+                .Where(p => ids.Contains(p.Id))
+                .Select(p => (p.Id, Name: p.Name ?? ledger.ContainerRows.Find(c => c.Id == p.ContainerId)?.Name))
+                .Where(p => p.Name is not null)
+                .ToDictionary(p => p.Id, p => p.Name!));
     }
 
     internal sealed class AppStore : IAppRepository
@@ -136,6 +145,9 @@ internal sealed class InMemoryLedger
         }
 
         public Task TouchAsync(IEnumerable<Guid> appIds, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<IReadOnlyDictionary<Guid, string>> NamesAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, string>>(Rows.Where(a => ids.Contains(a.Id)).ToDictionary(a => a.Id, a => a.Name));
     }
 
     internal sealed class LabelStore : ILabelRepository
@@ -149,7 +161,10 @@ internal sealed class InMemoryLedger
 
         public Task UpdateAsync(Label label, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<Guid>> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Guid>>([]);
+
+        public Task RestoreAsync(Guid id, IReadOnlyCollection<Guid> transactionIds, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<bool> NameTakenAsync(string name, Guid? excluding = null, CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
@@ -227,6 +242,11 @@ internal sealed class InMemoryLedger
                 .GroupBy(t => t.Description!, StringComparer.OrdinalIgnoreCase)
                 .Select(g => new EleFi.Application.Typeahead.TypeaheadCandidate(g.Key, g.Count(), g.Max(t => t.CreatedAt)))
                 .ToList());
+
+        public Task<ReviewFacts> ReviewFactsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ReviewFacts(
+                Live.Any() ? Live.Min(t => t.CreatedAt) : null,
+                [.. Live.Where(t => t.NeedsReview).Select(t => t.OccurredOn)]));
 
         // The real repository loads the parties and apps the derived Kind and the UI need.
         private Transaction Load(Transaction t)

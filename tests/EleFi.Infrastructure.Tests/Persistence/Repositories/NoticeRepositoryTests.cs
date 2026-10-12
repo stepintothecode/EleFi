@@ -42,6 +42,25 @@ public class NoticeRepositoryTests
         Assert.Equal(2, await repository.UnreadCountAsync());
     }
 
+    [Fact]
+    public async Task Mark_all_read_shows_as_read_when_the_same_screen_lists_them_again()
+    {
+        await using var f = await TestDatabase.CreateAsync();
+        var repository = new NoticeRepository(f.Db, f.Clock);
+        await repository.UpsertAsync(Make("One", "a"));
+        await repository.UpsertAsync(Make("Two", "b"));
+
+        // The Notifications page lists, marks all, and lists again through one context. A
+        // bulk statement that skips the change tracker left the listed rows unread on screen.
+        Assert.All(await repository.ListAsync(), n => Assert.False(n.IsRead));
+
+        await repository.SetAllReadAsync(true);
+        Assert.All(await repository.ListAsync(), n => Assert.True(n.IsRead));
+
+        await repository.SetAllReadAsync(false);
+        Assert.All(await repository.ListAsync(), n => Assert.False(n.IsRead));
+    }
+
     private static Notice Make(string title, string route) => new()
     {
         Title = title,

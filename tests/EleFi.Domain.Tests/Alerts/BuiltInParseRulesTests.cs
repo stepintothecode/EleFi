@@ -83,6 +83,52 @@ public class BuiltInParseRulesTests
         Assert.Equal(AlertChannel.PaymentApp, parsed.Value.Channel);
     }
 
+    // The wording each app is known to use, one or more lines per app. A phrasing seen on a
+    // real phone that is missing here is a new line first, then a rule change.
+    [Theory]
+    [InlineData("com.google.android.apps.nbu.paisa.user", "₹1.00 paid to Rahul Kumar", 100, "Rahul Kumar")]
+    [InlineData("com.google.android.apps.nbu.paisa.user", "Payment successful\nYou paid ₹450.00 to ZOMATO", 45000, "ZOMATO")]
+    [InlineData("com.phonepe.app", "Paid ₹450 to Zomato\nDebited from HDFC Bank - 4417", 45000, "Zomato")]
+    [InlineData("com.phonepe.app", "Sent ₹2,000 successfully to Rahul", 200000, "Rahul")]
+    [InlineData("net.one97.paytm", "Paid Rs.450 to Zomato", 45000, "Zomato")]
+    [InlineData("net.one97.paytm", "Rs. 450 paid successfully to Zomato", 45000, "Zomato")]
+    [InlineData("in.amazon.mShop.android.shopping", "You have successfully paid ₹349 to Swiggy", 34900, "Swiggy")]
+    [InlineData("in.amazon.mShop.android.shopping", "Payment of ₹349 to Swiggy was successful", 34900, "Swiggy")]
+    [InlineData("com.hdfcbank.payzapp", "Payment of Rs. 1,250.00 to BESCOM is successful", 125000, "BESCOM")]
+    [InlineData("com.hdfcbank.payzapp", "Rs. 99.00 paid to Chai Point via PayZapp", 9900, "Chai Point")]
+    [InlineData("com.dreamplug.androidapp", "₹500 paid to Zomato using CRED UPI", 50000, "Zomato")]
+    [InlineData("com.dreamplug.androidapp", "Transaction successful! ₹200 sent to Rahul", 20000, "Rahul")]
+    public void Each_payment_apps_own_wording_is_read(string package, string text, long minor, string payee)
+    {
+        var parsed = Parse(AlertChannel.PaymentApp, package, text);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(TransactionKind.Debit, parsed.Value.Direction);
+        Assert.Equal(minor, parsed.Value.AmountMinor);
+        Assert.Equal(payee, parsed.Value.Counterparty);
+        Assert.Equal(PaymentApps.Find(package)!.Name, parsed.Value.AppName);
+    }
+
+    [Theory]
+    [InlineData("com.google.android.apps.nbu.paisa.user", "Rahul Kumar paid you ₹500.00")]
+    [InlineData("com.phonepe.app", "Received ₹500 from Rahul Kumar")]
+    [InlineData("com.hdfcbank.payzapp", "You have received Rs. 500.00 from Rahul Kumar")]
+    public void Money_received_in_each_app_is_read_as_a_credit(string package, string text)
+    {
+        var parsed = Parse(AlertChannel.PaymentApp, package, text);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(TransactionKind.Credit, parsed.Value.Direction);
+        Assert.Equal(50000, parsed.Value.AmountMinor);
+        Assert.Equal("Rahul Kumar", parsed.Value.Counterparty);
+    }
+
+    [Fact]
+    public void PayZapp_is_on_the_allow_list_under_its_real_package()
+    {
+        Assert.Equal("PayZapp", PaymentApps.Find("com.hdfcbank.payzapp")!.Name);
+    }
+
     [Fact]
     public void A_note_after_for_is_kept_as_the_note()
     {

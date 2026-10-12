@@ -61,15 +61,22 @@ public sealed class NoticeRepository(EleFiDbContext db, IClock clock) : INoticeR
     public async Task SetAllReadAsync(bool read, CancellationToken cancellationToken = default)
     {
         var now = clock.UtcNow;
-        DateTimeOffset? readAt = read ? now : null;
 
-        // One statement for the whole list rather than loading every row.
-        await db.Notices
-            .ExecuteUpdateAsync(
-                set => set
-                    .SetProperty(n => n.ReadAt, readAt)
-                    .SetProperty(n => n.UpdatedAt, now),
-                cancellationToken)
+        // Through the change tracker, not a bulk statement. A bulk update skips the tracker,
+        // so the Notifications page, listing again through the same context, got back the
+        // instances it already held, still unread, and "Mark all read" appeared to do
+        // nothing. The list is capped and small, so loading the rows that change is cheap.
+        var changing = await db.Notices
+            .Where(n => read ? n.ReadAt == null : n.ReadAt != null)
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        foreach (var notice in changing)
+        {
+            notice.ReadAt = read ? now : null;
+            notice.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

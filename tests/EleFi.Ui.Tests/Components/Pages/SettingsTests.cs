@@ -39,6 +39,30 @@ public class SettingsTests : Bunit.TestContext
     }
 
     [Fact]
+    public void Contacts_are_one_tap_away_beside_deleted_transactions()
+    {
+        Register();
+
+        var component = RenderComponent<Settings>();
+
+        Assert.NotNull(component.Find("a[href='settings/contacts']"));
+    }
+
+    [Fact]
+    public void Eles_sound_can_be_switched_off_and_stays_off_but_ele_itself_cannot()
+    {
+        Register();
+        var component = RenderComponent<Settings>();
+
+        // Ele is the only messenger now, so only its sound is optional.
+        Assert.Empty(component.FindAll("input[aria-label='Ele reacts to changes']"));
+        Assert.True(component.Find("input[aria-label=\"Ele's sound\"]").HasAttribute("checked"));
+        component.Find("input[aria-label=\"Ele's sound\"]").Change(false);
+
+        Assert.Equal("false", _store.Read(EleReactions.SoundKey, "true"));
+    }
+
+    [Fact]
     public void Hiding_amounts_is_a_switch_here_too()
     {
         Register();
@@ -200,7 +224,8 @@ public class SettingsTests : Bunit.TestContext
         Services.AddSingleton<IFilePick>(new NoPick());
         Services.AddSingleton(links ?? new RecordingLinks());
         Services.AddSingleton<IMascotService>(new Fakes.SilentMascot());
-        Services.AddSingleton(new ToastService());
+        Services.AddSingleton(new EleReactions(_store, new ManualTime()));
+        Services.AddEleAndUndo();
     }
 
     private sealed class RecordingLinks : ILinkOpener

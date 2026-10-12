@@ -1,0 +1,182 @@
+@page "/settings/contacts"
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Contacts
+@using EleFi.Domain.Parties
+@using EleFi.Ui.Services
+@inject ContactService Contacts
+@inject IContactPicker Picker
+@inject EleReactions Ele
+@inject NavigationManager Nav
+
+@*
+    Every contact so far: everyone money has gone to or come from, plus anyone added here.
+
+    Likely duplicates have a page of their own, behind the button beside New, which carries
+    how many are waiting. The bank writes "ZOMATO LTD", the app writes "Zomato", and the two
+    need folding into one.
+*@
+
+<PageTitle>Contacts</PageTitle>
+
+<div class="section-head">
+    <h1>Contacts</h1>
+    <span class="row" style="gap:4px;">
+        <a class="icon-btn duplicates-link" href="settings/contacts/duplicates"
+           aria-label="@(_duplicates == 0 ? "Possible duplicates" : $"Possible duplicates, {_duplicates} waiting")">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="9" cy="8" r="3.2" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+                <circle cx="16.5" cy="9" r="2.6" /><path d="M15.5 14.2A4.6 4.6 0 0 1 20.5 19" />
+            </svg>
+            @if (_duplicates > 0)
+            {
+                <span class="bell-count">@_duplicates</span>
+            }
+        </a>
+        <button class="btn-ghost new-contact" @onclick="() => _adding = true">New</button>
+    </span>
+</div>
+
+@if (_loading)
+{
+    <div class="card"><div class="skeleton" style="width:60%;"></div></div>
+}
+else
+{
+    <input id="contact-search" class="section-gap" placeholder="Find a contact" value="@_search"
+           @oninput="e => _search = e.Value?.ToString() ?? string.Empty" autocomplete="off" />
+
+    @if (Shown.Count == 0)
+    {
+        <div class="card muted small" style="margin-top:12px;">
+            @(_all.Count == 0
+                ? "No contacts yet. Everyone you pay or are paid by appears here, and you can add someone with New."
+                : "Nobody by that name.")
+        </div>
+    }
+    else
+    {
+        <div class="card settings-list" style="margin-top:12px;">
+            @foreach (var contact in Shown)
+            {
+                <a class="settings-row contact-row" href="contacts/@contact.Id" @key="contact.Id">
+                    <span class="settings-icon contact-initial" aria-hidden="true">@Initial(contact.Name)</span>
+                    <span class="settings-text">
+                        <span class="settings-title who">@contact.Name</span>
+                        <span class="settings-sub">@Describe(contact)</span>
+                    </span>
+                    <span class="chev" aria-hidden="true">&rsaquo;</span>
+                </a>
+            }
+        </div>
+    }
+}
+
+<Modal Open="_adding" Title="New contact" OnCancel="() => _adding = false">
+    @if (Picker.IsSupported)
+    {
+        <button class="btn-ghost btn-block from-phone" disabled="@_busy" @onclick="FromPhoneAsync">Pick from phone contacts</button>
+        <p class="muted small" style="text-align:center;">or type a name</p>
+    }
+    <div class="field">
+        <label for="new-contact-name">Name</label>
+        <input id="new-contact-name" value="@_newName" @oninput="e => _newName = e.Value?.ToString() ?? string.Empty"
+               placeholder="Rahul, Zomato, Landlord" autocomplete="off" />
+    </div>
+    <button class="primary btn-block" disabled="@(_busy || string.IsNullOrWhiteSpace(_newName))" @onclick="CreateAsync">Add contact</button>
+</Modal>
+
+@code {
+    private IReadOnlyList<ContactSummary> _all = [];
+    private int _duplicates;
+    private string _search = string.Empty;
+    private bool _loading = true;
+    private bool _busy;
+
+    private bool _adding;
+    private string _newName = string.Empty;
+
+    private IReadOnlyList<ContactSummary> Shown => string.IsNullOrWhiteSpace(_search)
+        ? _all
+        : [.. _all.Where(c => c.Name.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase))];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _all = await Contacts.ListAsync();
+        _duplicates = (await Contacts.DuplicatesAsync()).Count;
+        _loading = false;
+    }
+
+    private static string Initial(string name) => name.Trim() is { Length: > 0 } n ? n[..1].ToUpperInvariant() : "?";
+
+    private static string Describe(ContactSummary contact)
+    {
+        var parts = new List<string>
+        {
+            contact.TransactionCount switch
+            {
+                0 => "No transactions yet",
+                1 => "1 transaction",
+                var n => $"{n} transactions",
+            },
+        };
+
+        if (contact.DetailCount > 0)
+        {
+            parts.Add(contact.DetailCount == 1 ? "1 detail" : $"{contact.DetailCount} details");
+        }
+
+        if (contact.HasPhoneContact)
+        {
+            parts.Add("on your phone");
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private async Task CreateAsync()
+    {
+        _busy = true;
+        try
+        {
+            var result = await Contacts.CreateAsync(_newName);
+            if (!result.Succeeded)
+            {
+                Ele.Problem(result.Error!);
+                return;
+            }
+
+            Ele.Say($"Added {result.Contact!.Name}.");
+            Nav.NavigateTo($"contacts/{result.Contact.Id}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task FromPhoneAsync()
+    {
+        _busy = true;
+        try
+        {
+            if (await Picker.PickAsync() is not { } picked)
+            {
+                return;
+            }
+
+            var result = await Contacts.CreateFromPhoneAsync(picked);
+            if (!result.Succeeded)
+            {
+                Ele.Problem(result.Error!);
+                return;
+            }
+
+            Ele.Say($"{result.Contact!.Name} is linked to your phone's contact.");
+            Nav.NavigateTo($"contacts/{result.Contact.Id}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

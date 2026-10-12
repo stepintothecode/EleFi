@@ -55,4 +55,53 @@ public class PlanRepositoryTests
         Assert.Empty(await repository.ListOpenAsync());
         Assert.Empty(await repository.ListCompletedAsync());
     }
+
+    [Fact]
+    public async Task A_plans_labels_repeat_end_and_skip_survive_a_round_trip()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var repository = new PlanRepository(f.Db, f.Clock);
+        var investment = (await f.Labels.ListAsync()).First(l => l.Name == "Investment");
+        var plan = new Plan
+        {
+            Title = "SIP",
+            DueOn = Today,
+            Repeat = new RepeatRule(RepeatFrequency.Weekly, 1, RepeatDays.Monday | RepeatDays.Thursday),
+            RepeatUntil = Today.AddMonths(6),
+            RepeatCount = 10,
+            RemindOn = Today.AddDays(1),
+            CreatedAt = f.Clock.UtcNow,
+            UpdatedAt = f.Clock.UtcNow,
+        };
+        plan.Labels.Add(new PlanLabel { PlanId = plan.Id, LabelId = investment.Id });
+        await repository.AddAsync(plan);
+        var next = plan.Skip(f.Clock.UtcNow)!;
+        await repository.UpdateAsync(plan);
+        await repository.AddAsync(next);
+
+        f.Db.ChangeTracker.Clear();
+        var open = Assert.Single(await repository.ListOpenAsync());
+        var skipped = Assert.Single(await repository.ListCompletedAsync());
+
+        Assert.Equal(RepeatDays.Monday | RepeatDays.Thursday, open.RepeatDays);
+        Assert.Equal(Today.AddMonths(6), open.RepeatUntil);
+        Assert.Equal(2, open.Occurrence);
+        Assert.Equal([investment.Id], open.Labels.Select(l => l.LabelId));
+        Assert.True(skipped.IsSkipped);
+        Assert.Equal(Today.AddDays(1), skipped.RemindOn);
+    }
+
+    [Fact]
+    public async Task A_deleted_plan_comes_back_for_undo()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var repository = new PlanRepository(f.Db, f.Clock);
+        var plan = new Plan { Title = "Rent", DueOn = Today, CreatedAt = f.Clock.UtcNow, UpdatedAt = f.Clock.UtcNow };
+        await repository.AddAsync(plan);
+        await repository.DeleteAsync(plan.Id);
+
+        await repository.RestoreAsync(plan.Id);
+
+        Assert.Single(await repository.ListOpenAsync());
+    }
 }

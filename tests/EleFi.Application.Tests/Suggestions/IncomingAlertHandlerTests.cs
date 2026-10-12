@@ -136,11 +136,11 @@ public class IncomingAlertHandlerTests
     {
         var capture = new CaptureService(_ledger.Transactions, _ledger.Parties, _ledger.Apps, _ledger.Labels, _clock);
         var editing = new EditTransactionService(
-            _ledger.Transactions, _ledger.Parties, _ledger.Labels, Substitute.For<IAuditRepository>(), _clock);
+            _ledger.Transactions, _ledger.Parties, _ledger.Labels, Substitute.For<IAuditRepository>(), _clock, _ledger.Apps);
         var resolver = new AlertPartyResolver(_ledger.Containers, _ledger.Parties, _ledger.Apps, _ledger.Transactions);
         var service = new AlertCaptureService(_links, resolver, _ledger.Apps, capture, editing, _clock);
 
-        var planner = new EleFi.Application.Planning.PlanService(_plans, _ledger.Transactions, _clock);
+        var planner = new EleFi.Application.Planning.PlanService(_plans, _ledger.Transactions, _clock, Substitute.For<IAuditRepository>(), Substitute.For<EleFi.Application.Abstractions.IReminderSchedule>());
         return new IncomingAlertHandler(service, new AlertCaptureSettings(_store), editing, planner, _notices, _prompts, _clock);
     }
 

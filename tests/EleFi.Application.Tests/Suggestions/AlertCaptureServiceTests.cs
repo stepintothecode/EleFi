@@ -155,6 +155,58 @@ public class AlertCaptureServiceTests
     }
 
     [Fact]
+    public async Task An_sms_is_recorded_at_the_time_it_arrived()
+    {
+        var arrived = LocalNoon(new DateOnly(2026, 9, 1)).AddMinutes(17);
+
+        await Service().IngestAsync(AlertChannel.Sms, "VM-HDFCBK", HdfcSms, arrived, Currency.Inr);
+
+        var transaction = Assert.Single(_ledger.TransactionRows);
+        Assert.Equal(new TimeOnly(12, 17), transaction.OccurredAtTime);
+    }
+
+    [Fact]
+    public async Task An_sms_about_an_earlier_day_is_not_given_the_time_it_arrived()
+    {
+        // HDFC's UPI format, which carries its own date.
+        const string late = "Sent Rs.450.00\nFrom HDFC Bank A/C x4417\nTo ZOMATO\nOn 25/08/26\nRef 523412345678";
+
+        await Service().IngestAsync(AlertChannel.Sms, "VM-HDFCBK", late, LocalNoon(new DateOnly(2026, 9, 1)), Currency.Inr);
+
+        // The bank says it happened on the 25th. Noon on the 1st is when the message arrived,
+        // which says nothing about the hour on the 25th, so no time is invented.
+        var transaction = Assert.Single(_ledger.TransactionRows);
+        Assert.Equal(new DateOnly(2026, 8, 25), transaction.OccurredOn);
+        Assert.Null(transaction.OccurredAtTime);
+    }
+
+    [Fact]
+    public async Task SM18_with_no_last_four_digits_the_account_the_message_names_is_the_one_charged()
+    {
+        var kotak = _ledger.AddContainer("Kotak Savings", ContainerKind.BankAccount);
+        Teach(new TeachingExample(
+            "VM-KOTAKB", "Rs 1,250.00 spent from your Kotak Bank account at AMAZON", TransactionKind.Debit,
+            "1,250.00", "AMAZON", AccountName: "Kotak Bank"));
+
+        await Service().IngestAsync(
+            AlertChannel.Sms, "AD-KOTAKB", "Rs 99.00 spent from your Kotak Bank account at SWIGGY", _clock.UtcNow, Currency.Inr);
+
+        // Without the name, the guess would be the first card in picker order.
+        Assert.Equal(_ledger.PartyOf(kotak).Id, Assert.Single(_ledger.TransactionRows).SourcePartyId);
+    }
+
+    [Fact]
+    public async Task SM18_with_neither_digits_nor_a_name_the_bank_in_the_sender_picks_its_only_account()
+    {
+        var kotak = _ledger.AddContainer("Kotak Savings", ContainerKind.BankAccount);
+        Teach(new TeachingExample("VM-KOTAKB", "Sent Rs 99 to Chai Point", TransactionKind.Debit, "99", "Chai Point"));
+
+        await Service().IngestAsync(AlertChannel.Sms, "JD-KOTAKB", "Sent Rs 250 to Rahul", _clock.UtcNow, Currency.Inr);
+
+        Assert.Equal(_ledger.PartyOf(kotak).Id, Assert.Single(_ledger.TransactionRows).SourcePartyId);
+    }
+
+    [Fact]
     public async Task Reading_a_message_to_show_the_user_records_nothing()
     {
         var parsed = await Service().ParseAsync(AlertChannel.Sms, "VM-HDFCBK", HdfcSms, Currency.Inr);
@@ -163,11 +215,22 @@ public class AlertCaptureServiceTests
         Assert.Empty(_ledger.TransactionRows);
     }
 
+    // Noon on the device's own clock that day, so the expected time holds in any timezone.
+    private static DateTimeOffset LocalNoon(DateOnly day) =>
+        new(day.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Local));
+
+    private void Teach(TeachingExample example)
+    {
+        var taught = RuleInducer.Induce(example, DateTimeOffset.UnixEpoch);
+        Assert.True(taught.Succeeded, taught.Error);
+        _links.Rules.Insert(0, taught.Rule!);
+    }
+
     private AlertCaptureService Service()
     {
         var audit = Substitute.For<EleFi.Application.Abstractions.IAuditRepository>();
         var capture = new CaptureService(_ledger.Transactions, _ledger.Parties, _ledger.Apps, _ledger.Labels, _clock);
-        var editing = new EditTransactionService(_ledger.Transactions, _ledger.Parties, _ledger.Labels, audit, _clock);
+        var editing = new EditTransactionService(_ledger.Transactions, _ledger.Parties, _ledger.Labels, audit, _clock, _ledger.Apps);
         var resolver = new AlertPartyResolver(_ledger.Containers, _ledger.Parties, _ledger.Apps, _ledger.Transactions);
 
         return new AlertCaptureService(_links, resolver, _ledger.Apps, capture, editing, _clock);

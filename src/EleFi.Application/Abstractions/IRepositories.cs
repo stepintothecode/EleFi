@@ -80,6 +80,11 @@ public interface IContainerRepository
     /// <param name="containerId">The container.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     Task SoftDeleteAsync(Guid containerId, CancellationToken cancellationToken = default);
+
+    /// <summary>Brings a soft-deleted container and its Party row back, for undo.</summary>
+    /// <param name="containerId">The container.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task RestoreAsync(Guid containerId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Reads and writes transactions.</summary>
@@ -184,7 +189,19 @@ public interface ITransactionRepository
     /// <param name="partyName">The other party's name, matched without regard to case.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     Task<IReadOnlyList<Typeahead.TypeaheadCandidate>> NotesForPartyAsync(string partyName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What the Steady ledger streak needs: when recording began, and the day of every live
+    /// transaction still flagged Needs Review.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<ReviewFacts> ReviewFactsAsync(CancellationToken cancellationToken = default);
 }
+
+/// <summary>The ledger's state for the Steady ledger streak.</summary>
+/// <param name="FirstRecordedAt">When the earliest live transaction was recorded, or null for none.</param>
+/// <param name="NeedsReviewOn">The day of each live transaction still flagged Needs Review.</param>
+public sealed record ReviewFacts(DateTimeOffset? FirstRecordedAt, IReadOnlyList<DateOnly> NeedsReviewOn);
 
 /// <summary>What came in and what went out, with transfers between your own containers ignored.</summary>
 /// <param name="InMinor">The sum of Credits, in home-currency minor units.</param>
@@ -274,7 +291,14 @@ public interface ILabelRepository
     /// </remarks>
     /// <param name="id">The label to remove.</param>
     /// <param name="cancellationToken">Cancellation.</param>
-    Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+    /// <returns>The transactions it was taken off, so an undo can put it back on them.</returns>
+    Task<IReadOnlyList<Guid>> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Brings a deleted label back, on the transactions it was taken off.</summary>
+    /// <param name="id">The label.</param>
+    /// <param name="transactionIds">The transactions to put it back on.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task RestoreAsync(Guid id, IReadOnlyCollection<Guid> transactionIds, CancellationToken cancellationToken = default);
 
     /// <summary>True when another live label already uses this name.</summary>
     /// <param name="name">The candidate name.</param>
@@ -346,6 +370,151 @@ public interface IPartyRepository
     /// <param name="partyIds">The parties used.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     Task TouchAsync(IEnumerable<Guid> partyIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What each party is called, for a history that stored only ids.
+    /// </summary>
+    /// <remarks>
+    /// Deleted and merged parties included: a transaction's history still has to say who it
+    /// was paid to after that contact was merged into another. A container's party is called
+    /// by its container's name. Ids that are not parties are left out.
+    /// </remarks>
+    /// <param name="ids">The ids to name.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyDictionary<Guid, string>> NamesAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default);
+}
+
+/// <summary>One line in the contact list.</summary>
+/// <param name="Id">The contact: an external party.</param>
+/// <param name="Name">Its name.</param>
+/// <param name="TransactionCount">Live transactions with it, at either end.</param>
+/// <param name="LastUsedAt">When it was last used, if ever.</param>
+/// <param name="DetailCount">How many phone numbers, emails and addresses it carries.</param>
+/// <param name="HasPhoneContact">True when it is linked to a contact on the phone.</param>
+public sealed record ContactSummary(
+    Guid Id,
+    string Name,
+    int TransactionCount,
+    DateTimeOffset? LastUsedAt,
+    int DetailCount,
+    bool HasPhoneContact);
+
+/// <summary>
+/// Everything a merge moved, so Undo can put it all back exactly.
+/// </summary>
+/// <param name="KeptId">The contact that stayed.</param>
+/// <param name="AbsorbedId">The contact folded into it, now an alias.</param>
+/// <param name="MovedSourceIds">Transactions whose Source was the absorbed contact.</param>
+/// <param name="MovedDestinationIds">Transactions whose Destination was the absorbed contact.</param>
+/// <param name="MovedDetailIds">Details that moved across.</param>
+/// <param name="MovedLinkIds">Links re-pointed from the absorbed contact to the kept one.</param>
+/// <param name="RetiredLinkIds">Links soft-deleted because they would have joined the kept contact to itself or repeated one it had.</param>
+/// <param name="RepointedAliasIds">Older aliases of the absorbed contact, now pointing at the kept one.</param>
+/// <param name="KeptNotesBefore">The kept contact's notes before the absorbed one's were added.</param>
+/// <param name="KeptPhoneKeyBefore">The kept contact's phone link before the merge.</param>
+/// <param name="UsageAdded">How much use was added to the kept contact's count.</param>
+public sealed record ContactMerge(
+    Guid KeptId,
+    Guid AbsorbedId,
+    IReadOnlyList<Guid> MovedSourceIds,
+    IReadOnlyList<Guid> MovedDestinationIds,
+    IReadOnlyList<Guid> MovedDetailIds,
+    IReadOnlyList<Guid> MovedLinkIds,
+    IReadOnlyList<Guid> RetiredLinkIds,
+    IReadOnlyList<Guid> RepointedAliasIds,
+    string? KeptNotesBefore,
+    string? KeptPhoneKeyBefore,
+    int UsageAdded);
+
+/// <summary>
+/// Contacts: external parties seen as people and businesses, with their details, links,
+/// aliases, and merges.
+/// </summary>
+public interface IContactRepository
+{
+    /// <summary>Every live contact, by name.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<ContactSummary>> ListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>One live contact, tracked for editing, or null. Never a container's party.</summary>
+    /// <param name="id">The contact.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<Domain.Parties.Party?> FindAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// True when a name already belongs to another live contact, or is another contact's alias,
+    /// case-insensitively (P4, CT4).
+    /// </summary>
+    /// <param name="name">The candidate name.</param>
+    /// <param name="excluding">The contact being renamed, whose own name and aliases do not count.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<bool> NameTakenAsync(string name, Guid? excluding = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a contact with nothing recorded against it yet.</summary>
+    /// <param name="name">Its name, already checked.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<Domain.Parties.Party> AddAsync(string name, CancellationToken cancellationToken = default);
+
+    /// <summary>Saves changes to a contact found through this repository.</summary>
+    /// <param name="contact">The contact.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task UpdateAsync(Domain.Parties.Party contact, CancellationToken cancellationToken = default);
+
+    /// <summary>Keeps a name as another name for a contact, so capturing with it lands there (CT4).</summary>
+    /// <param name="contactId">The contact it points at.</param>
+    /// <param name="name">The name.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task AddAliasAsync(Guid contactId, string name, CancellationToken cancellationToken = default);
+
+    /// <summary>A contact's other names: merged-away contacts and names from before a rename.</summary>
+    /// <param name="contactId">The contact.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<string>> AliasesAsync(Guid contactId, CancellationToken cancellationToken = default);
+
+    /// <summary>A contact's live details, in the order they were added.</summary>
+    /// <param name="contactId">The contact.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Domain.Parties.ContactDetail>> DetailsAsync(Guid contactId, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a checked detail.</summary>
+    /// <param name="detail">The detail.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task AddDetailAsync(Domain.Parties.ContactDetail detail, CancellationToken cancellationToken = default);
+
+    /// <summary>Soft-deletes a detail.</summary>
+    /// <param name="detailId">The detail.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task RemoveDetailAsync(Guid detailId, CancellationToken cancellationToken = default);
+
+    /// <summary>Live links, at either end of one contact, or every live link when null.</summary>
+    /// <param name="contactId">The contact, or null for all.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Domain.Parties.ContactLink>> LinksAsync(Guid? contactId, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a link.</summary>
+    /// <param name="link">The link.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task AddLinkAsync(Domain.Parties.ContactLink link, CancellationToken cancellationToken = default);
+
+    /// <summary>Soft-deletes a link.</summary>
+    /// <param name="linkId">The link.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task RemoveLinkAsync(Guid linkId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Folds one contact into another, in one database transaction (CT4): its transactions,
+    /// details and links move across, its notes are added, and it becomes an alias.
+    /// </summary>
+    /// <param name="keepId">The contact that stays.</param>
+    /// <param name="absorbId">The contact folded into it.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>What moved, for Undo.</returns>
+    Task<ContactMerge> MergeAsync(Guid keepId, Guid absorbId, CancellationToken cancellationToken = default);
+
+    /// <summary>Puts a merge back exactly as it was, in one database transaction.</summary>
+    /// <param name="merge">What the merge moved.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task UndoMergeAsync(ContactMerge merge, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Reads and writes Apps, the shared pool behind marketplace and payment roles.</summary>
@@ -373,6 +542,11 @@ public interface IAppRepository
     /// <param name="appIds">The apps used.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     Task TouchAsync(IEnumerable<Guid> appIds, CancellationToken cancellationToken = default);
+
+    /// <summary>What each app is called, deleted ones included, for a history that stored only ids.</summary>
+    /// <param name="ids">The ids to name. Ids that are not apps are left out.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyDictionary<Guid, string>> NamesAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Reads and writes plans: money the user expects to move.</summary>
@@ -406,6 +580,11 @@ public interface IPlanRepository
     /// <param name="id">The plan.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Brings a soft-deleted plan back, for undo.</summary>
+    /// <param name="id">The plan.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task RestoreAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>Every transaction some plan is linked to, so none is claimed twice.</summary>
     /// <param name="cancellationToken">Cancellation.</param>
@@ -571,6 +750,11 @@ public interface IGoalRepository
     /// <param name="id">The identifier.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Brings a soft-deleted goal back, for undo. Its contributions are re-attributed separately.</summary>
+    /// <param name="id">The identifier.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task RestoreAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>Live transactions attributed to any goal, with their parties loaded.</summary>
     /// <param name="cancellationToken">Cancellation.</param>

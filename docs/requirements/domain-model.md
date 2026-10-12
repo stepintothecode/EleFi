@@ -165,6 +165,9 @@ Party
   name           TEXT NULL                          -- iff kind='External'
   usage_count    INTEGER NOT NULL DEFAULT 0
   last_used_at   INTEGER
+  notes                TEXT NULL                       -- External only (Contacts, ADR-0016)
+  phone_contact_key    TEXT NULL                       -- the phone's lookup key, never its address book
+  merged_into_party_id TEXT NULL  indexed, no FK       -- set on an alias (CT4)
   created_at, updated_at, deleted_at
 ```
 
@@ -175,6 +178,40 @@ Party
 - `P3` - Exactly one Party row exists per Container, created and archived with it.
 - `P4` - External party names are unique per user, case-insensitively and after trimming.
   "Rahul", "rahul ", and "RAHUL" are one party, so the suggestion list does not fragment.
+  Since 2026-10-11 an **alias** holds its name too: no live contact may take it, except the
+  contact it points at.
+
+### Contacts (ADR-0016)
+
+An external Party is a **Contact**. It may carry details and links, and may leave aliases
+behind.
+
+```
+ContactDetail                         ContactLink
+  id          TEXT PK                   id              TEXT PK
+  party_id    TEXT FK -> Party.id       party_id        TEXT FK -> Party.id   -- the lower id
+  kind        INTEGER  Phone|Email|     other_party_id  TEXT FK -> Party.id   -- the higher id
+                       Address|Other    relation        INTEGER  SameAs|AnotherAccountOf|NotTheSame
+  label       TEXT NULL  "Work"         created_at, updated_at, deleted_at
+  value       TEXT NOT NULL             UNIQUE (party_id, other_party_id) WHERE deleted_at IS NULL
+  created_at, updated_at, deleted_at    CHECK  (party_id <> other_party_id)
+```
+
+- `CT1` - Only an External Party is a contact. A container's party never appears in the
+  contact list, and can be neither linked nor merged.
+- `CT2` - A detail is checked before it is kept: a phone number has 6 to 15 digits and only
+  phone punctuation, an email has one `@` and a dotted domain, nothing is empty or longer
+  than 500 characters.
+- `CT3` - A link joins two **different** contacts, stored with its ends in a fixed order, and
+  there is at most one live link per pair, enforced by a filtered unique index. `NotTheSame`
+  joins nothing; it only stops the pair being suggested as a duplicate.
+- `CT4` - **A merge destroys nothing.** Every transaction (deleted ones included), detail and
+  link of the absorbed contact moves to the kept one in one database transaction; a link
+  that would join the kept contact to itself, or repeat one it has, is soft-deleted. The
+  absorbed row is soft-deleted with `merged_into_party_id` set, which makes it an **alias**.
+  `GetOrCreateExternal` resolves a name to a live contact first, then to an alias's target.
+  A rename may leave its old name as an alias the same way. Undo reverses exactly what the
+  merge moved.
 
 ### Why parties are one table
 
@@ -517,6 +554,7 @@ ParseRule
 | `counterparty` | Merchant or payer text | no |
 | `occurred_on` | Date as written | no |
 | `note` | A note the payer attached, as a Payment App shows it | no |
+| `account` | The account or bank as the message names it in words, for a message with no last four digits (`SM18`) | no |
 
 Anything a rule does not capture is left empty on the suggestion. **A rule never
 substitutes a guess for a missing capture.**
@@ -601,8 +639,18 @@ and the sender is folded into it rather than stored beside it.
   automatic recording itself. Every affected screen degrades to manual capture, and
   Teach EleFi a message still works without any permission.
 - `SM11` - `container_id` is populated only by an exact `last4` match against a
-  non-archived container. An ambiguous or absent match leaves it null and the user is
-  asked. It is never inferred from the counterparty, the amount, or history.
+  non-archived container, or by `SM18`. An ambiguous or absent match leaves it null and the
+  usual guess (`SM17`) applies. It is never inferred from the counterparty, the amount, or
+  history.
+- `SM18` - *(2026-10-11)* With no single `last4` match, the container is the **one**
+  non-archived container whose name or bank fits the account the message names (a taught
+  rule's `account` capture), or failing that the bank in the SMS sender ID (`AD-KOTAKB` fits
+  Kotak). Words every bank uses ("bank", "card", "account") never establish a fit. Two
+  containers fitting is no answer. A Payment App's package names no bank. The result is still
+  recorded Needs Review.
+- `SM19` - *(2026-10-11)* An alert's transaction takes the local time the alert arrived as
+  its time of day, unless the message dates the payment to another day, when it gets no time
+  rather than an invented one.
 - `SM12` - A Payment App notification is read only when its posting package is on the
   `PaymentApps` allow-list, checked **before** its title or text is touched. Every other
   notification on the device is dropped unread. `SM1`, `SM2`, `SM4` and `SM5` apply to
@@ -659,6 +707,32 @@ BackupRecord
 `cycle_start_day` is capped at 28 so every month has one - there is no 30th of February,
 and a cycle that silently shifts in short months is worse than one that starts on the 28th.
 
+```
+Plan
+  id, series_id, title, due_on, due_time NULL, amount_minor NULL, currency_code,
+  direction ('Debit' | 'Credit' | 'SelfTransfer'), container_id NULL,
+  counterparty_name NULL, destination_container_id NULL, note NULL,
+  repeat_frequency, repeat_interval, repeat_days (bit flags, Monday = 1 .. Sunday = 64),
+  anchor_day (1..31; 31 means the last day of the month),
+  repeat_until NULL, repeat_count NULL, occurrence (1-based),
+  completed_at NULL, transaction_id NULL, is_skipped, remind_on NULL,
+  created_at, updated_at, deleted_at
+
+PlanLabel
+  plan_id, label_id               PRIMARY KEY (plan_id, label_id)
+```
+
+- `P1` - A plan never moves a balance. It becomes money only by linking or recording a
+  transaction.
+- `P2` - A repeating plan rolls on when completed or skipped, never on the calendar. The
+  next occurrence is a new row in the same series, with `occurrence + 1`, and none is made
+  past `repeat_until` or `repeat_count`.
+- `P3` - A plan's labels go onto the transaction it is completed with, when that
+  transaction has none of its own and is not a Self Transfer.
+- `P4` - `remind_on` moves only the reminder (Snooze). It is cleared when the due date
+  changes and is never carried to the next occurrence.
+- `P5` - Plans are audited by trigger, like transactions.
+
 ---
 
 ## 13. Derived calculations
@@ -702,6 +776,22 @@ spend_by_label(cycle) = (by_label, total)
   What still holds: no single bucket ever exceeds `total`, and every unlabelled rupee has
   its own bucket rather than disappearing.
 
+### The Steady ledger streak
+
+```
+week_is_clean(w) =
+    no transaction occurred in w with needs_review = true
+  AND no open plan has due_on in w
+
+streak = consecutive clean weeks, newest first, from the week of the first record,
+         plus this week while it is clean so far
+```
+
+- `S1` - Derived on every read, never stored, so tidying an old week mends the streak.
+- `S2` - One freeze is earned per four clean weeks, at most two held, and spent on a missed
+  week automatically.
+- `S3` - The week in progress never breaks the run before it ends.
+
 ### Export as a derived view
 
 An export is not a separate query. It is the transaction list's own query, serialised.
@@ -734,6 +824,9 @@ Container * ─── * Goal            (via GoalContainer)
 
 Party 1 ─── * Transaction         (as source)
 Party 1 ─── * Transaction         (as destination)
+Party 1 ─── * ContactDetail       (External only; ADR-0016)
+Party * ─── * Party               (via ContactLink, undirected; CT3)
+Party 1 ─── * Party               (aliases, via merged_into_party_id; CT4)
 
 Label * ─── * Transaction         (via TransactionLabel; flat, any number, ADR-0013)
 

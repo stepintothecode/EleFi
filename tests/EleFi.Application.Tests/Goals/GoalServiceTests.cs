@@ -119,6 +119,67 @@ public class GoalServiceTests
         Assert.DoesNotContain(await Service.AttributableAsync(), g => g.Id == old.Id);
     }
 
+    [Fact]
+    public async Task A_goal_projects_when_it_will_be_reached_at_the_pace_money_is_going_in()
+    {
+        var goal = (await Service.CreateAsync(Draft(FundingMode.TracksContributions, []) with { StartDate = _clock.Today.AddDays(-90) })).Goal!;
+        var put = Transfer(30_000_00, goal.Id);
+        put.OccurredOn = _clock.Today.AddDays(-5);
+        _goals.Contributions.Add(put);
+
+        var view = Assert.Single(await Service.OverviewAsync());
+
+        // 30,000 in ninety days is 10,000 a month; 2,70,000 to go is 27 months.
+        Assert.Equal(10_000_00, view.PaceMinor);
+        Assert.False(view.PaceIsPlanned);
+        Assert.Equal(_clock.Today.AddMonths(27), view.ProjectedFinish);
+    }
+
+    [Fact]
+    public async Task With_nothing_going_in_yet_the_monthly_plan_sets_the_pace()
+    {
+        await Service.CreateAsync(Draft(FundingMode.TracksContainerBalance, [_rd]) with { MonthlyContributionMinor = 20_000_00 });
+
+        var view = Assert.Single(await Service.OverviewAsync());
+
+        // 60,000 already in the RD; 2,40,000 to go at 20,000 a month is a year.
+        Assert.True(view.PaceIsPlanned);
+        Assert.Equal(_clock.Today.AddMonths(12), view.ProjectedFinish);
+    }
+
+    [Fact]
+    public async Task Undoing_a_delete_brings_the_goal_back_with_its_contributions_attributed_again()
+    {
+        var goal = (await Service.CreateAsync(Draft(FundingMode.TracksContributions, []))).Goal!;
+        var put = Transfer(10_000_00, goal.Id);
+        _goals.Contributions.Add(put);
+
+        var detached = await Service.DeleteAsync(goal.Id);
+        Assert.Equal([put.Id], detached);
+        Assert.Empty(await Service.OverviewAsync());
+
+        await Service.RestoreAsync(goal.Id, detached);
+
+        Assert.Single(await Service.OverviewAsync());
+        Assert.Equal(goal.Id, _goals.Attributed[put.Id]);
+    }
+
+    [Fact]
+    public async Task A_draft_taken_from_a_goal_puts_an_edit_back_exactly()
+    {
+        var goal = (await Service.CreateAsync(Draft(FundingMode.TracksContributions, [_salary], opening: 5_000_00) with { MonthlyContributionMinor = 2_000_00 })).Goal!;
+        var before = GoalDraft.From(goal);
+
+        await Service.UpdateAsync(goal.Id, before with { Name = "Bike", TargetAmountMinor = 1_00_000_00 });
+        await Service.UpdateAsync(goal.Id, before);
+
+        Assert.Equal("Ring", goal.Name);
+        Assert.Equal(3_00_000_00, goal.TargetAmountMinor);
+        Assert.Equal(5_000_00, goal.OpeningAllocationMinor);
+        Assert.Equal(2_000_00, goal.MonthlyContributionMinor);
+        Assert.Equal([_salary], goal.Containers.Select(c => c.ContainerId));
+    }
+
     private GoalDraft Draft(FundingMode mode, IReadOnlyList<Guid> containers, long opening = 0) =>
         new("Ring", 3_00_000_00, _clock.Today.AddYears(2), mode, containers, opening);
 
@@ -169,6 +230,12 @@ public class GoalServiceTests
         public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
         {
             Rows.Find(g => g.Id == id)!.DeletedAt = DateTimeOffset.UnixEpoch;
+            return Task.CompletedTask;
+        }
+
+        public Task RestoreAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            Rows.Find(g => g.Id == id)!.DeletedAt = null;
             return Task.CompletedTask;
         }
 

@@ -23,7 +23,25 @@ public sealed record GoalDraft(
     IReadOnlyList<Guid> ContainerIds,
     long OpeningAllocationMinor = 0,
     long? MonthlyContributionMinor = null,
-    DateOnly? StartDate = null);
+    DateOnly? StartDate = null)
+{
+    /// <summary>The draft that would put a goal back exactly as it is now, for undo.</summary>
+    /// <param name="goal">The goal as it stands.</param>
+    public static GoalDraft From(Goal goal)
+    {
+        ArgumentNullException.ThrowIfNull(goal);
+
+        return new GoalDraft(
+            goal.Name,
+            goal.TargetAmountMinor,
+            goal.TargetDate,
+            goal.FundingMode,
+            [.. goal.Containers.Select(c => c.ContainerId)],
+            goal.OpeningAllocationMinor,
+            goal.MonthlyContributionMinor,
+            goal.StartDate);
+    }
+}
 
 /// <summary>A saved goal, or why it could not be saved.</summary>
 /// <param name="Goal">The goal, when it worked.</param>
@@ -38,7 +56,16 @@ public sealed record GoalResult(Goal? Goal, string? Error)
 /// <param name="Goal">The goal.</param>
 /// <param name="Standing">Progress, status and what it still needs.</param>
 /// <param name="ContainerNames">The names of its linked containers.</param>
-public sealed record GoalView(Goal Goal, GoalStanding Standing, IReadOnlyList<string> ContainerNames);
+/// <param name="PaceMinor">What is going in each month: the recent pace, or the planned amount.</param>
+/// <param name="PaceIsPlanned">True when the pace is the planned monthly amount rather than what has gone in.</param>
+/// <param name="ProjectedFinish">When it will be reached at that pace, or null when nothing is going in.</param>
+public sealed record GoalView(
+    Goal Goal,
+    GoalStanding Standing,
+    IReadOnlyList<string> ContainerNames,
+    long PaceMinor = 0,
+    bool PaceIsPlanned = false,
+    DateOnly? ProjectedFinish = null);
 
 /// <summary>
 /// Goals: creating them, measuring them, and attributing transactions to them.
@@ -64,7 +91,8 @@ public sealed class GoalService(IGoalRepository goals, ITransactionRepository tr
         }
 
         var balances = await transactions.BalancesAsync(cancellationToken).ConfigureAwait(false);
-        var contributions = await ContributionTotalsAsync(cancellationToken).ConfigureAwait(false);
+        var attributed = await goals.ContributionsAsync(cancellationToken).ConfigureAwait(false);
+        var contributions = Totals(attributed);
         var today = clock.Today;
 
         return all
@@ -76,7 +104,26 @@ public sealed class GoalService(IGoalRepository goals, ITransactionRepository tr
                     .Where(b => g.Containers.Any(c => c.ContainerId == b.ContainerId))
                     .Select(b => b.Name)
                     .ToList();
-                return new GoalView(g, GoalMath.Stand(g, Progress(g, balances, contributions), today), names);
+                var progress = Progress(g, balances, contributions);
+
+                // What has actually been going in, for a goal that counts it; otherwise, or when
+                // nothing has gone in lately, what the user planned to put aside.
+                var recent = g.FundingMode == FundingMode.TracksContributions
+                    ? GoalMath.MonthlyPace(
+                        attributed.Where(t => t.GoalId == g.Id).Select(t => (t.OccurredOn, GoalMath.ContributionOf(t))),
+                        g.StartDate,
+                        today)
+                    : 0;
+                var planned = recent <= 0 && g.MonthlyContributionMinor is > 0;
+                var pace = planned ? g.MonthlyContributionMinor!.Value : recent;
+
+                return new GoalView(
+                    g,
+                    GoalMath.Stand(g, progress, today),
+                    names,
+                    pace,
+                    planned,
+                    GoalMath.ProjectedFinish(progress, g.TargetAmountMinor, pace, today));
             })
             .ToList();
     }
@@ -210,8 +257,32 @@ public sealed class GoalService(IGoalRepository goals, ITransactionRepository tr
     /// <summary>Deletes a goal and clears it from its transactions (GL6).</summary>
     /// <param name="id">The goal.</param>
     /// <param name="cancellationToken">Cancellation.</param>
-    public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
-        goals.DeleteAsync(id, cancellationToken);
+    /// <returns>The transactions that had counted toward it, so undo can attribute them again.</returns>
+    public async Task<IReadOnlyList<Guid>> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var attributed = (await goals.ContributionsAsync(cancellationToken).ConfigureAwait(false))
+            .Where(t => t.GoalId == id)
+            .Select(t => t.Id)
+            .ToList();
+
+        await goals.DeleteAsync(id, cancellationToken).ConfigureAwait(false);
+        return attributed;
+    }
+
+    /// <summary>Brings a deleted goal back, with what had counted toward it. For undo.</summary>
+    /// <param name="id">The goal.</param>
+    /// <param name="contributions">The transactions its delete reported.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    public async Task RestoreAsync(Guid id, IReadOnlyList<Guid> contributions, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(contributions);
+        await goals.RestoreAsync(id, cancellationToken).ConfigureAwait(false);
+
+        foreach (var transactionId in contributions)
+        {
+            await goals.SetGoalAsync(transactionId, id, cancellationToken).ConfigureAwait(false);
+        }
+    }
 
     /// <summary>
     /// Attributes a transaction to a goal, or clears it with null. Only a contributions-mode
@@ -296,12 +367,12 @@ public sealed class GoalService(IGoalRepository goals, ITransactionRepository tr
         goal.OpeningAllocationMinor = draft.FundingMode == FundingMode.TracksContributions ? draft.OpeningAllocationMinor : 0;
     }
 
-    private async Task<IReadOnlyDictionary<Guid, long>> ContributionTotalsAsync(CancellationToken cancellationToken)
-    {
-        var all = await goals.ContributionsAsync(cancellationToken).ConfigureAwait(false);
-        return all
+    private async Task<IReadOnlyDictionary<Guid, long>> ContributionTotalsAsync(CancellationToken cancellationToken) =>
+        Totals(await goals.ContributionsAsync(cancellationToken).ConfigureAwait(false));
+
+    private static Dictionary<Guid, long> Totals(IReadOnlyList<Transaction> attributed) =>
+        attributed
             .Where(t => t.GoalId is not null)
             .GroupBy(t => t.GoalId!.Value)
             .ToDictionary(g => g.Key, g => g.Sum(GoalMath.ContributionOf));
-    }
 }

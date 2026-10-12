@@ -16,8 +16,12 @@ namespace EleFi.Domain.Alerts;
 /// <param name="Channel">Where the alert arrived from.</param>
 /// <param name="AppName">The Payment App it came through, for a Payment App alert.</param>
 /// <param name="OccurredAtTime">
-/// The local time of day, known only for a Payment App alert. The parser never sets it; the
-/// caller does, from when the notification was raised.
+/// The local time of day. The parser never sets it; the caller does, from when the alert
+/// arrived.
+/// </param>
+/// <param name="AccountName">
+/// The account or bank the message names in words ("your Kotak Bank account"), when a rule
+/// captured it. Used to find the container when there are no last four digits (SM18).
 /// </param>
 public readonly record struct ParsedAlert(
     Guid RuleId,
@@ -30,7 +34,8 @@ public readonly record struct ParsedAlert(
     string? Note = null,
     AlertChannel Channel = AlertChannel.Sms,
     string? AppName = null,
-    TimeOnly? OccurredAtTime = null);
+    TimeOnly? OccurredAtTime = null,
+    string? AccountName = null);
 
 /// <summary>
 /// Turns a bank's SMS into a <see cref="ParsedAlert"/>, or into nothing.
@@ -155,7 +160,8 @@ public static class AlertParser
                 ReadDate(match),
                 Tidy(Group(match, "note")),
                 channel,
-                candidate.Rule.AppName);
+                candidate.Rule.AppName,
+                AccountName: Tidy(Group(match, "account")));
         }
 
         return null;

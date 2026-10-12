@@ -151,7 +151,16 @@ public class RoutesTests : Bunit.TestContext
         Services.AddSingleton<ILaunchIntent>(launch ?? new Fakes.PlainLaunch());
         Services.AddSingleton<ISystemBack>(systemBack);
         Services.AddSingleton(sp => new BackNavigator(sp.GetRequiredService<NavigationManager>(), systemBack));
-        Services.AddSingleton<ToastService>();
+        Services.AddSingleton(new EleReactions(new Fakes.MemorySettings(), new ManualTime()));
+        Services.AddEleAndUndo();
+        Services.AddSingleton<ISettingsStore>(new Fakes.MemorySettings());
+        var plans = NSubstitute.Substitute.For<IPlanRepository>();
+        NSubstitute.SubstituteExtensions.Returns(plans.ListOpenAsync(NSubstitute.Arg.Any<CancellationToken>()), Array.Empty<EleFi.Domain.Planning.Plan>());
+        var goals = NSubstitute.Substitute.For<IGoalRepository>();
+        NSubstitute.SubstituteExtensions.Returns(goals.ListAsync(NSubstitute.Arg.Any<CancellationToken>()), Array.Empty<EleFi.Domain.Goals.Goal>());
+        Services.AddSingleton(new EleFi.Application.Streaks.SteadyLedgerService(transactions, plans, clock));
+        Services.AddSingleton(new EleFi.Application.Planning.PlanService(plans, transactions, clock, NSubstitute.Substitute.For<IAuditRepository>(), NSubstitute.Substitute.For<IReminderSchedule>()));
+        Services.AddSingleton(new EleFi.Application.Goals.GoalService(goals, transactions, clock));
         Services.AddSingleton<ILinkOpener>(new NoLinks());
         Services.AddSingleton(new PrivacyMode(new Fakes.MemorySettings()));
         Services.AddSingleton(new AppSwitcherPrivacy(new Fakes.MemorySettings()));

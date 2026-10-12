@@ -1,6 +1,7 @@
 using Bunit;
 using EleFi.Application.Abstractions;
 using EleFi.Ui.Components.Layout;
+using EleFi.Ui.Tests.Support;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -24,12 +25,31 @@ namespace EleFi.Ui.Tests.Components.Layout;
 public class MainLayoutTests : Bunit.TestContext
 {
     private readonly EleFi.Ui.Services.PrivacyMode _privacy = new(new EleFi.Ui.Tests.Support.Fakes.MemorySettings());
+    private readonly EleFi.Ui.Services.EleReactions _ele = new(new EleFi.Ui.Tests.Support.Fakes.MemorySettings(), new EleFi.Ui.Tests.Support.ManualTime());
 
-    /// <summary>The shell hosts the toast list and the privacy switch, so it needs both.</summary>
+    /// <summary>The shell hosts the toast list, the privacy switch and Ele, so it needs all three.</summary>
     public MainLayoutTests()
     {
-        Services.AddSingleton<EleFi.Ui.Services.ToastService>();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddEleAndUndo();
         Services.AddSingleton(_privacy);
+        Services.AddSingleton(_ele);
+        Services.AddTransient<IMascotService, EleFi.Ui.Tests.Support.Fakes.SilentMascot>();
+    }
+
+    [Fact]
+    public void Ele_comes_on_over_any_page_and_the_page_stays_where_it_is()
+    {
+        var component = RenderComponent<MainLayout>(p =>
+            p.Add(x => x.Body, (RenderFragment)(b => b.AddMarkupContent(0, "<p>page content</p>"))));
+
+        _ele.React(EleFi.Ui.Services.EleMoment.Recorded);
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.NotNull(component.Find(".ele-pop"));
+            Assert.Contains("page content", component.Markup, StringComparison.Ordinal);
+        });
     }
 
     [Fact]

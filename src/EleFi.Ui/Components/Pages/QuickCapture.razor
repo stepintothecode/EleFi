@@ -11,7 +11,9 @@
 @inject IContainerRepository Containers
 @inject IPartyRepository Parties
 @inject IClock Clock
-@inject IMascotService Mascot
+@inject EleReactions Ele
+@inject UndoHistory Undo
+@inject EditTransactionService Editing
 @inject NavigationManager Nav
 @layout EleFi.Ui.Components.Layout.BareLayout
 
@@ -41,6 +43,8 @@
     *@
     <div class="quick-top">
         <span class="muted small">Quick capture</span>
+        <span class="grow"></span>
+        <UndoRedo Area="@UndoHistory.Transactions" />
         <button type="button" class="close-stack" aria-label="Cancel and go back" @onclick="Cancel">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                  stroke-linecap="round" aria-hidden="true">
@@ -120,10 +124,6 @@
         }
     </div>
 
-    @if (_problem is not null)
-    {
-        <p class="notice error" role="alert">@_problem</p>
-    }
 
     <div class="quick-actions @(_finishing ? "quick-actions-even" : null)">
         @if (_finishing)
@@ -141,36 +141,17 @@
         }
     </div>
 
-    @if (_added is not null)
-    {
-        <div class="quick-done enter" role="status">
-            <span class="glyph" aria-hidden="true">&#128018;</span>
-            <div>
-                <strong>Added successfully!</strong>
-                <div class="small">@_added Flagged for review, so you can fill in the rest later.</div>
-            </div>
-        </div>
-    }
 </div>
+
 
 @code {
     private static readonly string[] StepLabels = ["Amount", "Paid from", "Paid to"];
 
-    /// <summary>How long the confirmation stays before clearing itself.</summary>
-    /// <remarks>
-    /// It used to sit there until the next save, so the screen showed "Added successfully"
-    /// over an empty form and there was no telling whether it meant the thing just typed or
-    /// the one before it.
-    /// </remarks>
-    private const int ConfirmationMilliseconds = 3200;
 
     /// <summary>The app's back handling, cascaded from the router.</summary>
     [CascadingParameter]
     public BackNavigator? Back { get; set; }
 
-    // Identifies the confirmation currently showing, so a fast second save does not have its
-    // message wiped by the first one's timer firing late.
-    private Guid _confirmationId;
 
     private IReadOnlyList<Container> _containers = [];
     private IReadOnlyList<TypeaheadCandidate> _partyCandidates = [];
@@ -181,8 +162,6 @@
     private Guid _containerId;
     private string _partyName = string.Empty;
     private bool _busy;
-    private string? _added;
-    private string? _problem;
 
     // On the last question: Done, or Add other details.
     private bool _finishing;
@@ -306,7 +285,6 @@
     private void SetStep(int step)
     {
         _step = step;
-        _problem = null;
         SyncStepBack();
     }
 
@@ -339,21 +317,6 @@
     // widget tap, so there is no history to go back to.
     private void Cancel() => Nav.NavigateTo("/");
 
-    private async Task ClearConfirmationLaterAsync(Guid id)
-    {
-        await Task.Delay(ConfirmationMilliseconds).ConfigureAwait(false);
-
-        // Only clear the message this call raised. A second save inside the window replaces
-        // the id, and its own timer takes over.
-        await InvokeAsync(() =>
-        {
-            if (_confirmationId == id)
-            {
-                _added = null;
-                StateHasChanged();
-            }
-        });
-    }
 
     private void Next()
     {
@@ -365,7 +328,6 @@
         if (_step == 2)
         {
             _finishing = true;
-            _problem = null;
             SyncStepBack();
             return;
         }
@@ -411,7 +373,7 @@
         }
 
         _busy = true;
-        _added = null;
+
 
         try
         {
@@ -421,17 +383,16 @@
                 return;
             }
 
-            _added = $"{MoneyText.ToDisplayString(saved.Value.Amount)} to {saved.Value.Counterparty}.";
-            _confirmationId = Guid.CreateVersion7();
-
-            try
-            {
-                await Mascot.CheerAsync();
-            }
-            catch (Exception)
-            {
-                // Celebration is never allowed to matter.
-            }
+            // Ele is the only confirmation. "Recorded", never "Saved", which reads as money
+            // put aside.
+            var id = saved.Value.TransactionId;
+            var shown = MoneyText.ToDisplayString(saved.Value.Amount);
+            Undo.Push(
+                UndoHistory.Transactions,
+                $"recording {shown} to {saved.Value.Counterparty}",
+                () => Editing.DeleteAsync(id),
+                () => Editing.RestoreAsync(id, flagForReview: true));
+            Ele.React(EleMoment.Recorded, shown, saved.Value.Counterparty);
 
             _amountText = string.Empty;
             _partyName = string.Empty;
@@ -441,7 +402,6 @@
             SetStep(0);
             await LoadCandidatesAsync();
 
-            _ = ClearConfirmationLaterAsync(_confirmationId);
         }
         finally
         {
@@ -472,18 +432,16 @@
 
     private async Task<(Guid TransactionId, Money Amount, string Counterparty)?> SaveAsync()
     {
-        _problem = null;
-
         if (!MoneyText.TryParse(_amountText, Currency.Inr, out var amount) || amount.Minor <= 0)
         {
-            _problem = "Enter an amount greater than zero.";
+            Ele.Problem("Enter an amount greater than zero.");
             return null;
         }
 
         var containerParty = await Containers.PartyForAsync(_containerId);
         if (containerParty is null)
         {
-            _problem = "That container no longer exists. Pick another one.";
+            Ele.Problem("That container no longer exists. Pick another one.");
             return null;
         }
 
@@ -509,7 +467,7 @@
 
         if (!result.Succeeded)
         {
-            _problem = result.Error;
+            Ele.Problem(result.Error!);
             return null;
         }
 

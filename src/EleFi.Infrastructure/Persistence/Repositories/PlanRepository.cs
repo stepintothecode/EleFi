@@ -11,6 +11,7 @@ public sealed class PlanRepository(EleFiDbContext db, IClock clock) : IPlanRepos
     public async Task<IReadOnlyList<Plan>> ListOpenAsync(CancellationToken cancellationToken = default)
     {
         var open = await db.Plans
+            .Include(p => p.Labels)
             .Where(p => p.CompletedAt == null)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -27,6 +28,7 @@ public sealed class PlanRepository(EleFiDbContext db, IClock clock) : IPlanRepos
     /// <inheritdoc />
     public async Task<IReadOnlyList<Plan>> ListCompletedAsync(int take = 100, CancellationToken cancellationToken = default) =>
         await db.Plans
+            .Include(p => p.Labels)
             .Where(p => p.CompletedAt != null)
             .OrderByDescending(p => p.CompletedAt)
             .Take(take)
@@ -35,7 +37,7 @@ public sealed class PlanRepository(EleFiDbContext db, IClock clock) : IPlanRepos
 
     /// <inheritdoc />
     public Task<Plan?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
-        db.Plans.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+        db.Plans.Include(p => p.Labels).FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
     /// <inheritdoc />
     public async Task AddAsync(Plan plan, CancellationToken cancellationToken = default)
@@ -62,6 +64,20 @@ public sealed class PlanRepository(EleFiDbContext db, IClock clock) : IPlanRepos
         }
 
         plan.DeletedAt = clock.UtcNow;
+        plan.UpdatedAt = clock.UtcNow;
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task RestoreAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var plan = await db.Plans.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Id == id, cancellationToken).ConfigureAwait(false);
+        if (plan is null)
+        {
+            return;
+        }
+
+        plan.DeletedAt = null;
         plan.UpdatedAt = clock.UtcNow;
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }

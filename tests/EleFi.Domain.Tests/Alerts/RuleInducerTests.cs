@@ -119,6 +119,38 @@ public class RuleInducerTests
         Assert.Equal("Rahul Kumar", Parse(taught.Rule!, "VM-KOTAKB", "Sent Rs 500 to Rahul Kumar")!.Value.Counterparty);
     }
 
+    [Fact]
+    public void With_no_last_four_digits_the_account_can_be_taught_by_its_name()
+    {
+        var taught = RuleInducer.Induce(
+            new TeachingExample(
+                "VM-KOTAKB",
+                "Rs 1,250.00 spent from your Kotak Bank account at AMAZON on 30-08-26",
+                TransactionKind.Debit,
+                "1,250.00",
+                "AMAZON",
+                OccurredOn: "30-08-26",
+                AccountName: "Kotak Bank"),
+            DateTimeOffset.UnixEpoch);
+
+        Assert.True(taught.Succeeded, taught.Error);
+
+        var parsed = Parse(taught.Rule!, "AD-KOTAKB", "Rs 99.00 spent from your Kotak 811 account at SWIGGY on 01-09-26");
+
+        Assert.Equal("Kotak 811", parsed!.Value.AccountName);
+        Assert.Equal("SWIGGY", parsed.Value.Counterparty);
+        Assert.Null(parsed.Value.Last4);
+    }
+
+    [Fact]
+    public void An_account_name_that_is_not_in_the_message_is_refused()
+    {
+        var taught = RuleInducer.Induce(Example with { Last4 = null, AccountName = "Kotak" }, DateTimeOffset.UnixEpoch);
+
+        Assert.False(taught.Succeeded);
+        Assert.Contains("Kotak", taught.Error, StringComparison.Ordinal);
+    }
+
     private static ParsedAlert? Parse(ParseRule rule, string sender, string text)
     {
         Assert.True(rule.TryCompile(out var compiled, out var error), error);

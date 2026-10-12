@@ -34,6 +34,12 @@ internal sealed class InMemoryPlans : IPlanRepository
         return Task.CompletedTask;
     }
 
+    public Task RestoreAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        Rows.Find(p => p.Id == id)!.DeletedAt = null;
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlySet<Guid>> ClaimedTransactionIdsAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlySet<Guid>>(Live.Where(p => p.TransactionId is not null).Select(p => p.TransactionId!.Value).ToHashSet());
 }

@@ -78,6 +78,35 @@ internal static class Fakes
         }
     }
 
+    /// <summary>Ele's sound, recorded rather than played.</summary>
+    public sealed class RecordingSound : ISoundCue
+    {
+        public List<SoundCue> Played { get; } = [];
+
+        public Task PlayAsync(SoundCue cue, CancellationToken cancellationToken = default)
+        {
+            Played.Add(cue);
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>A phone contacts picker that hands back whatever the test says the user picked.</summary>
+    public sealed class FakeContactPicker : IContactPicker
+    {
+        public bool IsSupported { get; init; } = true;
+
+        /// <summary>What the next pick returns: null is the user backing out.</summary>
+        public PickedContact? Next { get; set; }
+
+        public List<string> Opened { get; } = [];
+
+        public Task<PickedContact?> PickAsync(CancellationToken cancellationToken = default) => Task.FromResult(Next);
+
+        public void Open(string lookupKey) => Opened.Add(lookupKey);
+    }
+
     /// <summary>A back control that records whether the app was asked to leave.</summary>
     public sealed class RecordingBack : ISystemBack
     {
@@ -124,6 +153,9 @@ internal static class Fakes
             Task.FromResult(0);
 
         public Task SoftDeleteAsync(Guid containerId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RestoreAsync(Guid containerId, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
     }
 
@@ -183,6 +215,11 @@ internal static class Fakes
 
         public Task<IReadOnlyList<EleFi.Application.Typeahead.TypeaheadCandidate>> NotesForPartyAsync(string partyName, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<EleFi.Application.Typeahead.TypeaheadCandidate>>([]);
+
+        /// <summary>What <see cref="ReviewFactsAsync"/> returns.</summary>
+        public ReviewFacts Facts { get; set; } = new(null, []);
+
+        public Task<ReviewFacts> ReviewFactsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Facts);
     }
 
     /// <summary>A small starter label set.</summary>
@@ -194,8 +231,10 @@ internal static class Fakes
             new() { Name = "Travel", Colour = "#0ea5e9" },
         ];
 
+        private readonly List<Label> _deleted = [];
+
         public Task<IReadOnlyList<Label>> ListAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<Label>>(_labels);
+            Task.FromResult<IReadOnlyList<Label>>(_labels.ToList());
 
         public Task AddAsync(Label label, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
@@ -204,7 +243,19 @@ internal static class Fakes
 
         public Task UpdateAsync(Label label, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<Guid>> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            _deleted.AddRange(_labels.Where(l => l.Id == id));
+            _labels.RemoveAll(l => l.Id == id);
+            return Task.FromResult<IReadOnlyList<Guid>>([]);
+        }
+
+        public Task RestoreAsync(Guid id, IReadOnlyCollection<Guid> transactionIds, CancellationToken cancellationToken = default)
+        {
+            _labels.AddRange(_deleted.Where(l => l.Id == id));
+            _deleted.RemoveAll(l => l.Id == id);
+            return Task.CompletedTask;
+        }
 
         public Task<bool> NameTakenAsync(
             string name, Guid? excluding = null, CancellationToken cancellationToken = default) =>

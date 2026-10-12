@@ -77,7 +77,8 @@ public sealed class EditTransactionService(
     IPartyRepository parties,
     ILabelRepository labels,
     IAuditRepository audit,
-    IClock clock)
+    IClock clock,
+    IAppRepository apps)
 {
     /// <summary>The table name the audit trail files transactions under.</summary>
     public const string EntityType = "Transactions";
@@ -95,6 +96,39 @@ public sealed class EditTransactionService(
         Guid id,
         CancellationToken cancellationToken = default) =>
         audit.TimelineAsync(EntityType, id, cancellationToken);
+
+    /// <summary>
+    /// Everything that has happened to a transaction, newest first, in names and money.
+    /// </summary>
+    /// <remarks>
+    /// The trail holds ids for the parties and apps, so they are looked up here, deleted and
+    /// merged ones included: the history of a payment to someone since merged away still has
+    /// to say who it was.
+    /// </remarks>
+    /// <param name="id">The transaction.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    public async Task<IReadOnlyList<HistoryEntry>> HistoryAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var events = await audit.TimelineAsync(EntityType, id, cancellationToken).ConfigureAwait(false);
+        var ids = TransactionHistory.ReferencedIds(events);
+
+        var names = new Dictionary<Guid, string>();
+        if (ids.Count > 0)
+        {
+            foreach (var (key, name) in await parties.NamesAsync(ids, cancellationToken).ConfigureAwait(false))
+            {
+                names[key] = name;
+            }
+
+            foreach (var (key, name) in await apps.NamesAsync(ids, cancellationToken).ConfigureAwait(false))
+            {
+                names[key] = name;
+            }
+        }
+
+        var transaction = await transactions.FindAsync(id, cancellationToken).ConfigureAwait(false);
+        return TransactionHistory.Describe(events, names, transaction?.SourceCurrency ?? Currency.Inr);
+    }
 
     /// <summary>
     /// Applies an edit, re-checking every invariant capture checks.
@@ -279,51 +313,4 @@ public sealed class EditTransactionService(
         return deleted.Count;
     }
 
-    /// <summary>
-    /// Turns a stored field name and value into something a person can read.
-    /// </summary>
-    /// <remarks>
-    /// The trail stores column names and raw values because that is what a trigger can see.
-    /// Translating happens here rather than in the database so it can change without a
-    /// migration.
-    /// </remarks>
-    /// <param name="field">The column name.</param>
-    public static string FieldLabel(string field) => field switch
-    {
-        "SourcePartyId" => "Paid from",
-        "DestinationPartyId" => "Paid to",
-        "SourceAmountMinor" or "DestinationAmountMinor" => "Amount",
-        "SourceCurrencyCode" or "DestinationCurrencyCode" => "Currency",
-        "OccurredOn" => "Date",
-        "OccurredAtTime" => "Time",
-        "Description" => "Note",
-        "MarketplaceAppId" => "Bought through",
-        "PaymentAppId" => "Paid with",
-        "NeedsReview" => "Needs review",
-        "CaptureSource" => "Recorded via",
-        "Labels" => "Label",
-        _ => field,
-    };
-
-    /// <summary>
-    /// Formats a changed value, turning minor units back into money.
-    /// </summary>
-    /// <param name="field">The column the value came from.</param>
-    /// <param name="raw">The value as the trail stored it.</param>
-    /// <param name="currency">The transaction's currency.</param>
-    public static string FieldValue(string field, string raw, Currency currency)
-    {
-        if (string.Equals(raw, "nothing", StringComparison.Ordinal))
-        {
-            return raw;
-        }
-
-        return field switch
-        {
-            "SourceAmountMinor" or "DestinationAmountMinor" when long.TryParse(raw, out var minor) =>
-                MoneyText.ToDisplayString(Money.SignedMinor(minor, currency)),
-            "NeedsReview" => string.Equals(raw, "1", StringComparison.Ordinal) ? "yes" : "no",
-            _ => raw,
-        };
-    }
 }

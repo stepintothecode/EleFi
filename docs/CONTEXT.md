@@ -55,6 +55,45 @@ always exactly one of:
 The word "party" covers both because the two are interchangeable in the *role* they
 play, which is why they share a single suggestion list during entry.
 
+### Contact
+An External Party seen as a person or business: everyone money has gone to or come from,
+plus anyone added by hand. Not a separate thing from the party a transaction points at, so
+renaming a contact renames it on every transaction at once. A container is never a contact.
+
+A contact may carry **Contact Details**, notes, a link to a contact on the phone, links to
+other contacts, and aliases. Listed in Settings > Contacts.
+
+### Contact Detail
+One way of reaching a contact, or one thing worth keeping about them: a phone number, an
+email address, a postal address, or anything else, each with an optional label ("Work").
+Checked before it is kept, so a phone number field holds a phone number.
+
+### Alias
+Another name for a contact. Left behind when a contact is **merged** into another, or kept
+from before a rename when the user asks. Capturing with an alias, by hand or from an alert,
+lands on the contact it points at, so a bank that keeps writing `ZOMATO LTD` stops making a
+second Zomato. An alias appears in no list; it is shown on its contact's page as "Also known
+as".
+
+### Merge
+Folding one contact into another: its transactions, details and links move to the one kept,
+and its name becomes an alias. Nothing is deleted, and the Undo arrow reverses it.
+
+Distinct from a **Contact Link**, which keeps both contacts and connects them.
+
+### Contact Link
+A connection between two contacts that stay separate. Either **Same as** (the same person or
+business, kept as two), or **Another account of** (Rahul's HDFC UPI and his SBI UPI). A third
+answer, **Not the same**, connects nothing: it records that a suggested duplicate is two
+different people, so it is not suggested again.
+
+### Possible Duplicate
+Two contacts that look like one: the same name written differently (case, spacing, "Ltd", a
+UPI handle), one letter out, or one name inside the other ("Rahul" and "Rahul Kumar"). Only
+ever a suggestion, on its own page behind the button beside New on Contacts, answered with
+**Merge**, **Same** (link them as the same, keep both) or **Different** (never suggest the
+pair again).
+
 ### Transaction
 One movement of money, recorded once. It has a **Source Party**, a **Destination
 Party**, an amount at each end, a date, and any number of labels.
@@ -206,14 +245,16 @@ a plausible wrong amount in a money app is worse than nothing at all.
 
 ### Taught Rule
 A Parse Rule the user made by teaching: they pasted a message EleFi could not read and
-copied out its amount, payee, account and date. EleFi learns the message's shape from that
+copied out its amount, payee, account (its last four digits, or its name when the message
+gives no digits) and date. EleFi learns the message's shape from that
 one example and checks it reads the example back before keeping it. Runs ahead of the
 built-in rules, can be switched off, and can be forgotten.
 
 ### Capture Suggestion
 What a Parse Rule read from one or two alerts about the same payment: an amount, a
-direction, the Container if the last four digits named one, a counterparty, a note, the
-Payment App.
+direction, the Container if the last four digits named one (or, with no digits, the one
+container the message's account name or its sender's bank fits), a counterparty, a note, the
+Payment App, and the time the first alert arrived.
 
 **Internal since ADR-0015.** It is recorded at once as a Transaction flagged Needs Review,
 and the suggestion stays behind only as the link between the alerts and that transaction:
@@ -246,10 +287,23 @@ capture form, or, for a plan with no amount, just ticks it. An alert whose trans
 matches an open plan completes it automatically.
 
 ### Repeat
-How a plan comes back: daily, weekly, monthly or yearly, every N. A repeating plan rolls
-forward **on completion**, not on the calendar, so a missed month stays overdue. Each
-occurrence is its own Plan in the same **series**; a monthly plan keeps its day of the month
-(the 31st becomes the 30th in a short month, and the 31st again after).
+How a plan comes back: daily, weekly, monthly or yearly, every N. A weekly plan can fall on
+chosen days ("every week on Mon, Thu"); a monthly one can be **on the last day** of every
+month. A repeat can end on a date or after a number of times. A repeating plan rolls
+forward **on completion** or **skip**, not on the calendar, so a missed month stays overdue.
+Each occurrence is its own Plan in the same **series**; a monthly plan keeps its day of the
+month (the 31st becomes the 30th in a short month, and the 31st again after).
+
+A plan's **Labels** go onto the transaction it becomes, when that transaction has none.
+
+### Skip
+Closing one occurrence of a plan without a transaction: "not this month". A repeating plan
+rolls on to the next. Shown under Completed as skipped, and reopening it undoes the skip.
+
+### Reminder
+The notification on the day a plan is due: at its time if it has one, otherwise 9:00. It
+offers **Mark done**, which opens the plan to tick off, and **Snooze to tomorrow**, which
+moves the reminder, never the due date.
 
 ### Suggestion
 An answer the app offers from history: a payee, an app, a note used before with the same
@@ -263,7 +317,13 @@ another plan.
 
 ### Steady Ledger
 The streak shown on Home (S42). It counts **weeks**, not days, kept when nothing from that
-week still needs review and no plan due that week is open. Not counted yet.
+week still needs review and no plan due that week is open. A week with nothing in it counts.
+Derived on every read like a balance, so tidying an old week later mends the streak. The
+week in progress adds one while it is tidy and never breaks the run before it ends.
+
+### Freeze
+Earned for every four clean weeks, at most two held, and spent automatically on a missed
+week so a holiday does not reset a long streak. Ele celebrates 4, 12, 26 and 52 weeks.
 
 ---
 
@@ -296,6 +356,14 @@ net worth. Goals are a *view over* money the user already has.
 ### Goal Status
 **On Track**, **Behind**, or **Achieved**, computed by comparing actual progress against
 what progress should be by today, given the start date, target date, and target amount.
+
+### Pace
+How much a goal has been gaining a month: over the last 90 days of contributions (or since
+it started, if younger), and when there are none yet, the monthly amount the user planned.
+
+### Projected Finish
+The date a goal reaches its target if its pace holds: "At this pace, done by Mar 2028".
+Shown beside the status, which compares against the target date instead.
 
 ---
 
@@ -334,7 +402,8 @@ the bank.
 ### Net Worth
 Total assets minus total liabilities, in the home currency. Always presented alongside
 its three components - **Liquid**, **Locked**, and **Owed** - because the total alone
-hides the situation that actually matters.
+hides the situation that actually matters. Tapping one lists the containers that make it
+up, by the same rule that adds it up.
 
 ### Statement
 A filtered view of every transaction touching one container over a date range,
@@ -384,6 +453,22 @@ user deletes is destroyed.
 
 Deleted transactions are listed in Settings, with Restore and Restore all. A restored
 transaction returns everywhere at once, flagged Needs Review.
+
+### Undo
+Two arrows, Undo and Redo, at the top of each page that changes things, greyed out when
+there is nothing to undo or redo. Each page reaches only its own kind of change
+(transactions, contacts, plans, goals, containers, labels). An undo runs back through the
+same checked path as the original change, so it is in the record's history too. Kept for
+the session, up to thirty steps per kind.
+
+### Ele
+The mascot, and the **only messenger**: every confirmation, every undo, and every problem
+("Who was it paid to?") is something Ele says, in a bubble, for a few seconds. There are no
+toasts and no inline error banners. Pleased when something worked, calm for a deletion or an
+undo, cross when something needs fixing, each with its own face and its own sound: a short
+jolly trumpet, a soft hum, a grumpy snort. A newer message pushes the one showing down and
+out. Ele can be quieted (its sound) but not switched off. Which action brings which mood is
+listed in [functional.md, Ele's moods](requirements/functional.md#eles-moods).
 
 ---
 

@@ -5,4 +5,22 @@
     <style name="EleFi.SplashTheme" parent="Maui.SplashTheme">
         <item name="android:windowBackground">@drawable/boot_window</item>
     </style>
+
+    <!-- Laid over the main theme in MainActivity.OnCreate, after MAUI applies it.
+
+         The WebView's date and time pickers are native dialogs, and Material styles their
+         buttons (Set, Clear, Cancel) and header in colorPrimary. Ours is the window's ground,
+         so the buttons were drawn in the dialog's own colour and could not be seen. Setting
+         colorAccent alone did not reach them. Only theme attributes change here: the window
+         background is set from the colorPrimary colour resource directly, so it keeps its
+         ground. -->
+    <style name="EleFi.NativeDialogs" parent="">
+        <item name="colorPrimary">@color/dialogAccent</item>
+        <item name="colorOnPrimary">@color/dialogOnAccent</item>
+        <item name="colorAccent">@color/dialogAccent</item>
+        <item name="colorSecondary">@color/dialogAccent</item>
+        <item name="colorOnSecondary">@color/dialogOnAccent</item>
+        <item name="android:colorPrimary">@color/dialogAccent</item>
+        <item name="android:colorAccent">@color/dialogAccent</item>
+    </style>
 </resources>
