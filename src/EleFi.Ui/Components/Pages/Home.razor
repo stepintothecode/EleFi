@@ -183,7 +183,7 @@
                             }
                             <div class="meta">@balance.Kind.DisplayName()</div>
                         </div>
-                        <div class="amount @(part == NetWorthPart.Owed ? "owed" : null)">
+                        <div class="amount @(part == NetWorthPart.Owed && balance.AmountOwed.Minor > 0 ? "owed" : null)">
                             @Format(part == NetWorthPart.Owed ? balance.AmountOwed : balance.Balance)
                         </div>
                     </div>
@@ -216,8 +216,12 @@
     </a>
 }
 
-@* Tabs rather than a heading, so last month and any other stretch are one tap away. *@
+@* Tabs rather than a heading, so today, last month and any other stretch are one tap away.
+   This month stays the one shown first. *@
 <div class="segmented" role="tablist" aria-label="Period">
+    <button type="button" role="tab" class="@(_period == DatePreset.Today ? "on" : null)"
+            aria-selected="@(_period == DatePreset.Today ? "true" : "false")"
+            @onclick="() => ShowPresetAsync(DatePreset.Today)">Today</button>
     <button type="button" role="tab" class="@(_period == DatePreset.ThisMonth ? "on" : null)"
             aria-selected="@(_period == DatePreset.ThisMonth ? "true" : "false")"
             @onclick="() => ShowPresetAsync(DatePreset.ThisMonth)">This month</button>
@@ -226,7 +230,7 @@
             @onclick="() => ShowPresetAsync(DatePreset.LastMonth)">Last month</button>
     <button type="button" role="tab" class="@(_period == DatePreset.Custom ? "on" : null)"
             aria-selected="@(_period == DatePreset.Custom ? "true" : "false")"
-            @onclick="() => _rangeOpen = true">@(_period == DatePreset.Custom ? RangeText : "Select a range")</button>
+            @onclick="() => _rangeOpen = true">@(_period == DatePreset.Custom ? RangeText : "Range")</button>
 </div>
 
 <DateRangeSheet Open="_rangeOpen" Initial="_range" OnApply="ShowRangeAsync" OnCancel="() => _rangeOpen = false" />
@@ -387,9 +391,13 @@ else
     private TransactionFilter _range = TransactionFilter.Empty;
     private bool _rangeOpen;
 
-    private string RangeText =>
-        $"{_range.From:d MMM}{(_range.FromTime is { } a ? $" {a:HH\\:mm}" : string.Empty)} to "
-        + $"{_range.To:d MMM}{(_range.ToTime is { } b ? $" {b:HH\\:mm}" : string.Empty)}";
+    // Short enough for a quarter of a phone's width: "10-12 Aug", or "28 Aug-2 Sep" across
+    // months. The times chosen still apply; the sheet shows them.
+    private string RangeText => _range.From is { } from && _range.To is { } to
+        ? from.Month == to.Month && from.Year == to.Year
+            ? from == to ? $"{from:d MMM}" : $"{from:%d}-{to:d MMM}"
+            : $"{from:d MMM}-{to:d MMM}"
+        : "Range";
 
     protected override async Task OnInitializedAsync()
     {

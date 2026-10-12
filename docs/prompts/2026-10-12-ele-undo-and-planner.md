@@ -63,6 +63,16 @@ latest change to any transaction. Splitting it per page was offered and not take
 
 Answered with the table of moods, triggers and test steps in [functional.md, Ele's moods](../requirements/functional.md#eles-moods).
 
+> Wait, also in the home page, just like "This month", "Last month", and "select a range" options, also add "Today" tab button but on the very left of "Next month". And then keep "This month" as default opened just as it is currently.
+
+Read as "left of This month", since there is no Next month tab.
+
+> No, keep al;all 4 equal sized. Maybe keep the text as short as possible e.g.  "Range" instead of "Select a Range"
+
+> Also, when I click on "Owed" and in that list of containers, the 0.00 Rs is still shown in red color
+
+> update the TODOs also so far... and next remaining items. With all the changes so far.Keep tythe enxt item list up to date before commiting and pushing
+
 ## 4. What changed mid-session
 
 | Before | After | Why |
@@ -73,6 +83,9 @@ Answered with the table of moods, triggers and test steps in [functional.md, Ele
 | A paid-off card showed a red ₹0.00 "owed" | Shows "nothing owed", not red | Seen on the phone while checking the new list |
 | Pleased was two brassy notes, calm a bell, cross two falling notes | A real elephant trumpet, a low hum, a snort | Asked for: the jolly one as a trumpet, and a sound per face |
 | Marking a duplicate pair Different made Ele pleased | Calm | Found while documenting every mood: Different changes nothing, so it is not a win |
+| Home's period tabs sized to their words | Four equal tabs; "Select a range" became "Range", and a chosen range shows as "10-12 Aug" | Asked for equal sizes, with shorter words to fit |
+| The Owed sheet coloured every card's amount | Only an amount actually owed is in the owed colour | ₹0.00 was still red there |
+| TODO had one flat "Now" list | An ordered "Next up" list, then "Later, not ordered" | Asked for the next items to be kept current |
 
 ## 5. Final shape
 

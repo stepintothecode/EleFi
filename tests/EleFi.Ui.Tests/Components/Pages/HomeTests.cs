@@ -122,12 +122,28 @@ public class HomeTests : Bunit.TestContext
     }
 
     [Fact]
+    public void Today_is_the_first_tab_and_shows_just_today()
+    {
+        Register();
+        var component = RenderComponent<Home>();
+
+        var tabs = component.FindAll(".segmented button").Select(b => b.TextContent).ToList();
+        Assert.Equal(["Today", "This month", "Last month", "Range"], tabs);
+
+        component.FindAll(".segmented button")[0].Click();
+
+        Assert.Equal("Today", component.Find(".segmented [aria-selected=true]").TextContent);
+        Assert.Equal(new DateOnly(2026, 8, 30), _transactions.LastSpendFilter!.From);
+        Assert.Equal(new DateOnly(2026, 8, 30), _transactions.LastSpendFilter.To);
+    }
+
+    [Fact]
     public void Last_month_is_one_tap_away()
     {
         Register();
         var component = RenderComponent<Home>();
 
-        component.FindAll(".segmented button")[1].Click();
+        component.FindAll(".segmented button").First(b => b.TextContent == "Last month").Click();
 
         Assert.Equal("Last month", component.Find(".segmented [aria-selected=true]").TextContent);
         Assert.Equal(new DateOnly(2026, 7, 1), _transactions.LastSpendFilter!.From);
@@ -135,12 +151,12 @@ public class HomeTests : Bunit.TestContext
     }
 
     [Fact]
-    public void Select_a_range_asks_for_dates_and_times_and_then_shows_that_range()
+    public void Range_asks_for_dates_and_times_and_then_shows_that_range_briefly()
     {
         Register();
         var component = RenderComponent<Home>();
 
-        component.FindAll(".segmented button")[2].Click();
+        component.FindAll(".segmented button").First(b => b.TextContent == "Range").Click();
         Assert.Equal("Select a range", component.Find("[role=dialog]").GetAttribute("aria-label"));
 
         component.Find("#range-from").Change("2026-08-10");
@@ -151,7 +167,8 @@ public class HomeTests : Bunit.TestContext
         Assert.Equal(new DateOnly(2026, 8, 10), _transactions.LastSpendFilter!.From);
         Assert.Equal(new TimeOnly(18, 0), _transactions.LastSpendFilter.FromTime);
         Assert.Equal(new DateOnly(2026, 8, 12), _transactions.LastSpendFilter.To);
-        Assert.Contains("10 Aug 18:00 to 12 Aug", component.Find(".segmented [aria-selected=true]").TextContent, StringComparison.Ordinal);
+        // Short enough for a quarter of the bar; the 18:00 still applies to the figures.
+        Assert.Equal("10-12 Aug", component.Find(".segmented [aria-selected=true]").TextContent);
     }
 
     [Fact]
@@ -210,6 +227,23 @@ public class HomeTests : Bunit.TestContext
         component.Find("button.tile[aria-label^='Owed']").Click();
 
         Assert.Equal(["Card"], component.Find("[role=dialog]").QuerySelectorAll(".who").Select(w => w.TextContent));
+    }
+
+    [Fact]
+    public void A_card_with_nothing_owed_is_not_shown_in_the_owed_colour()
+    {
+        Register(balances:
+        [
+            new ContainerBalance(Guid.NewGuid(), "Paid off", ContainerKind.CreditCard, Money.SignedMinor(0, Currency.Inr)),
+            new ContainerBalance(Guid.NewGuid(), "In use", ContainerKind.CreditCard, Money.SignedMinor(-300_00, Currency.Inr)),
+        ]);
+        var component = RenderComponent<Home>();
+
+        component.Find("button.tile[aria-label^='Owed']").Click();
+
+        var amounts = component.FindAll("[role=dialog] .txn .amount");
+        Assert.False(amounts[0].ClassList.Contains("owed"));
+        Assert.True(amounts[1].ClassList.Contains("owed"));
     }
 
     [Fact]

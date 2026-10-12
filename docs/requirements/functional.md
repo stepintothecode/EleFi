@@ -189,7 +189,7 @@ The core feature. Everything else exists to make this worth doing.
 | FR-5.4 | Tap any label to drill into its filtered transaction list | 1.0 |
 | FR-5.5 | Cycle income vs spend vs net | 1.0 |
 | FR-5.6 | `needs_review` count with a link to the review queue | 1.0 |
-| FR-5.7 | Cycle selector: current, previous, any past cycle | 1.0 |
+| FR-5.7 | Four equal period tabs: Today, This month (shown first), Last month, and Range, which then shows the chosen dates briefly ("10-12 Aug") | 1.0 |
 | FR-5.8 | Goal progress summary with on-track status | 1.1 |
 | FR-5.8a | What is still planned this month: to pay, to come in, and how many plans | 1.1 |
 | FR-5.8b | The Steady ledger streak, with this week's status, recent weeks, freezes and the next milestone (S42) | 1.1 |
