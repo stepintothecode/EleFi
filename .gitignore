@@ -52,3 +52,6 @@ desktop.ini
 .nuget/
 *.nupkg
 node_modules/
+
+# Crash dumps from Git Bash on Windows.
+*.stackdump
