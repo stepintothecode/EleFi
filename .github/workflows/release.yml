@@ -27,18 +27,18 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
 
@@ -53,6 +53,8 @@ jobs:
           dotnet test tests/EleFi.Application.Tests -c Release
           dotnet test tests/EleFi.Infrastructure.Tests -c Release
           dotnet test tests/EleFi.Architecture.Tests -c Release
+          dotnet test tests/EleFi.Properties.Tests -c Release
+          dotnet test tests/EleFi.Ui.Tests -c Release
 
       - name: Read version from tag
         id: version
