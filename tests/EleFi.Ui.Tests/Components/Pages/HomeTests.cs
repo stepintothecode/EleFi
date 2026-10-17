@@ -185,6 +185,30 @@ public class HomeTests : Bunit.TestContext
     }
 
     [Fact]
+    public void A_new_user_with_nothing_set_up_gets_eles_guide_once()
+    {
+        var guide = new EleFi.Ui.Services.EleGuide(new Fakes.MemorySettings());
+        Services.AddSingleton(guide);
+        Register();
+
+        RenderComponent<Home>();
+
+        Assert.True(guide.IsOpen);
+    }
+
+    [Fact]
+    public void Someone_with_containers_is_not_interrupted_by_the_guide()
+    {
+        var guide = new EleFi.Ui.Services.EleGuide(new Fakes.MemorySettings());
+        Services.AddSingleton(guide);
+        Register(balances: [new ContainerBalance(Guid.NewGuid(), "Savings", ContainerKind.BankAccount, Money.FromMinor(100, Currency.Inr))]);
+
+        RenderComponent<Home>();
+
+        Assert.False(guide.IsOpen);
+    }
+
+    [Fact]
     public void Containers_are_not_listed_on_home_any_more()
     {
         Register(balances: [new ContainerBalance(Guid.NewGuid(), "Savings", ContainerKind.BankAccount, Money.FromMinor(100, Currency.Inr))]);
@@ -286,8 +310,23 @@ public class HomeTests : Bunit.TestContext
         component.Find(".streak-chip").Click();
 
         Assert.Equal("Steady ledger", component.Find("[role=dialog]").GetAttribute("aria-label"));
-        Assert.Contains("Sunday night", component.Find("[role=dialog]").TextContent, StringComparison.Ordinal);
+        Assert.Contains("by Sunday", component.Find("[role=dialog]").TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("not being counted", component.Find("[role=dialog]").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_streak_sheet_says_the_rule_in_one_line_and_little_else()
+    {
+        Register(startedAt: new DateTimeOffset(2026, 8, 10, 9, 0, 0, TimeSpan.Zero));
+        var component = RenderComponent<Home>();
+
+        component.Find(".streak-chip").Click();
+
+        var words = component.Find("[role=dialog]").TextContent
+            .Split((char[])[' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries).Length;
+        Assert.InRange(words, 1, 75);
+        Assert.Equal(2, component.Find(".streak-rule").TextContent.Split('.', StringSplitOptions.RemoveEmptyEntries)
+            .Count(s => s.Trim().Length > 0));
     }
 
     [Fact]

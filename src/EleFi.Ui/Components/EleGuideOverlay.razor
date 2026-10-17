@@ -1,0 +1,133 @@
+@using EleFi.Application.Abstractions
+@using EleFi.Ui.Services
+@implements IDisposable
+@inject EleGuide Guide
+@inject EleReactions Ele
+@inject ISoundCue Sound
+@inject NavigationManager Nav
+
+@*
+    Ele's guide, over the app.
+
+    The page behind is the real one for each step, dimmed, with its tab lit in the bar below
+    (the layout adds the classes for that). Ele sits in the upper half and says a sentence or
+    two, each on its own line, with her sound; Previous and Next are right under her, and Skip
+    is alone at the top, solid so nothing behind shows through, out of the way of the thumb
+    that is tapping Next.
+
+    The back gesture goes back a step, and on the first step it skips, so back never leaves
+    the app halfway through.
+*@
+
+@if (Guide.IsOpen)
+{
+    var step = Guide.Current;
+
+    <div class="guide-backdrop" role="dialog" aria-modal="true" aria-label="Ele's guide">
+        <button type="button" class="guide-skip" @onclick="Guide.Skip">Skip guide</button>
+
+        <div class="guide-card" @key="Guide.Index">
+            <div class="guide-ele">
+                <MascotViewer Mood="step.Mood" />
+            </div>
+            <div class="guide-bubble" role="status">
+                <strong class="guide-title">@step.Title</strong>
+                @foreach (var sentence in EleGuide.Sentences(step.Line))
+                {
+                    <span class="guide-line">@sentence</span>
+                }
+                <span class="guide-count">@(Guide.Index + 1) of @EleGuide.Steps.Count</span>
+            </div>
+            <div class="guide-nav">
+                <button type="button" class="btn-ghost guide-previous" disabled="@Guide.IsFirst" @onclick="Guide.Previous">Previous</button>
+                <button type="button" class="primary guide-next" @onclick="Guide.Next">@(Guide.IsLast ? "Let's go" : "Next")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IDisposable? _back;
+    private int _shownIndex = -1;
+
+    /// <summary>The app's back handling, cascaded from the router.</summary>
+    [CascadingParameter]
+    public BackNavigator? Back { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Guide.Changed += OnChanged;
+        Sync();
+    }
+
+    public void Dispose()
+    {
+        Guide.Changed -= OnChanged;
+        _back?.Dispose();
+    }
+
+    private void OnChanged() => InvokeAsync(() =>
+    {
+        Sync();
+        StateHasChanged();
+    });
+
+    // Opens each step's page behind the guide, and takes over back while it is open.
+    private void Sync()
+    {
+        if (!Guide.IsOpen)
+        {
+            _shownIndex = -1;
+            _back?.Dispose();
+            _back = null;
+            return;
+        }
+
+        _back ??= Back?.Intercept(() =>
+        {
+            // The navigator has dropped this registration before calling it.
+            _back = null;
+            if (Guide.IsFirst)
+            {
+                Guide.Skip();
+            }
+            else
+            {
+                Guide.Previous();
+            }
+
+            return Task.CompletedTask;
+        });
+
+        if (_shownIndex != Guide.Index)
+        {
+            if (Guide.Current.Route is { } route)
+            {
+                Nav.NavigateTo(route);
+            }
+
+            _ = ChimeAsync(Guide.Current.Mood);
+        }
+
+        _shownIndex = Guide.Index;
+    }
+
+    // Ele's sound with each step, the same cues as her messages: a trumpet for the happy hello
+    // and goodbye, a soft hum in between. Decoration, so it never matters if it fails.
+    private async Task ChimeAsync(MascotMood mood)
+    {
+        if (!Ele.SoundEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            await Sound.PlayAsync(mood == MascotMood.Happy ? SoundCue.Pleased : SoundCue.Calm);
+        }
+        catch (Exception)
+        {
+            // A sound that does not play is not a problem.
+        }
+    }
+}

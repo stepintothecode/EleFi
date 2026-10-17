@@ -17,6 +17,11 @@ backup now holds everything, and a Safety Copy is taken before any update change
 schema. Back works everywhere, the app hides from the recent-apps view (part of S11), and
 labels take any colour. See [the decision log](prompts/2026-10-05-data-safety-goals-and-polish.md).
 
+**Status 2026-10-17.** Ele has a new look, one drawing for every Ele from the live mascot to the
+app icon: a cheerful young elephant with big eyes and no mouth, whose lids, trunk and ears
+carry the mood. Ele's guide walks a new user through every major feature, containers first,
+and is in Settings any time. See [the decision log](prompts/2026-10-17-ele-redesign-and-guide.md).
+
 **Status 2026-10-12.** Ele is now the only messenger (no toasts, no inline errors), with a
 tone per message and a short sound, and every page that changes things has Undo and Redo
 arrows. The Planner (S41) is complete: chosen weekdays, last day of the month, end date or

@@ -16,8 +16,8 @@
     <color name="dialogOnAccent">#FFFFFF</color>
 
     <!-- Ele on the start-up window (drawable/boot_ele.xml), the ele-mascot tokens in app.css. -->
-    <color name="ele_mascot_hide">#B9A5D8</color>
-    <color name="ele_mascot_hide_dark">#8E77B4</color>
-    <color name="ele_mascot_ear">#7C63A6</color>
-    <color name="ele_mascot_ink">#2A2140</color>
+    <color name="ele_mascot_hide">#A98BFA</color>
+    <color name="ele_mascot_hide_dark">#8466EE</color>
+    <color name="ele_mascot_ear">#7656E0</color>
+    <color name="ele_mascot_ink">#231A3D</color>
 </resources>

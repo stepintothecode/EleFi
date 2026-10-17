@@ -63,6 +63,17 @@ public class SettingsTests : Bunit.TestContext
     }
 
     [Fact]
+    public void The_quick_guide_by_ele_can_be_started_from_here_any_time()
+    {
+        Register();
+        var component = RenderComponent<Settings>();
+
+        component.Find("button.start-guide").Click();
+
+        Assert.True(Services.GetRequiredService<EleGuide>().IsOpen);
+    }
+
+    [Fact]
     public void Hiding_amounts_is_a_switch_here_too()
     {
         Register();

@@ -10,6 +10,8 @@ namespace EleFi.Ui.Tests.Support;
 /// </summary>
 /// <remarks>
 /// Try-added, so a test that registered its own Ele first, to read what Ele said, keeps it.
+/// Ele's guide is registered as already finished, so it does not open over pages whose tests
+/// are about something else; the guide's own tests start it themselves.
 /// </remarks>
 internal static class EleServices
 {
@@ -20,6 +22,10 @@ internal static class EleServices
         services.TryAddSingleton(new EleReactions(new Fakes.MemorySettings(), new ManualTime()));
         services.TryAddSingleton<ISoundCue>(new Fakes.RecordingSound());
         services.TryAddSingleton(new UndoHistory());
+
+        var seen = new Fakes.MemorySettings();
+        seen.Write(EleGuide.DoneKey, "true");
+        services.TryAddSingleton(new EleGuide(seen));
         return services;
     }
 }

@@ -524,18 +524,37 @@ transaction already names ([ADR-0016](../adr/0016-contacts-merge-with-aliases.md
 | FR-14.7 | A plan's labels go onto the transaction it becomes when that has none | 1.1 |
 | FR-14.8 | A reminder notification on the due day, at the plan's time or 9:00, with Mark done and Snooze to tomorrow. Put back after a restart | 1.1 |
 | FR-14.9 | Every change to a plan is in its history | 1.1 |
+| FR-14.10 | Ele's guide: a short walk through every major feature, over the app itself. Each step opens its page behind a dim overlay and lights its tab; Ele says a sentence or two, each on its own line, with her sound; Previous and Next beside her, a solid Skip at the top; back steps back. It starts on its own once for a new user with no containers, and Settings > Help > Quick guide by Ele starts it any time | 1.1 |
 
 ### Ele's moods
 
-Ele has three moods. Each has its own face, movement and sound, so the mood reads at a
-glance even with the sound off. Built in `EleReactions` (`EleTone`) and `EleOverlay`; the
+**What Ele looks like.** A cheerful young elephant in the spirit of Duolingo's Duo: a bright
+violet, round head, two big eyes close together with large pupils and two sparkles each, soft
+puffed cheeks, round ears held out, a short chubby trunk that curls up at the tip, and two
+small tusks. No mouth and no brows: the eyes' lids carry the feeling, backed by the trunk and
+the ears. Confetti comes when she turns pleased, or when a pleased message or guide step
+arrives, never on a picture that simply opens pleased (About, Settings). One drawing,
+`wwwroot/js/elefi-ele-shape.js`, makes every Ele: the live one, and
+the app icon, splash, start-up screen and brand icon, which `docs/brand/generate.mjs` writes
+from it.
+
+| Face | Eyes | Trunk and ears |
+|---|---|---|
+| At rest | Wide open | Trunk hanging, tip curled up; ears out |
+| Pleased | Lower lids rise into a smile | Trunk raised up the right side of the face to eye level, its lighter ridged underside showing, its end turned to the front with both nostrils; ears spread; a burst of confetti |
+| Cross | Upper lids slant in | Trunk droops a little; ears held back |
+| Sad | Upper lids droop at the outer corners | Trunk hangs straight; ears low |
+| Hiding amounts | Covered | Both big ears flop down over the top of the face from its edges, in an eased 0.6 s fold that reverses smoothly if tapped mid-way. A page that opens with amounts already hidden shows her already hiding |
+
+Ele has three moods for messages. Each has its own face, movement and sound, so the mood reads
+at a glance even with the sound off. Built in `EleReactions` (`EleTone`) and `EleOverlay`; the
 sounds are synthesised in `wwwroot/js/elefi-sound.js`.
 
 | Mood | Face | Movement | Sound | Stays | Meaning |
 |---|---|---|---|---|---|
-| **Pleased** | Happy | Hops twice, then floats | A short, jolly elephant trumpet | 4 s | Something worked |
-| **Calm** | At rest, neither happy nor cross | Only floats | A soft, low hum | 4 s | Something neutral: a deletion, an undo, an archive |
-| **Cross** | Frowning | Shakes its head twice, then floats; the line is in the warning colour | A short grumpy snort, never a buzzer | 5 s, long enough to read | Something needs fixing |
+| **Pleased** | Pleased | Hops twice, then floats; confetti | A short, jolly elephant trumpet | 4 s | Something worked |
+| **Calm** | At rest | Only floats | A soft, low hum | 4 s | Something neutral: a deletion, an undo, an archive |
+| **Cross** | Cross | Shakes its head twice, then floats; the line is in the warning colour | A short grumpy snort, never a buzzer | 5 s, long enough to read | Something needs fixing |
 
 Every mood arrives from the right above the tab bar and leaves by sliding down and fading
 over 0.42 s, whether it timed out, its × was tapped, or a newer message replaced it. Only

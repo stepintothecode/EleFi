@@ -4,14 +4,16 @@ Everything not yet built, in one place, so nothing is forgotten. The roadmap
 ([roadmap.md](roadmap.md)) says why and in what order; this file is the checklist. Tick an
 item in the same commit that finishes it, and move it to **Done** at the bottom.
 
-Priorities as of 2026-10-12: multi-currency is **low** priority. Last updated 2026-10-12,
-after the Ele, undo and Planner session; the build with everything below ticked is on the
-test phone.
+Priorities as of 2026-10-12: multi-currency is **low** priority. Last updated 2026-10-17,
+after Ele's new look and Ele's guide; the build with everything below ticked is on the test
+phone.
 
 ## Next up, in order
 
 1. [ ] **Check on the phone, with real use** (needs the user, nothing to build):
    - a plan due in a few minutes: the reminder fires, Mark done opens it, Snooze moves it
+   - Ele's new look in every mood, the confetti, the smoother hide, and the guide (Settings >
+     Help > Quick guide by Ele)
    - each of Ele's three moods and sounds (steps in
      [functional.md, Ele's moods](requirements/functional.md#eles-moods))
    - the next real GPay, PhonePe, Paytm, Amazon Pay, PayZapp and CRED payment is recorded
@@ -88,6 +90,12 @@ test phone.
 
 ## Done recently
 
+- [x] **2026-10-17, Ele's new look**: one drawing for every Ele (the live mascot, app icon,
+      launcher images, splash, start-up screen, brand icon); a cheerful young elephant with big
+      eyes and no mouth; lids carry the mood; the pleased trunk raised with its end facing front;
+      big ears folding over the eyes in a smooth timed fold; confetti when pleased
+- [x] **2026-10-17, Ele's guide**: eight steps over the real screens, containers first; Skip,
+      Previous, Next and back; starts once for a new user, and from Settings > Help
 - [x] **2026-10-12, Ele and undo**: Ele is the only messenger (toasts and inline error banners
       gone); three moods, each with its own face, movement and sound (a short elephant
       trumpet, a low hum, a grumpy snort); a newer message pushes the old one down and out;

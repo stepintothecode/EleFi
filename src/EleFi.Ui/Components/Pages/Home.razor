@@ -18,6 +18,7 @@
 @inject EleFi.Application.Goals.GoalService Goals
 @inject ISettingsStore Settings
 @inject EleReactions Ele
+@inject EleGuide Guide
 
 @*
     The dashboard answers one question in three seconds: what do I actually have?
@@ -52,42 +53,34 @@
 </div>
 
 <Modal Open="_streakOpen" Title="Steady ledger" OnCancel="() => _streakOpen = false">
-    <p>
-        A week counts when, by Sunday night, nothing from that week still needs review and no
-        plan due that week is left open. A week with no transactions counts too: there was
-        nothing to tidy.
-    </p>
-    <p class="muted small">
-        It is about keeping the numbers true, not adding something every day. With your SMS and
-        payment apps recording most payments, a clean week is usually a minute of tidying.
-    </p>
-    <p class="muted small">
-        Earn a freeze every four clean weeks, so a holiday does not reset a long streak. Ele
-        celebrates at 4, 12, 26 and 52 weeks.
+    @* The rule in one line, then where this week stands, then the two numbers that matter.
+       Everything else this sheet used to say was explaining the explanation. *@
+    <p class="streak-rule">
+        A week counts when, by Sunday, every transaction in it is reviewed and every plan due in
+        it is done. A quiet week counts too.
     </p>
     @if (_streak is { } streak)
     {
         <div class="streak-now @(streak.ThisWeek.IsTidy ? "tidy" : "untidy")" role="status">
             @if (streak.ThisWeek.IsTidy)
             {
-                <strong>This week is tidy so far.</strong>
+                <strong>This week counts so far.</strong>
             }
             else
             {
-                <strong>To keep this week:</strong>
+                <strong>This week:</strong>
                 @if (streak.ThisWeek.ToReview > 0)
                 {
                     <span> review @streak.ThisWeek.ToReview @(streak.ThisWeek.ToReview == 1 ? "transaction" : "transactions")</span>
                 }
                 @if (streak.ThisWeek.ToReview > 0 && streak.ThisWeek.PlansOpen > 0)
                 {
-                    <span> and</span>
+                    <span>,</span>
                 }
                 @if (streak.ThisWeek.PlansOpen > 0)
                 {
                     <span> tick off @streak.ThisWeek.PlansOpen @(streak.ThisWeek.PlansOpen == 1 ? "plan" : "plans")</span>
                 }
-                <span>.</span>
             }
         </div>
 
@@ -102,15 +95,27 @@
                 }
                 <span class="streak-week now @(streak.ThisWeek.IsTidy ? "clean" : null)" aria-label="This week"></span>
             </div>
+            <div class="streak-legend small muted">
+                <span><span class="streak-week clean"></span> counted</span>
+                <span><span class="streak-week frozen"></span> saved by a freeze</span>
+                <span><span class="streak-week missed"></span> missed</span>
+            </div>
         }
 
-        <p class="small">
-            @streak.Freezes @(streak.Freezes == 1 ? "freeze" : "freezes") in hand.
+        <div class="streak-facts">
+            <div class="row between">
+                <span>Freezes</span>
+                <strong>@streak.Freezes</strong>
+            </div>
+            <p class="muted small">One earned every 4 counted weeks. It saves a missed week on its own.</p>
             @if (streak.NextMilestone is { } next)
             {
-                @($" Next celebration at {next} weeks.")
+                <div class="row between">
+                    <span>Next milestone</span>
+                    <strong>@next weeks</strong>
+                </div>
             }
-        </p>
+        </div>
     }
     <button class="primary btn-block" @onclick="() => _streakOpen = false">Got it</button>
 </Modal>
@@ -419,6 +424,12 @@ else
         // The mascot reacts, but nothing waits on it (NFR-2.7).
         _mood = _netWorth.Owed.Minor > _netWorth.Liquid.Minor ? MascotMood.Concerned : MascotMood.Idle;
         CelebrateMilestone();
+
+        // A new user, with nothing set up: Ele walks them through, once.
+        if (Guide.ShouldStartOnItsOwn(hasContainers: _balances.Count > 0))
+        {
+            Guide.Start();
+        }
 
         _loading = false;
     }

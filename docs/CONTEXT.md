@@ -462,13 +462,20 @@ same checked path as the original change, so it is in the record's history too. 
 the session, up to thirty steps per kind.
 
 ### Ele
-The mascot, and the **only messenger**: every confirmation, every undo, and every problem
+A cheerful young elephant, the app's mascot: big bright eyes, puffed cheeks, round ears, a
+chubby trunk, no mouth. Her feelings show in her eyelids, trunk and ears. And she is the
+**only messenger**: every confirmation, every undo, and every problem
 ("Who was it paid to?") is something Ele says, in a bubble, for a few seconds. There are no
 toasts and no inline error banners. Pleased when something worked, calm for a deletion or an
 undo, cross when something needs fixing, each with its own face and its own sound: a short
 jolly trumpet, a soft hum, a grumpy snort. A newer message pushes the one showing down and
 out. Ele can be quieted (its sound) but not switched off. Which action brings which mood is
 listed in [functional.md, Ele's moods](requirements/functional.md#eles-moods).
+
+### Ele's guide
+A one-minute walk through the app with Ele, step by step over the real screens: containers
+first, then recording, Quick, the list, plans and goals, automatic capture, and Home. It
+starts on its own once for a new user, and is always in Settings > Help.
 
 ---
 

@@ -2,6 +2,7 @@
 @using EleFi.Ui.Services
 @implements IDisposable
 @inject PrivacyMode Privacy
+@inject EleGuide Guide
 
 @*
     The error boundary is not decoration.
@@ -13,9 +14,12 @@
 
     The shell carries the privacy class, so hiding amounts covers every page, every sheet and
     every word Ele says without any of them knowing the switch exists.
+
+    While Ele's guide is open the shell also says so, and which tab the step is about, so the
+    tab bar can light that one tab above the dimmed page without any tab knowing the guide.
 *@
 
-<div class="shell @Privacy.CssClass">
+<div class="shell @Privacy.CssClass @GuideClass">
     <main class="page">
         <ErrorBoundary @ref="_boundary">
             <ChildContent>
@@ -37,20 +41,33 @@
 
     <NavMenu />
     <EleOverlay />
+    <EleGuideOverlay />
 </div>
 
 @code {
     private ErrorBoundary? _boundary;
 
-    protected override void OnInitialized() => Privacy.Changed += OnPrivacyChanged;
+    private string? GuideClass => Guide.IsOpen
+        ? $"guiding spot-{Guide.Current.Spot.ToString().ToLowerInvariant()}"
+        : null;
+
+    protected override void OnInitialized()
+    {
+        Privacy.Changed += OnShellChanged;
+        Guide.Changed += OnShellChanged;
+    }
 
     // A boundary latches once it has caught something. Without this, navigating away and
     // back shows the same error over a page that would now render perfectly well.
     protected override void OnParametersSet() => _boundary?.Recover();
 
-    public void Dispose() => Privacy.Changed -= OnPrivacyChanged;
+    public void Dispose()
+    {
+        Privacy.Changed -= OnShellChanged;
+        Guide.Changed -= OnShellChanged;
+    }
 
-    private void OnPrivacyChanged() => InvokeAsync(StateHasChanged);
+    private void OnShellChanged() => InvokeAsync(StateHasChanged);
 
     private void Recover() => _boundary?.Recover();
 }

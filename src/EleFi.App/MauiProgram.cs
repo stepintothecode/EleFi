@@ -63,6 +63,7 @@ public static class MauiProgram
         builder.Services.AddScoped<EleFi.Ui.Services.EleReactions>();
         builder.Services.AddScoped<ISoundCue, WebAudioSoundCue>();
         builder.Services.AddScoped<EleFi.Ui.Services.UndoHistory>();
+        builder.Services.AddScoped<EleFi.Ui.Services.EleGuide>();
 
         // Scoped for the same reason: one history per WebView, kept across page changes.
         builder.Services.AddScoped<EleFi.Ui.Services.BackNavigator>();

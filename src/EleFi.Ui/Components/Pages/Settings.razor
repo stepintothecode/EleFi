@@ -18,6 +18,7 @@
 @inject ILinkOpener Links
 @inject IClock Clock
 @inject NavigationManager Nav
+@inject EleGuide Guide
 
 @*
     Settings, and the honest list of what is not built yet. Each card is its buttons and an
@@ -253,6 +254,22 @@
         <div class="who grow">Encrypted backup to your own Drive</div>
         <span class="tag">Not built yet</span>
     </div>
+</div>
+
+<h2>Help</h2>
+<div class="card settings-list">
+    <button type="button" class="settings-row start-guide" @onclick="Guide.Start">
+        <span class="settings-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9" /><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.1-2.4 3.6" /><path d="M12 17.2h.01" />
+            </svg>
+        </span>
+        <span class="settings-text">
+            <span class="settings-title">Quick guide by Ele</span>
+            <span class="settings-sub">A one-minute walk through the app</span>
+        </span>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
+    </button>
 </div>
 
 <h2>About</h2>

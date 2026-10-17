@@ -11,8 +11,8 @@
     <color name="dialogAccent">#DDD3FE</color>
     <color name="dialogOnAccent">#1E1636</color>
 
-    <color name="ele_mascot_hide">#CDBCE8</color>
-    <color name="ele_mascot_hide_dark">#A38FC8</color>
-    <color name="ele_mascot_ear">#8E77B4</color>
-    <color name="ele_mascot_ink">#241C36</color>
+    <color name="ele_mascot_hide">#B8A0FC</color>
+    <color name="ele_mascot_hide_dark">#9478F2</color>
+    <color name="ele_mascot_ear">#8466EE</color>
+    <color name="ele_mascot_ink">#231A3D</color>
 </resources>
