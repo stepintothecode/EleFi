@@ -89,7 +89,7 @@ public class EleGuideOverlayTests : Bunit.TestContext
     }
 
     [Fact]
-    public void Ele_makes_her_sound_on_each_step_a_trumpet_when_happy_a_hum_otherwise()
+    public void Ele_makes_her_sound_on_each_step_pleased_to_start_and_the_soft_bell_between()
     {
         var overlay = RenderComponent<EleGuideOverlay>();
 

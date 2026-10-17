@@ -552,9 +552,12 @@ sounds are synthesised in `wwwroot/js/elefi-sound.js`.
 
 | Mood | Face | Movement | Sound | Stays | Meaning |
 |---|---|---|---|---|---|
-| **Pleased** | Pleased | Hops twice, then floats; confetti | A short, jolly elephant trumpet | 4 s | Something worked |
-| **Calm** | At rest | Only floats | A soft, low hum | 4 s | Something neutral: a deletion, an undo, an archive |
-| **Cross** | Cross | Shakes its head twice, then floats; the line is in the warning colour | A short grumpy snort, never a buzzer | 5 s, long enough to read | Something needs fixing |
+| **Pleased** | Pleased | Hops twice, then floats; confetti | A short trumpet, then three bright twinkles | 4 s | Something worked |
+| **Calm** | At rest | Only floats | One warm bell with a long, quiet tail | 4 s | Something neutral: a deletion, an undo, an archive |
+| **Cross** | Cross | Shakes its head twice, then floats; the line is in the warning colour | Two short low trunk blasts, never a buzzer | 5 s, long enough to read | Something needs fixing |
+
+Ele's guide uses the pleased sound for its first and last steps, and the calm bell for every
+step between.
 
 Every mood arrives from the right above the tab bar and leaves by sliding down and fading
 over 0.42 s, whether it timed out, its × was tapped, or a newer message replaced it. Only

@@ -5,11 +5,12 @@
   download, and nothing that can fail to load. Reached only through ISoundCue, like the mascot
   is through IMascotService, so no component touches JavaScript.
 
-  One sound per face, all from the same small elephant:
-  - Pleased (happy face): a short, jolly trumpet. A brassy blare that swoops up through the
-    trunk, with the rough flutter that makes it an elephant rather than a horn.
-  - Calm (calm face): a soft, low hum, a contented rumble that settles. Nothing to react to.
-  - Cross (cross face): a short grumpy snort, two low falling blows. Never a buzzer.
+  One sound per face, all from the same small elephant, chosen by ear from a board of options:
+  - Pleased (happy face): a short trumpet that swoops up through the trunk, with the rough
+    flutter that makes it an elephant rather than a horn, then three bright twinkles.
+  - Calm (calm face, and each step of Ele's guide between the first and last): one warm bell
+    with a long, quiet tail. Nothing to react to.
+  - Cross (cross face): two short low trunk blasts, the second lower. Never a buzzer.
 
   Quiet on purpose. A habit app's chime is a nudge, not an alarm: every cue stays well under a
   tenth of full volume.
@@ -103,33 +104,21 @@ function voice(ctx, out, {
   osc.stop(start + length + 0.05);
 }
 
-// A breath of noise through the trunk, for the snort and the start of the trumpet.
-function breath(ctx, out, { start, length, gain = 0.02, trunk = 900 }) {
-  const frames = Math.floor(ctx.sampleRate * length);
-  const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < frames; i++) {
-    data[i] = Math.random() * 2 - 1;
+// A bell: a pure tone and two quieter, inharmonic overtones, struck and left to ring.
+function bell(ctx, out, { start, freq, length = 0.6, gain = 0.035 }) {
+  for (const [mult, g] of [[1, gain], [2.76, gain * 0.25], [5.4, gain * 0.08]]) {
+    const osc = ctx.createOscillator();
+    const amp = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq * mult;
+    amp.gain.setValueAtTime(0.0001, start);
+    amp.gain.exponentialRampToValueAtTime(g, start + 0.006);
+    amp.gain.exponentialRampToValueAtTime(0.0001, start + length / mult ** 0.3);
+    osc.connect(amp);
+    amp.connect(out);
+    osc.start(start);
+    osc.stop(start + length + 0.05);
   }
-
-  const source = ctx.createBufferSource();
-  const band = ctx.createBiquadFilter();
-  const amp = ctx.createGain();
-
-  source.buffer = buffer;
-  band.type = 'bandpass';
-  band.frequency.value = trunk;
-  band.Q.value = 0.9;
-
-  amp.gain.setValueAtTime(0.0001, start);
-  amp.gain.exponentialRampToValueAtTime(gain, start + 0.02);
-  amp.gain.exponentialRampToValueAtTime(0.0001, start + length);
-
-  source.connect(band);
-  band.connect(amp);
-  amp.connect(out);
-  source.start(start);
-  source.stop(start + length + 0.02);
 }
 
 export function play(cue) {
@@ -146,87 +135,54 @@ export function play(cue) {
 
   switch (cue) {
     case 'Pleased':
-      // A short, jolly trumpet: a quick upward swoop that holds, then lifts at the end.
-      breath(ctx, out, { start: t, length: 0.12, gain: 0.018, trunk: 1300 });
+      // A short trumpet, then three bright twinkles.
       voice(ctx, out, {
-        start: t + 0.02,
-        length: 0.62,
-        pitch: [[0, 360], [0.09, 720], [0.38, 760], [0.55, 880]],
+        start: t,
+        length: 0.36,
+        pitch: [[0, 380], [0.08, 740], [0.3, 800]],
         type: 'sawtooth',
-        gain: 0.055,
-        trunk: 1250,
+        gain: 0.05,
+        trunk: 1300,
         q: 1.6,
         flutter: 28,
-        flutterDepth: 0.4,
+        flutterDepth: 0.35,
       });
-      // A second, slightly sharper reed in the trunk: what makes it brassy.
+      [1318, 1568, 2093].forEach((freq, i) => bell(ctx, out, { start: t + 0.3 + i * 0.07, freq, length: 0.5, gain: 0.022 }));
+      break;
+
+    case 'Cross':
+      // Two short low trunk blasts, the second lower.
       voice(ctx, out, {
-        start: t + 0.02,
-        length: 0.6,
-        pitch: [[0, 364], [0.09, 728], [0.38, 768], [0.55, 890]],
-        type: 'square',
-        gain: 0.018,
-        trunk: 1700,
-        q: 2,
-        flutter: 31,
+        start: t,
+        length: 0.16,
+        pitch: [[0, 220], [0.12, 200]],
+        type: 'sawtooth',
+        gain: 0.05,
+        trunk: 600,
+        q: 1.4,
+        flutter: 18,
+        flutterDepth: 0.3,
+      });
+      voice(ctx, out, {
+        start: t + 0.2,
+        length: 0.28,
+        pitch: [[0, 180], [0.22, 150]],
+        type: 'sawtooth',
+        gain: 0.05,
+        trunk: 520,
+        q: 1.4,
+        flutter: 18,
         flutterDepth: 0.3,
       });
       break;
 
-    case 'Cross':
-      // A grumpy snort: two short, low, falling blows.
-      breath(ctx, out, { start: t, length: 0.16, gain: 0.03, trunk: 600 });
-      voice(ctx, out, {
-        start: t + 0.01,
-        length: 0.2,
-        pitch: [[0, 240], [0.18, 190]],
-        type: 'sawtooth',
-        gain: 0.045,
-        trunk: 650,
-        q: 1.4,
-        flutter: 22,
-        flutterDepth: 0.45,
-      });
-      breath(ctx, out, { start: t + 0.24, length: 0.18, gain: 0.025, trunk: 520 });
-      voice(ctx, out, {
-        start: t + 0.25,
-        length: 0.3,
-        pitch: [[0, 200], [0.26, 150]],
-        type: 'sawtooth',
-        gain: 0.045,
-        trunk: 560,
-        q: 1.4,
-        flutter: 20,
-        flutterDepth: 0.45,
-      });
-      break;
-
     default:
-      // Calm: a soft, low, contented hum that settles. No rasp, no rise.
-      voice(ctx, out, {
-        start: t,
-        length: 0.9,
-        pitch: [[0, 196], [0.5, 185], [0.85, 175]],
-        type: 'triangle',
-        gain: 0.05,
-        trunk: 420,
-        q: 0.8,
-        attack: 0.12,
-      });
-      voice(ctx, out, {
-        start: t,
-        length: 0.8,
-        pitch: [[0, 392], [0.7, 350]],
-        type: 'sine',
-        gain: 0.012,
-        trunk: 800,
-        q: 0.7,
-        attack: 0.12,
-      });
+      // Calm: one warm bell with a long, quiet tail, and a fainter one a sixth above.
+      bell(ctx, out, { start: t, freq: 880, length: 1.1, gain: 0.03 });
+      bell(ctx, out, { start: t + 0.05, freq: 1319, length: 0.8, gain: 0.012 });
       break;
   }
 }
-
 export function dispose() {
   if (context) {
     context.close();

@@ -31,6 +31,7 @@ drawn live by `elefi-mascot.js` and written into every still picture by
 | 11 | The guide | Eight steps over the real screens: hello, containers first, record, Quick, the list, plans and goals, automatic capture, Home. One sentence each. Skip at the top, Previous and Next under Ele, back steps back |
 | 12 | When it starts | On its own once, for a new user with no containers; Settings > Help > Quick guide by Ele any time. The owner's phone has containers, so it never interrupts |
 | 13 | Icon size | Ele drawn about 15% larger in the icon only, since the build scales the foreground to 85% |
+| 14 | Ele's sounds, chosen from a board of four options each | Pleased: P2 trumpet and sparkle. Calm: C4 soft bell. Cross: X2 low double toot. Guide steps between first and last: the C4 soft bell too; a separate G1 "checked" sound was picked, then dropped ⤵ |
 
 ## 3. Verbatim answers you typed
 
@@ -82,6 +83,10 @@ Answers to the questions that followed:
 > 3. If hide mode is on, and I switch from any other page to home page, the animation of Ele hiding with ears happens again, why? If hide mode is on, Ele should be already hiding, right?
 >
 > Make all these changes, then ammend in last commit and push force
+
+> Nah, Ele's sounds in the first guide, is so wrong... The pleased one is fine for first and last step. But why did you use the calm one for the rest of the steps. Do one thing, leave the first and last step sounds as it is... but for rest, introduce a new sound which is similar to a "checked" sound just like in Duolingo... but elephantised somehow, just explore, give me options and then I will chose from them. And let's rethink all the sounds actually. So just give me the options (atleast 3-4) for each kind of sounds of Ele... so that still the calm one can be used in the started guide but a new and better sound for calm emotion overall.. GIve me options and then ask me in form of questionarre to choose from... for each emotion/sound Ele or this app makes
+
+> Keep the C4 soft bell also for every guide step between the first and last. Forget the G1 sound
 
 ## 4. What changed mid-session
 

@@ -467,8 +467,8 @@ chubby trunk, no mouth. Her feelings show in her eyelids, trunk and ears. And sh
 **only messenger**: every confirmation, every undo, and every problem
 ("Who was it paid to?") is something Ele says, in a bubble, for a few seconds. There are no
 toasts and no inline error banners. Pleased when something worked, calm for a deletion or an
-undo, cross when something needs fixing, each with its own face and its own sound: a short
-jolly trumpet, a soft hum, a grumpy snort. A newer message pushes the one showing down and
+undo, cross when something needs fixing, each with its own face and its own sound: a trumpet
+with twinkles, a soft bell, two low toots. A newer message pushes the one showing down and
 out. Ele can be quieted (its sound) but not switched off. Which action brings which mood is
 listed in [functional.md, Ele's moods](requirements/functional.md#eles-moods).
 

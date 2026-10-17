@@ -122,13 +122,13 @@ public interface IReminderSchedule
 /// <summary>Which of Ele's sounds to play.</summary>
 public enum SoundCue
 {
-    /// <summary>Something worked, happy face: a short, jolly elephant trumpet.</summary>
+    /// <summary>Something worked, happy face: a short trumpet, then three bright twinkles.</summary>
     Pleased = 0,
 
-    /// <summary>Something neutral, calm face: a soft, low, contented hum.</summary>
+    /// <summary>Something neutral, calm face, and each step of Ele's guide: one warm bell with a long, quiet tail.</summary>
     Calm = 1,
 
-    /// <summary>Something needs fixing, cross face: a short grumpy snort. Never a buzzer.</summary>
+    /// <summary>Something needs fixing, cross face: two short low trunk blasts. Never a buzzer.</summary>
     Cross = 2,
 }
 
