@@ -1,0 +1,70 @@
+@*
+    One filter as a single compact row: what it filters on the left, what is chosen on the
+    right, and a chevron. Tapping it drops its options open right underneath, in place.
+
+    Replaces a heading over a wall of chips for every container and label, which made the
+    filter sheet long enough to scroll and hid Clear at the bottom. Only one is open at a
+    time; the page decides which, so opening another closes this one.
+*@
+
+<div class="filter-field @(Expanded ? "open" : null)">
+    <button type="button" id="@Id" class="filter-row" aria-expanded="@(Expanded ? "true" : "false")"
+            @onclick="() => OnToggle.InvokeAsync()">
+        <span class="filter-label">@Label</span>
+        <span class="filter-value @(Summary is null ? "muted" : "set")">@(Summary ?? "Any")</span>
+        <svg class="filter-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" />
+        </svg>
+    </button>
+
+    @if (Expanded)
+    {
+        <div class="filter-options" role="listbox" aria-label="@Label" aria-multiselectable="@(Multiple ? "true" : "false")">
+            @ChildContent
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>The row's id.</summary>
+    [Parameter]
+    public string? Id { get; set; }
+
+    /// <summary>What is filtered on, such as "Container".</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>What is chosen, in a few words; null shows "Any".</summary>
+    [Parameter]
+    public string? Summary { get; set; }
+
+    /// <summary>Whether the options are showing.</summary>
+    [Parameter]
+    public bool Expanded { get; set; }
+
+    /// <summary>Whether more than one option can be on at once.</summary>
+    [Parameter]
+    public bool Multiple { get; set; } = true;
+
+    /// <summary>Raised when the row is tapped, to open or close it.</summary>
+    [Parameter]
+    public EventCallback OnToggle { get; set; }
+
+    /// <summary>The options, each a <see cref="FilterOption" />.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// A short summary of what is chosen: nothing is "Any", one or two are named, and more
+    /// are the first two and how many others.
+    /// </summary>
+    /// <param name="names">The chosen options' names, in display order.</param>
+    /// <returns>The summary, or null when nothing is chosen.</returns>
+    public static string? Summarise(IReadOnlyList<string> names) => names.Count switch
+    {
+        0 => null,
+        1 or 2 => string.Join(", ", names),
+        _ => $"{names[0]}, {names[1]} +{names.Count - 2}",
+    };
+}

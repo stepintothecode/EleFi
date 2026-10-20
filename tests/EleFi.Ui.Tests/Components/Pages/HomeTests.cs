@@ -209,6 +209,20 @@ public class HomeTests : Bunit.TestContext
     }
 
     [Fact]
+    public void Coming_back_to_the_app_shows_what_was_recorded_meanwhile()
+    {
+        Register(needsReview: 0);
+        var component = RenderComponent<Home>();
+        Assert.Empty(component.FindAll("a.inbox-banner"));
+
+        // An SMS recorded a payment while EleFi was in the background.
+        _transactions.NeedsReviewCount = 1;
+        ((Fakes.ManualResume)Services.GetRequiredService<IAppResume>()).Resume();
+
+        component.WaitForAssertion(() => Assert.NotNull(component.Find("a.inbox-banner")));
+    }
+
+    [Fact]
     public void Containers_are_not_listed_on_home_any_more()
     {
         Register(balances: [new ContainerBalance(Guid.NewGuid(), "Savings", ContainerKind.BankAccount, Money.FromMinor(100, Currency.Inr))]);

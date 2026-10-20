@@ -3,6 +3,7 @@ using EleFi.Application.Abstractions;
 using EleFi.Application.Goals;
 using EleFi.Application.Labels;
 using EleFi.Application.Transactions;
+using EleFi.Application.Typeahead;
 using EleFi.Domain.Apps;
 using EleFi.Domain.Audit;
 using EleFi.Domain.Containers;
@@ -98,6 +99,7 @@ public class EditTransactionTests : Bunit.TestContext
         Services.AddSingleton(new LabelService(labels, clock));
         Services.AddSingleton(parties);
         Services.AddSingleton(apps);
+        Services.AddSingleton(new FormSuggestions(Substitute.For<ISuggestionHistory>(), apps));
         Services.AddSingleton(_ele);
         Services.AddEleAndUndo();
     }

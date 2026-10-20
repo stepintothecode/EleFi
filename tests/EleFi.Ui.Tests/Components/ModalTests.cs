@@ -121,8 +121,10 @@ public class ModalTests : Bunit.TestContext
         await back.GoBackAsync();
 
         // Back now does what it would on the dashboard, rather than "closing" a sheet that
-        // is not there and appearing to do nothing.
+        // is not there: a first press there asks before closing the app.
         Assert.Equal(0, dismissals);
+        Assert.Equal(0, system.Left);
+        await back.GoBackAsync();
         Assert.Equal(1, system.Left);
     }
 }

@@ -6,12 +6,16 @@ using Microsoft.Extensions.DependencyInjection;
 namespace EleFi.Ui.Tests.Services;
 
 /// <summary>
-/// What the system back gesture does: close what is open, step back a screen, and leave the
-/// app only from the dashboard.
+/// What the system back gesture does: close what is open, step back to the screen before,
+/// and close the app only on a second press when there is nothing left to go back to.
 /// </summary>
 public class BackNavigatorTests : Bunit.TestContext
 {
     private readonly Fakes.RecordingBack _system = new();
+    private readonly ManualTime _time = new();
+    private readonly EleReactions _ele;
+
+    public BackNavigatorTests() => _ele = new EleReactions(new Fakes.MemorySettings(), _time);
 
     [Fact]
     public async Task Back_returns_to_the_previous_screen_instead_of_closing_the_app()
@@ -59,27 +63,124 @@ public class BackNavigatorTests : Bunit.TestContext
     }
 
     [Fact]
-    public async Task Back_from_the_dashboard_leaves_the_app()
+    public async Task One_back_press_never_closes_the_app_ele_asks_for_a_second()
     {
         var (_, back) = Start();
+
+        Assert.True(await back.GoBackAsync());
+
+        Assert.Equal(0, _system.Left);
+        Assert.Equal(BackNavigator.ExitPrompt, _ele.Current!.Line);
+    }
+
+    [Fact]
+    public async Task A_second_press_soon_after_closes_the_app()
+    {
+        var (_, back) = Start();
+
+        await back.GoBackAsync();
+        _time.Advance(TimeSpan.FromSeconds(1));
 
         Assert.False(await back.GoBackAsync());
         Assert.Equal(1, _system.Left);
     }
 
     [Fact]
-    public async Task Reaching_the_dashboard_starts_the_history_again()
+    public async Task A_second_press_too_late_asks_again_instead_of_closing()
+    {
+        var (_, back) = Start();
+
+        await back.GoBackAsync();
+        _time.Advance(BackNavigator.ExitWindow + TimeSpan.FromSeconds(1));
+
+        Assert.True(await back.GoBackAsync());
+        Assert.Equal(0, _system.Left);
+    }
+
+    [Fact]
+    public async Task Moving_somewhere_between_the_two_presses_cancels_the_close()
     {
         var (nav, back) = Start();
 
-        nav.NavigateTo("quick");
+        await back.GoBackAsync();
+        nav.NavigateTo("containers");
+        await back.GoBackAsync();
 
-        // Quick capture's Cancel goes home. Back from there should leave, not reopen the
-        // screen that was just cancelled.
+        // Back from containers went home; it was a step, not the second "close" press.
+        Assert.Equal(nav.BaseUri, nav.Uri);
+        Assert.Equal(0, _system.Left);
+    }
+
+    [Fact]
+    public async Task Back_from_the_dashboard_returns_to_the_screen_before_it()
+    {
+        var (nav, back) = Start();
+
+        nav.NavigateTo("containers");
         nav.NavigateTo("/");
 
-        Assert.False(await back.GoBackAsync());
-        Assert.Equal(1, _system.Left);
+        Assert.True(await back.GoBackAsync());
+
+        Assert.EndsWith("/containers", nav.Uri, StringComparison.Ordinal);
+        Assert.Equal(0, _system.Left);
+    }
+
+    [Fact]
+    public async Task Back_from_an_open_transaction_returns_to_the_list()
+    {
+        var (nav, back) = Start();
+
+        nav.NavigateTo("transactions");
+        nav.NavigateTo("transactions/5d2c8f7a-1b2c-4d5e-8f90-123456789abc");
+
+        Assert.True(await back.GoBackAsync());
+
+        Assert.EndsWith("/transactions", nav.Uri, StringComparison.Ordinal);
+        Assert.Equal(0, _system.Left);
+    }
+
+    [Fact]
+    public async Task A_screen_that_ends_itself_is_not_returned_to()
+    {
+        var (nav, back) = Start();
+
+        nav.NavigateTo("containers");
+        nav.NavigateTo("quick");
+
+        // Quick capture cancelled: it leaves, and back from where it left to does not reopen it.
+        back.Leave("/");
+        Assert.EndsWith("/containers", nav.Uri, StringComparison.Ordinal);
+
+        await back.GoBackAsync();
+        Assert.Equal(nav.BaseUri, nav.Uri);
+        Assert.Equal([""], back.History);
+    }
+
+    [Fact]
+    public void Leaving_with_nothing_behind_replaces_the_screen_with_the_fallback()
+    {
+        var nav = Services.GetRequiredService<FakeNavigationManager>();
+        nav.NavigateTo("transactions/5d2c8f7a-1b2c-4d5e-8f90-123456789abc");
+        var back = new BackNavigator(nav, _system, _ele, _time);
+        back.Start();
+        nav.NavigateTo("transactions/5d2c8f7a-1b2c-4d5e-8f90-123456789abc");
+
+        back.Leave("transactions");
+        back.Leave("transactions");
+
+        Assert.DoesNotContain("transactions/5d2c8f7a-1b2c-4d5e-8f90-123456789abc", back.History);
+    }
+
+    [Fact]
+    public void Replacing_a_screen_adds_no_step()
+    {
+        var (nav, back) = Start();
+
+        nav.NavigateTo("containers");
+        back.ReplaceTo("capture");
+        back.ReplaceTo("transactions");
+
+        Assert.Equal(["", "transactions"], back.History);
     }
 
     [Fact]
@@ -89,7 +190,7 @@ public class BackNavigatorTests : Bunit.TestContext
         var nav = Services.GetRequiredService<FakeNavigationManager>();
         nav.NavigateTo("quick");
 
-        var back = new BackNavigator(nav, _system);
+        var back = new BackNavigator(nav, _system, _ele, _time);
         back.Start();
 
         Assert.True(await back.GoBackAsync());
@@ -148,7 +249,7 @@ public class BackNavigatorTests : Bunit.TestContext
         await back.GoBackAsync();
 
         Assert.False(called);
-        Assert.Equal(1, _system.Left);
+        Assert.Equal(BackNavigator.ExitPrompt, _ele.Current!.Line);
     }
 
     [Fact]
@@ -184,7 +285,7 @@ public class BackNavigatorTests : Bunit.TestContext
     private (FakeNavigationManager Nav, BackNavigator Back) Start()
     {
         var nav = Services.GetRequiredService<FakeNavigationManager>();
-        var back = new BackNavigator(nav, _system);
+        var back = new BackNavigator(nav, _system, _ele, _time);
         back.Start();
         return (nav, back);
     }

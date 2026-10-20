@@ -12,12 +12,58 @@ namespace EleFi.App.Services;
 /// </remarks>
 public sealed class AndroidLaunchIntent : ILaunchIntent
 {
+    private readonly List<Action> _listeners = [];
+    private readonly Lock _gate = new();
+
     /// <summary>Creates the adapter and forwards the activity's event.</summary>
     public AndroidLaunchIntent() =>
-        MainActivity.RouteRequested += () => RouteRequested?.Invoke();
+        MainActivity.RouteRequested += Forward;
 
     /// <inheritdoc />
-    public event Action? RouteRequested;
+    /// <remarks>
+    /// Only the newest listener hears it, for the same reason as the back button
+    /// (<see cref="MauiSystemBack"/>): a rebuilt activity leaves the old router subscribed.
+    /// </remarks>
+    public event Action? RouteRequested
+    {
+        add
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                _listeners.Remove(value);
+                _listeners.Add(value);
+            }
+        }
+
+        remove
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                _listeners.Remove(value);
+            }
+        }
+    }
+
+    private void Forward()
+    {
+        Action? newest;
+        lock (_gate)
+        {
+            newest = _listeners.Count > 0 ? _listeners[^1] : null;
+        }
+
+        newest?.Invoke();
+    }
 
     /// <inheritdoc />
     /// <remarks>

@@ -73,31 +73,69 @@ public class TransactionsTests : Bunit.TestContext
     }
 
     [Fact]
+    public void Each_filter_is_one_compact_row_with_nothing_listed_until_it_is_opened()
+    {
+        var page = RenderComponent<Transactions>();
+        page.Find(".section-head button.open-filters").Click();
+
+        var rows = page.FindAll("[role=dialog] .filter-row .filter-label").Select(l => l.TextContent.Trim());
+        Assert.Equal(["Dates", "Kind", "Container", "Label", "Needs review only"], rows);
+        Assert.Empty(page.FindAll("[role=dialog] [role=option]"));
+        Assert.All(page.FindAll("[role=dialog] .filter-value"), v => Assert.Equal("Any", v.TextContent.Trim()));
+    }
+
+    [Fact]
     public void Today_and_this_week_are_offered_and_containers_are_in_picker_order()
     {
         var page = RenderComponent<Transactions>();
         page.Find(".section-head button.open-filters").Click();
 
-        var chips = page.FindAll("[role=dialog] .chip").Select(c => c.TextContent.Trim()).ToList();
+        page.Find("#filter-dates").Click();
+        var dates = Options(page);
+        Assert.Contains("Today", dates);
+        Assert.Contains("This week", dates);
+        Assert.Contains("Custom range", dates);
 
-        Assert.Contains("Today", chips);
-        Assert.Contains("This week", chips);
-        Assert.Contains("Custom range", chips);
-        Assert.True(chips.IndexOf("Amex") < chips.IndexOf("SBI"), "Cards come before banks, as in every picker.");
-        Assert.NotEmpty(page.FindAll("[role=dialog] hr.divider"));
+        // One open at a time: opening Container closes Dates.
+        page.Find("#filter-container").Click();
+        var containers = Options(page);
+        Assert.DoesNotContain("Today", containers);
+        Assert.True(containers.IndexOf("Amex") < containers.IndexOf("SBI"), "Cards come before banks, as in every picker.");
     }
 
     [Fact]
-    public void Choosing_today_filters_to_today()
+    public void Choosing_today_filters_to_today_and_says_so_on_the_row()
     {
         var page = RenderComponent<Transactions>();
         page.Find(".section-head button.open-filters").Click();
 
-        page.FindAll("[role=dialog] .chip").First(c => c.TextContent.Trim() == "Today").Click();
+        page.Find("#filter-dates").Click();
+        page.FindAll("[role=dialog] [role=option]").First(c => c.TextContent.Trim() == "Today").Click();
 
         Assert.Equal(new DateOnly(2026, 8, 30), _state.Filter.From);
         Assert.Equal(new DateOnly(2026, 8, 30), _state.Filter.To);
+        Assert.Equal("Today", page.Find("#filter-dates .filter-value").TextContent.Trim());
+        Assert.Empty(page.FindAll("[role=dialog] [role=option]"));
     }
+
+    [Fact]
+    public void Clear_filters_is_in_the_head_of_the_sheet_and_clears_everything()
+    {
+        var page = RenderComponent<Transactions>();
+        page.Find(".section-head button.open-filters").Click();
+        Assert.True(page.Find(".modal-head .clear-filters").HasAttribute("disabled"));
+
+        page.Find("#filter-kind").Click();
+        page.FindAll("[role=dialog] [role=option]").First(c => c.TextContent.Trim() == "Debit").Click();
+        Assert.NotEmpty(_state.Filter.Kinds);
+
+        page.Find(".modal-head .clear-filters").Click();
+
+        Assert.True(_state.Filter.IsEmpty);
+    }
+
+    private static List<string> Options(IRenderedComponent<Transactions> page) =>
+        page.FindAll("[role=dialog] [role=option]").Select(o => o.TextContent.Trim()).ToList();
 
     [Fact]
     public void The_list_ends_with_its_total_in_out_and_net()
@@ -117,8 +155,8 @@ public class TransactionsTests : Bunit.TestContext
         var page = RenderComponent<Transactions>();
         page.Find(".section-head button.open-filters").Click();
 
-        var chip = page.FindAll("[role=dialog] .chip").First(c => c.TextContent.Contains("Rahul and 1 linked", StringComparison.Ordinal));
-        chip.Click();
+        Assert.Equal("Rahul and 1 linked", page.Find("[role=dialog] .filter-contact .filter-value").TextContent.Trim());
+        page.Find("[role=dialog] .filter-contact .filter-remove").Click();
 
         Assert.Empty(_state.Filter.PartyIds);
     }
@@ -142,7 +180,7 @@ public class TransactionsTests : Bunit.TestContext
     {
         var first = RenderComponent<Transactions>();
         first.Find(".section-head button.open-filters").Click();
-        first.FindAll("[role=dialog] .chip").First(c => c.TextContent.Trim() == "Needs review").Click();
+        first.Find("[role=dialog] input[aria-label='Needs review only']").Change(true);
         first.Find("a.txn-link").Click();
 
         // The editor opens and the list is torn down; this is the way back.

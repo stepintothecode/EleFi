@@ -20,6 +20,10 @@
     <div class="modal-sheet enter-sheet" role="dialog" aria-modal="true" aria-label="@Title">
         <div class="modal-head">
             <h2>@Title</h2>
+            @if (HeadAction is not null)
+            {
+                <span class="modal-head-action">@HeadAction</span>
+            }
             <button type="button" class="icon-btn" aria-label="Close" @onclick="OnCancelAsync">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                      stroke-linecap="round" aria-hidden="true">
@@ -46,6 +50,13 @@
     /// <summary>The sheet's contents.</summary>
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Something to do with the whole sheet, beside the cross, such as clearing every filter.
+    /// In the head so it is reachable without scrolling to the bottom.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? HeadAction { get; set; }
 
     /// <summary>Raised when the backdrop or the cross is used.</summary>
     [Parameter]

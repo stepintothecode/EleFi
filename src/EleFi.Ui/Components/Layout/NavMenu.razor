@@ -7,8 +7,16 @@
     renders differently on every OEM's font, and several were landing as a filled square.
     An SVG is the same drawing everywhere and takes the current colour, so the active tab
     tints without a second asset.
+
+    One pill marks the open tab, and it glides from tab to tab rather than each tab drawing
+    its own, so switching reads as movement. It steps aside on Quick, which has its own disc,
+    and on pages that belong to no tab; it comes back from wherever it last was.
 *@
+@implements IDisposable
+@inject NavigationManager Nav
+
 <nav class="tabs">
+    <span class="tab-pill @(_open is int i && i != QuickTab ? null : "away")" style="--tab:@_shown" aria-hidden="true"></span>
     <NavLink href="" Match="NavLinkMatch.All" ActiveClass="active">
         <span class="glyph" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
@@ -93,3 +101,67 @@
         <span>Settings</span>
     </NavLink>
 </nav>
+
+@code {
+    // The tabs in bar order, as NavLink matches them: Home exactly, the rest by prefix.
+    private static readonly string[] Tabs = ["", "plans", "containers", "quick", "capture", "transactions", "settings"];
+
+    /// <summary>Quick's place in the bar. The pill never sits there.</summary>
+    public const int QuickTab = 3;
+
+    private int? _open;
+    private int _shown;
+
+    /// <summary>
+    /// The place in the bar (0 to 6) of the tab a page belongs to, or null when it belongs to
+    /// none. Matches the way the links light up: Home only on the root, every other tab on its
+    /// own page and the pages under it, such as an open transaction under All.
+    /// </summary>
+    /// <param name="relativePath">The address relative to the app's base, query and all.</param>
+    /// <returns>The tab's place, or null.</returns>
+    public static int? TabFor(string relativePath)
+    {
+        var path = relativePath.Split('?', '#')[0].Trim('/');
+        if (path.Length == 0)
+        {
+            return 0;
+        }
+
+        for (var i = 1; i < Tabs.Length; i++)
+        {
+            if (path == Tabs[i] || path.StartsWith(Tabs[i] + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        Follow(Nav.Uri);
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        Follow(e.Location);
+        InvokeAsync(StateHasChanged);
+    }
+
+    // The pill stays where it was while Quick or a tabless page is open, so it glides back
+    // from there afterwards instead of jumping in from the left.
+    private void Follow(string uri)
+    {
+        _open = TabFor(Nav.ToBaseRelativePath(uri));
+        if (_open is int i && i != QuickTab)
+        {
+            _shown = i;
+        }
+    }
+}

@@ -21,6 +21,7 @@
 @inject UndoHistory Undo
 @inject EleReactions Ele
 @inject NavigationManager Nav
+@inject FormSuggestions Suggest
 @implements IDisposable
 
 @*
@@ -52,7 +53,7 @@ else
         <h1>Edit</h1>
         <span class="row" style="gap:4px;">
             <UndoRedo Area="@UndoHistory.Transactions" OnChanged="ReloadAfterUndoAsync" />
-            <button type="button" class="btn-ghost" @onclick="CloseAsync">Close</button>
+            <button type="button" class="btn-ghost" @onclick="Close">Close</button>
         </span>
     </div>
 
@@ -144,8 +145,8 @@ else
                 <label for="marketplace">Bought through <span class="muted small">(optional)</span></label>
                 <AppRoleInfo />
             </div>
-            <TypeaheadInput Id="marketplace" @bind-Value="_marketplaceAppName" Candidates="_appCandidates"
-                            IdleCount="0" PanelLabel="Apps" />
+            <TypeaheadInput Id="marketplace" @bind-Value="_marketplaceAppName" Candidates="_boughtCandidates"
+                            IdleCount="3" PanelLabel="Apps" />
         </div>
 
         <div class="field">
@@ -153,8 +154,8 @@ else
                 <label for="payment">Paid with <span class="muted small">(optional)</span></label>
                 <AppRoleInfo Payment="true" />
             </div>
-            <TypeaheadInput Id="payment" @bind-Value="_paymentAppName" Candidates="_appCandidates"
-                            IdleCount="0" PanelLabel="Apps" />
+            <TypeaheadInput Id="payment" @bind-Value="_paymentAppName" Candidates="_paidCandidates"
+                            IdleCount="3" PanelLabel="Apps" />
         </div>
 
         <div class="field">
@@ -254,7 +255,9 @@ else
     private IReadOnlyList<Container> _containers = [];
     private IReadOnlyList<Label> _labels = [];
     private IReadOnlyList<TypeaheadCandidate> _partyCandidates = [];
-    private IReadOnlyList<TypeaheadCandidate> _appCandidates = [];
+    private IReadOnlyList<TypeaheadCandidate> _boughtCandidates = [];
+    private IReadOnlyList<TypeaheadCandidate> _paidCandidates = [];
+    private SuggestionPools? _pools;
     private IReadOnlyList<HistoryEntry> _timeline = [];
 
     private TransactionKind _kind = TransactionKind.Debit;
@@ -286,7 +289,7 @@ else
         _containers = ContainerGrouping.InPickerOrder(await Containers.ListSelectableAsync());
         _labels = await LabelList.ListByUsageAsync();
         _partyCandidates = TypeaheadCandidates.From(await Parties.ListExternalAsync());
-        _appCandidates = TypeaheadCandidates.From(await Apps.ListAsync());
+        _pools = await Suggest.LoadAsync();
 
         if (_transaction is not null)
         {
@@ -344,15 +347,18 @@ else
 
     // Back to wherever the editor was opened from: the list, the dashboard, or quick capture
     // after "Add other details". Straight to the list when there is nothing behind it.
-    private async Task CloseAsync()
+    private void Close() => Leave("transactions");
+
+    // The editor is done with, so back must not return to it.
+    private void Leave(string fallback)
     {
-        if (Back?.CanStepBack == true)
+        if (Back is not null)
         {
-            await Back.GoBackAsync();
+            Back.Leave(fallback);
             return;
         }
 
-        Nav.NavigateTo("transactions");
+        Nav.NavigateTo(fallback);
     }
 
     private async Task SaveAsync()
@@ -498,7 +504,9 @@ else
             () => Editing.DeleteAsync(id));
 
         Ele.React(EleMoment.Deleted, amount, about);
-        Nav.NavigateTo("transactions");
+
+        // Deleted: back must never come back to a transaction that is gone.
+        Leave("transactions");
     }
 
     // Puts a transaction to a state through the same checked path as any edit, so an undo is
@@ -555,8 +563,9 @@ else
 
     private IReadOnlyList<TypeaheadCandidate> _noteCandidates = [];
 
-    // The note offers what was written with this payee before ("Gift" for Mom), once "Paid
-    // to" names someone already known. Not looked up for a half-typed name.
+    // Note, Bought through and Paid with offer what was used with this contact before ("Gift"
+    // for Mom), then what is used most overall. A half-typed or new name is not looked up: it
+    // gets the most used straight away.
     private async Task PartyChangedAsync(string name)
     {
         _partyName = name;
@@ -565,8 +574,17 @@ else
 
     private async Task LoadNoteCandidatesAsync()
     {
-        var known = _partyCandidates.Any(c => string.Equals(c.Name, _partyName.Trim(), StringComparison.OrdinalIgnoreCase));
-        _noteCandidates = known ? await Transactions.NotesForPartyAsync(_partyName) : [];
+        if (_pools is null)
+        {
+            return;
+        }
+
+        var name = _kind == TransactionKind.SelfTransfer ? null : _partyName.Trim();
+        var known = name is { Length: > 0 } && _partyCandidates.Any(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+        var lists = await Suggest.ForAsync(_pools, name, known);
+        _noteCandidates = lists.Notes;
+        _boughtCandidates = lists.BoughtThrough;
+        _paidCandidates = lists.PaidWith;
     }
 
     private IReadOnlyList<EleFi.Domain.Goals.Goal> _goals = [];

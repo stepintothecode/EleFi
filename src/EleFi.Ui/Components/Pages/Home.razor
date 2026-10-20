@@ -31,6 +31,8 @@
     eyes with its ears for as long as they stay hidden.
 *@
 
+<RefreshOnResume OnResumed="RefreshAsync" />
+
 <PageTitle>EleFi</PageTitle>
 
 @* The top bar: the streak, and the bell for everything EleFi has done on the user's behalf. *@
@@ -408,13 +410,34 @@ else
     {
         Privacy.Changed += OnPrivacyChanged;
 
+        _range = TransactionFilter.Empty.WithPreset(_period, Clock.Today);
+        await RefreshAsync();
+
+        // A new user, with nothing set up: Ele walks them through, once.
+        if (Guide.ShouldStartOnItsOwn(hasContainers: _balances.Count > 0))
+        {
+            Guide.Start();
+        }
+
+        _loading = false;
+    }
+
+    // Everything the dashboard shows, read again: on opening, and when the app comes back to
+    // the front. The chosen period and anything open stay as they are.
+    private async Task RefreshAsync()
+    {
         // Already in picker order: cards, banks, cash and wallets, the rest.
         _balances = await Containers.BalancesAsync();
         _netWorth = await Containers.NetWorthAsync(_home);
         _needsReview = await Transactions.CountAsync(new TransactionFilter { NeedsReview = true });
         _unread = await Notices.UnreadCountAsync();
 
-        _range = TransactionFilter.Empty.WithPreset(_period, Clock.Today);
+        // "Today" and "This month" move with the clock; a chosen range stays what was chosen.
+        if (_period != DatePreset.Custom)
+        {
+            _range = TransactionFilter.Empty.WithPreset(_period, Clock.Today);
+        }
+
         await LoadSpendAsync();
 
         _streak = await Streaks.CurrentAsync();
@@ -424,14 +447,6 @@ else
         // The mascot reacts, but nothing waits on it (NFR-2.7).
         _mood = _netWorth.Owed.Minor > _netWorth.Liquid.Minor ? MascotMood.Concerned : MascotMood.Idle;
         CelebrateMilestone();
-
-        // A new user, with nothing set up: Ele walks them through, once.
-        if (Guide.ShouldStartOnItsOwn(hasContainers: _balances.Count > 0))
-        {
-            Guide.Start();
-        }
-
-        _loading = false;
     }
 
     public void Dispose() => Privacy.Changed -= OnPrivacyChanged;

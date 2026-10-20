@@ -18,6 +18,9 @@
     combination that looked wrong.
   */
   --ele-accent: #6a58c9;
+  /* Quick capture's own colour, a quiet dusty teal used nowhere else: its disc, and its label when open. */
+  --ele-bolt: #3E8F8A;
+  --ele-bolt-disc: color-mix(in srgb, #7CC5C0 28%, #ffffff);
   --ele-accent-strong: #4e3f9e;
   --ele-accent-soft: #efebfc;
   /* Suggestions: their own colour, so an offered answer never looks like form chrome. */
@@ -75,11 +78,15 @@
   /* One motion vocabulary. Springs are approximated with these curves. */
   --ele-quick: 120ms cubic-bezier(0.2, 0, 0, 1);
   --ele-settle: 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Something travelling across the screen, landing with the slightest overshoot. */
+  --ele-glide: 380ms cubic-bezier(0.34, 1.2, 0.5, 1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --ele-accent: #c4b5fd;
+    --ele-bolt: #8FD3CE;
+    --ele-bolt-disc: color-mix(in srgb, #7CC5C0 20%, #18212c);
     --ele-accent-strong: #ddd3fe;
     --ele-accent-soft: #2a2440;
     --ele-suggest: #3fd0bd;
@@ -620,6 +627,132 @@ button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owe
   margin-bottom: 8px;
 }
 .modal-head h2 { margin: 0; color: var(--ele-text); font-size: 1.05rem; }
+/* An action beside the cross, such as Clear filters: pushed right, next to it. */
+.modal-head h2 { flex: 1 1 auto; }
+
+/* Ele's sound: a round speaker that mutes and unmutes, unlike the switches above it. */
+.sound-toggle {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--ele-surface-2);
+  border-color: var(--ele-line);
+  color: var(--ele-text-dim);
+}
+.sound-toggle svg { width: 24px; height: 24px; }
+.sound-toggle.on { background: var(--ele-accent-soft); border-color: color-mix(in srgb, var(--ele-accent) 45%, var(--ele-line)); color: var(--ele-accent); }
+
+/* Google Drive backup, before it exists: the familiar shape, greyed out. */
+.drive-soon {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--ele-radius-sm);
+  background: var(--ele-accent-soft);
+  font-size: 0.9rem;
+}
+.coming-soon { opacity: 0.55; pointer-events: none; user-select: none; }
+.drive-hero { text-align: center; }
+.drive-cloud {
+  display: inline-grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--ele-accent-soft);
+  color: var(--ele-accent);
+  margin: 4px 0 8px;
+}
+.drive-cloud svg { width: 34px; height: 34px; }
+.drive-heading { margin: 0 0 8px; font-size: 1rem; }
+.drive-facts { display: grid; grid-template-columns: auto auto; justify-content: center; gap: 2px 14px; margin: 0 0 12px; font-size: 0.9rem; }
+.drive-facts dt { color: var(--ele-text-dim); text-align: right; }
+.drive-facts dd { margin: 0; text-align: left; font-weight: 600; }
+.drive-hero p { margin: 0 0 10px; }
+.drive-back-up { min-width: 140px; margin-top: 4px; }
+.drive-row { justify-content: space-between; }
+.modal-head-action { display: inline-flex; }
+
+/*
+  The filter sheet: search, then one grouped card of compact rows. Each row is what it
+  filters and what is chosen; tapping drops the options open underneath it.
+*/
+.clear-filters {
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: var(--ele-accent);
+  border-color: color-mix(in srgb, var(--ele-accent) 40%, var(--ele-line));
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.clear-filters:disabled { color: var(--ele-text-dim); border-color: var(--ele-line); opacity: 0.6; }
+.filter-search { width: 100%; margin-bottom: 12px; background: var(--ele-surface-2); border-color: transparent; }
+.filter-fields {
+  border: 1px solid var(--ele-line);
+  border-radius: var(--ele-radius);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+/* Above .filter-row's border: none, so every row after the first keeps its hairline. */
+.filter-fields > :not(:first-child) { border-top: 1px solid var(--ele-line); }
+.filter-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  justify-content: flex-start;
+}
+.filter-row:active { transform: none; background: var(--ele-surface-2); }
+.filter-label { flex: 0 0 auto; font-weight: 500; }
+.filter-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.9rem;
+}
+.filter-value.set { color: var(--ele-accent); font-weight: 600; }
+.filter-chev { width: 18px; height: 18px; flex: 0 0 auto; color: var(--ele-text-dim); transition: transform var(--ele-quick); }
+.filter-field.open .filter-chev { transform: rotate(180deg); }
+.filter-field.open > .filter-row { background: var(--ele-surface-2); }
+.filter-options {
+  display: flex;
+  flex-direction: column;
+  max-height: 244px;
+  overflow-y: auto;
+  padding: 4px 0;
+  background: var(--ele-surface-2);
+}
+.filter-option {
+  width: 100%;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 6px 14px 6px 26px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 0.93rem;
+}
+.filter-option:active { transform: none; background: color-mix(in srgb, var(--ele-accent) 10%, var(--ele-surface-2)); }
+.filter-option.on { color: var(--ele-accent); font-weight: 600; }
+.filter-option-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.filter-check { width: 18px; height: 18px; flex: 0 0 auto; color: var(--ele-accent); }
+.filter-toggle { cursor: pointer; justify-content: space-between; margin: 0; }
+.filter-toggle .filter-label { font-size: 1rem; color: var(--ele-text); }
+.filter-remove { width: 36px; height: 36px; min-height: 36px; padding: 0; margin-right: -8px; }
+.filter-remove svg { width: 18px; height: 18px; }
+.filter-show { width: 100%; }
 
 .enter-sheet { animation: sheet-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @keyframes sheet-up {
@@ -1271,13 +1404,56 @@ nav.tabs a {
   justify-content: center;
   gap: 3px;
 }
+/*
+  The open tab: its colour, and a soft pill behind its icon. There is one pill for the whole
+  bar, and it glides from the tab that was open to the new one as the page changes, so the
+  eye follows where it went. --tab is the open tab's place, 0 to 6, set by the menu.
+*/
+nav.tabs a { position: relative; z-index: 1; }
 nav.tabs a.active { color: var(--ele-accent); font-weight: 600; }
+nav.tabs .tab-pill {
+  position: absolute;
+  top: 0;
+  left: var(--ele-safe-left);
+  width: calc((100% - var(--ele-safe-left) - var(--ele-safe-right)) / 7);
+  height: var(--ele-tabs-height);
+  transform: translateX(calc(var(--tab, 0) * 100%));
+  transition: transform var(--ele-glide), opacity var(--ele-settle);
+  pointer-events: none;
+}
+nav.tabs .tab-pill::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 48px;
+  height: 30px;
+  margin-left: -24px;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--ele-accent) 20%, var(--ele-surface));
+}
+/* On Quick, which has its own disc, and on pages that are no tab at all, it steps aside. */
+nav.tabs .tab-pill.away { opacity: 0; }
 nav.tabs .glyph { display: block; width: 22px; height: 22px; }
 nav.tabs .glyph svg { width: 100%; height: 100%; display: block; }
 
-/* Quick capture is the reason the app exists, so its tab is the one that is coloured. */
-nav.tabs .glyph-accent { color: var(--ele-accent); }
-nav.tabs a.active .glyph-accent { color: inherit; }
+/*
+  Quick capture is an action more than a place, so it looks like one: its bolt sits in a
+  faded dusty-teal disc, a colour no other tab uses, just enough to say it is different. It
+  never takes the purple pill. Open, its label turns teal and the disc gets a thin ring.
+*/
+nav.tabs .glyph-accent {
+  width: 30px;
+  height: 30px;
+  margin: -4px 0;
+  padding: 6px;
+  border-radius: 50%;
+  background: var(--ele-bolt-disc);
+  color: var(--ele-bolt);
+  transition: box-shadow var(--ele-settle);
+}
+nav.tabs a.active .glyph-accent { box-shadow: 0 0 0 2px var(--ele-bolt); }
+nav.tabs a[href="quick"].active { color: var(--ele-bolt); }
 
 /* Six tabs on a narrow phone: let the labels shrink rather than wrap or clip. */
 nav.tabs a { font-size: clamp(0.6rem, 2.6vw, 0.72rem); }
@@ -1557,6 +1733,7 @@ a.about-hero .chev { width: 18px; height: 18px; margin-left: auto; color: var(--
 /* Quick capture's top: title, a gap, the arrows, the cross. */
 .quick-top .grow { flex: 1 1 auto; }
 .quick-top .undo-redo { margin-top: 2px; }
+.segmented.quick-kind { margin: 2px 0 10px; }
 
 /* A whole row that opens something: a container, a contact. */
 .row-button {

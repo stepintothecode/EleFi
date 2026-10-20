@@ -104,6 +104,7 @@ The core feature. Everything else exists to make this worth doing.
 | FR-2.18 | Show the implied FX rate on a cross-currency transaction | 1.2 |
 | FR-2.19 | Attribute a transaction to a goal during capture | 1.1 |
 | FR-2.20 | Voice capture: "four fifty Zomato" parsed into a draft form | 3.0 |
+| FR-2.21 | Note, Bought through and Paid with each offer their top three before anything is typed: first what was used with this contact before, then what is used most across all transactions. A new contact gets the most used straight away | 1.1 |
 
 **User stories**
 
@@ -135,6 +136,7 @@ The core feature. Everything else exists to make this worth doing.
 | FR-3.11 | Floating bubble over other apps, with a permission-request flow that explains why | 3.0 |
 | FR-3.12 | Bubble degrades gracefully when the OS kills its service; never silently stops without telling the user | 3.0 |
 | FR-3.13 | Share-sheet target accepting shared text (e.g. a payment confirmation) | 3.0 |
+| FR-3.14 | In-app quick capture has a Debit / Credit / Self Transfer switch under its title, Debit first. Its steps follow the kind: Paid from and Paid to; Received into and Received from; Source and Destination, both containers. The Quick tab has its own faded dusty-teal disc, never the purple pill of the open tab; open, its label turns teal and the disc gets a thin ring | 1.1 |
 
 **User stories**
 
@@ -167,6 +169,7 @@ The core feature. Everything else exists to make this worth doing.
 | FR-4.15 | Delete, edit and confirm can be undone and redone from two arrows beside Filters and beside Close on an open transaction, greyed out when there is nothing to undo or redo (FR-14.1) | 1.0 |
 | FR-4.16 | Indian digit grouping (`₹1,23,456`) when locale is `en-IN` | 1.0 |
 | FR-4.17 | An export control on this page, exporting exactly the current filtered set - see FR-7.17-7.22 | 1.0 |
+| FR-4.18 | The Filters sheet is compact: search, then one row per filter (Dates, Kind, Container, Label, and Contact when opened from one) saying what is chosen, which drops its options open underneath, one at a time; Needs review only is a switch. Clear filters is in the sheet's head, beside the cross | 1.1 |
 
 **User stories**
 
@@ -336,6 +339,7 @@ Paywalling the exit from a money app is corrosive.
 | FR-9.13 | Warn plainly that a lost passphrase and recovery code means an unrecoverable backup | 1.0 |
 | FR-9.14 | Local encrypted backup file export, independent of Google | 1.2 |
 | FR-9.15 | True multi-device sync with change-log merge | 3.0 |
+| FR-9.16 | Settings > Backup and Restore holds three rows: Google Drive backup, Export to a file, Restore from a file. Until FR-9.1-9.13 are built, the Drive row opens a page laid out like WhatsApp's chat backup (last backup, Back up, Google Account, how often, mobile data, encrypted), all greyed out under "Coming soon" | 1.1 |
 
 **User stories**
 
@@ -518,13 +522,16 @@ transaction already names ([ADR-0016](../adr/0016-contacts-merge-with-aliases.md
 | FR-14.1 | Undo and Redo arrows at the top of every page that changes things: transactions, deleted, capture, quick capture, containers, labels, contacts, duplicates, plans, goals. Each reaches only its own kind of change, runs through the same checked path as the change, and is greyed out when there is nothing to do | 1.1 |
 | FR-14.2 | Ele is the only messenger: every confirmation, undo and problem, including a required field left empty, is something Ele says. No toasts, no inline error banners | 1.1 |
 | FR-14.3 | Ele is pleased when something worked, calm for a deletion or an undo, and cross for a problem. A newer message pushes the one showing down and out | 1.1 |
-| FR-14.4 | A short synthesised sound with each message, matching its tone, which can be turned off in Settings | 1.1 |
+| FR-14.4 | A short synthesised sound with each message, matching its tone. Settings mutes and unmutes it with a round speaker button, not a switch | 1.1 |
 | FR-14.5 | A weekly plan can fall on chosen days; a monthly plan on the last day of every month; any repeat can end on a date or after a number of times | 1.1 |
 | FR-14.6 | An occurrence can be skipped; a repeating plan then rolls on, and reopening undoes the skip | 1.1 |
 | FR-14.7 | A plan's labels go onto the transaction it becomes when that has none | 1.1 |
 | FR-14.8 | A reminder notification on the due day, at the plan's time or 9:00, with Mark done and Snooze to tomorrow. Put back after a restart | 1.1 |
 | FR-14.9 | Every change to a plan is in its history | 1.1 |
 | FR-14.10 | Ele's guide: a short walk through every major feature, over the app itself. Each step opens its page behind a dim overlay and lights its tab; Ele says a sentence or two, each on its own line, with her sound; Previous and Next beside her, a solid Skip at the top; back steps back. It starts on its own once for a new user with no containers, and Settings > Help > Quick guide by Ele starts it any time | 1.1 |
+| FR-14.11 | Back always goes to the page that was open before, in the order they were opened, including from an open transaction. With nothing behind, the first press has Ele say "Press back again to close EleFi." and only a second press within 2.5 seconds closes the app. One press never closes it | 1.1 |
+| FR-14.12 | Coming back to the app from the recent apps reads every list and figure again (Home, transactions, containers, contacts, plans, goals, notifications, deleted, duplicates). Forms are never read again, so nothing half typed is lost | 1.1 |
+| FR-14.13 | The open tab is marked by its colour and one soft pill behind its icon, which glides from the tab that was open to the new one as the page changes. Quick has no pill; the pill fades there and glides on from where it was | 1.1 |
 
 ### Ele's moods
 

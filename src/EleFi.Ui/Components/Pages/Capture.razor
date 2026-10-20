@@ -21,6 +21,7 @@
 @inject EleFi.Application.Goals.GoalService Goals
 @inject ITransactionRepository Transactions
 @inject NavigationManager Nav
+@inject FormSuggestions Suggest
 
 @*
     The core screen. Everything else exists to make this worth doing.
@@ -132,8 +133,8 @@
             <label for="marketplace">Bought through <span class="muted small">(optional)</span></label>
             <AppRoleInfo />
         </div>
-        <TypeaheadInput Id="marketplace" @bind-Value="_marketplaceAppName" Candidates="_appCandidates"
-                        IdleCount="0" PanelLabel="Apps" Placeholder="Zomato, Amazon, Uber" />
+        <TypeaheadInput Id="marketplace" @bind-Value="_marketplaceAppName" Candidates="_boughtCandidates"
+                        IdleCount="3" PanelLabel="Apps" Placeholder="Zomato, Amazon, Uber" />
     </div>
 
     <div class="field">
@@ -141,8 +142,8 @@
             <label for="payment">Paid with <span class="muted small">(optional)</span></label>
             <AppRoleInfo Payment="true" />
         </div>
-        <TypeaheadInput Id="payment" @bind-Value="_paymentAppName" Candidates="_appCandidates"
-                        IdleCount="0" PanelLabel="Apps" Placeholder="GPay, Cash, Net Banking" />
+        <TypeaheadInput Id="payment" @bind-Value="_paymentAppName" Candidates="_paidCandidates"
+                        IdleCount="3" PanelLabel="Apps" Placeholder="GPay, Cash, Net Banking" />
     </div>
 
     <div class="field">
@@ -227,7 +228,9 @@
     private IReadOnlyList<Container> _containers = [];
     private IReadOnlyList<Label> _labels = [];
     private IReadOnlyList<TypeaheadCandidate> _partyCandidates = [];
-    private IReadOnlyList<TypeaheadCandidate> _appCandidates = [];
+    private IReadOnlyList<TypeaheadCandidate> _boughtCandidates = [];
+    private IReadOnlyList<TypeaheadCandidate> _paidCandidates = [];
+    private SuggestionPools? _pools;
 
     private TransactionKind _kind = TransactionKind.Debit;
     private string _amountText = string.Empty;
@@ -318,7 +321,7 @@
     private async Task LoadCandidatesAsync()
     {
         _partyCandidates = TypeaheadCandidates.From(await Parties.ListExternalAsync());
-        _appCandidates = TypeaheadCandidates.From(await Apps.ListAsync());
+        _pools = await Suggest.LoadAsync();
     }
 
     // Labels no longer restrict which kind they suit, so switching kind leaves them alone.
@@ -467,13 +470,13 @@
             // Recorded for a plan or a goal: go back to where the user came from.
             if (planId is not null)
             {
-                Nav.NavigateTo("plans");
+                Leave("plans");
                 return;
             }
 
             if (GoalQuery is not null)
             {
-                Nav.NavigateTo("plans?tab=goals");
+                Leave("plans?tab=goals");
                 return;
             }
 
@@ -488,6 +491,7 @@
 
             // Usage changed, so the ranking did too.
             await LoadCandidatesAsync();
+            await LoadNoteCandidatesAsync();
             _labels = await LabelList.ListByUsageAsync();
         }
         finally
@@ -495,10 +499,28 @@
             _busy = false;
         }
     }
+    /// <summary>The app's back handling, cascaded from the router.</summary>
+    [CascadingParameter]
+    public BackNavigator? Back { get; set; }
+
+    // Recorded for a plan or a goal: back to the plan or goal it came from, not forward to a
+    // second copy of it, and never back into this form.
+    private void Leave(string fallback)
+    {
+        if (Back is not null)
+        {
+            Back.Leave(fallback);
+            return;
+        }
+
+        Nav.NavigateTo(fallback);
+    }
+
     private IReadOnlyList<TypeaheadCandidate> _noteCandidates = [];
 
-    // The note offers what was written with this payee before ("Gift" for Mom), once "Paid
-    // to" names someone already known. Not looked up for a half-typed name.
+    // Note, Bought through and Paid with offer what was used with this contact before ("Gift"
+    // for Mom), then what is used most overall. A half-typed or new name is not looked up: it
+    // gets the most used straight away.
     private async Task PartyChangedAsync(string name)
     {
         _partyName = name;
@@ -507,7 +529,16 @@
 
     private async Task LoadNoteCandidatesAsync()
     {
-        var known = _partyCandidates.Any(c => string.Equals(c.Name, _partyName.Trim(), StringComparison.OrdinalIgnoreCase));
-        _noteCandidates = known ? await Transactions.NotesForPartyAsync(_partyName) : [];
+        if (_pools is null)
+        {
+            return;
+        }
+
+        var name = _kind == TransactionKind.SelfTransfer ? null : _partyName.Trim();
+        var known = name is { Length: > 0 } && _partyCandidates.Any(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+        var lists = await Suggest.ForAsync(_pools, name, known);
+        _noteCandidates = lists.Notes;
+        _boughtCandidates = lists.BoughtThrough;
+        _paidCandidates = lists.PaidWith;
     }
 }

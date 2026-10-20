@@ -766,3 +766,21 @@ public interface IGoalRepository
     /// <param name="cancellationToken">Cancellation.</param>
     Task SetGoalAsync(Guid transactionId, Guid? goalId, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// The history behind the suggestions on the capture and edit forms: notes, and the apps a
+/// purchase was bought through or paid with.
+/// </summary>
+public interface ISuggestionHistory
+{
+    /// <summary>Notes written on transactions, with how often each was used.</summary>
+    /// <param name="partyName">Only notes on transactions with this contact, at either end; or null for every note.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Typeahead.TypeaheadCandidate>> NotesAsync(string? partyName, CancellationToken cancellationToken = default);
+
+    /// <summary>Apps used in one place on a transaction, with how often each was used there.</summary>
+    /// <param name="slot">Bought through, or paid with.</param>
+    /// <param name="partyName">Only transactions with this contact, at either end; or null for every transaction.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Typeahead.TypeaheadCandidate>> AppsAsync(Typeahead.AppSlot slot, string? partyName, CancellationToken cancellationToken = default);
+}

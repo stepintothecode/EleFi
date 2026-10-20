@@ -2,6 +2,7 @@ using Bunit;
 using EleFi.Application.Abstractions;
 using EleFi.Domain.Notices;
 using EleFi.Ui.Components.Pages;
+using EleFi.Ui.Tests.Support;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
@@ -22,6 +23,7 @@ public class NotificationsTests : Bunit.TestContext
         notices.When(n => n.SetAllReadAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>()))
             .Do(call => _rows.ForEach(r => r.ReadAt = call.ArgAt<bool>(0) ? DateTimeOffset.UnixEpoch : null));
         Services.AddSingleton(notices);
+        Services.AddEleAndUndo();
     }
 
     [Fact]

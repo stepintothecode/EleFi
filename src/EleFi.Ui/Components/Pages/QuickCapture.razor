@@ -20,7 +20,9 @@
 @*
     Three taps, and out.
 
-    Amount, Source, Destination. Nothing else is asked, because everything else has a defensible
+    Kind, then Amount, Source, Destination. The kind is a switch at the top, Debit unless
+    changed, and it decides what the last two steps ask: who was paid, who paid, or which of
+    the user's own containers the money moved into. Nothing else is asked, because everything else has a defensible
     default and asking for it is what makes the full form take thirty seconds instead of
     three. The result is a complete, real Transaction flagged Needs Review, not a draft:
     a guessed transaction that counts is worth more than a perfect one that never exists.
@@ -54,6 +56,16 @@
         </button>
     </div>
 
+    @* Debit unless changed. The step names and both lists follow it. *@
+    <div class="segmented quick-kind" role="tablist" aria-label="Kind">
+        @foreach (var kind in Kinds)
+        {
+            <button type="button" role="tab" class="@(_kind == kind ? "on" : null)"
+                    aria-selected="@(_kind == kind ? "true" : "false")"
+                    @onclick="() => SetKind(kind)">@kind.DisplayName()</button>
+        }
+    </div>
+
     <div class="quick-steps" role="group" aria-label="Step @(_step + 1) of 3">
         @for (var i = 0; i < StepLabels.Length; i++)
         {
@@ -77,8 +89,18 @@
             <div class="quick-panel quick-finish">
                 <p class="quick-summary">
                     <span class="amount">@AmountDisplay</span>
-                    from @(_containers.FirstOrDefault(c => c.Id == _containerId)?.Name)
-                    to @_partyName.Trim()
+                    @if (_kind == TransactionKind.Credit)
+                    {
+                        @($"into {NameOf(_containerId)} from {_partyName.Trim()}")
+                    }
+                    else if (_kind == TransactionKind.SelfTransfer)
+                    {
+                        @($"from {NameOf(_containerId)} to {NameOf(_destinationId)}")
+                    }
+                    else
+                    {
+                        @($"from {NameOf(_containerId)} to {_partyName.Trim()}")
+                    }
                 </p>
                 <p class="muted small">@StartedAt.Date.ToString("ddd d MMM") at @StartedAt.Time.ToString("HH:mm")</p>
                 <p class="muted small">Done records it now, flagged for review. Add other details opens the full form with this filled in.</p>
@@ -97,10 +119,10 @@
         else if (_step == 1)
         {
             <div class="quick-panel">
-                <label>Paid from</label>
+                <label>@StepLabels[1]</label>
                 @if (_containers.Count == 0)
                 {
-                    <p class="notice error">Add a container first. Quick capture needs somewhere for money to leave.</p>
+                    <p class="notice error">Add a container first. Quick capture needs one of yours to record against.</p>
                 }
                 else
                 {
@@ -108,14 +130,28 @@
                 }
             </div>
         }
+        else if (_kind == TransactionKind.SelfTransfer)
+        {
+            <div class="quick-panel">
+                <label>Destination</label>
+                @if (_containers.Count < 2)
+                {
+                    <p class="notice error">A transfer needs two containers. Add another one first.</p>
+                }
+                else
+                {
+                    <ContainerChoices Containers="DestinationChoices" Selected="_destinationId" OnChosen="ChooseDestination" />
+                }
+            </div>
+        }
         else
         {
             <div class="quick-panel">
-                <label for="q-to">Paid to</label>
+                <label for="q-to">@StepLabels[2]</label>
                 <TypeaheadInput Id="q-to"
                                 @bind-Value="_partyName"
                                 Candidates="_partyCandidates"
-                                PanelLabel="People and places you pay"
+                                PanelLabel="@(_kind == TransactionKind.Credit ? "People who pay you" : "People and places you pay")"
                                 EnterKeyHint="done"
                                 Placeholder="Zomato, Rahul, chai"
                                 OnPicked="ChooseParty"
@@ -145,7 +181,25 @@
 
 
 @code {
-    private static readonly string[] StepLabels = ["Amount", "Paid from", "Paid to"];
+    private static readonly TransactionKind[] Kinds =
+        [TransactionKind.Debit, TransactionKind.Credit, TransactionKind.SelfTransfer];
+
+    // The capture form's words for each kind. Source and Destination for a transfer, never
+    // To and From.
+    private string[] StepLabels => _kind switch
+    {
+        TransactionKind.Credit => ["Amount", "Received into", "Received from"],
+        TransactionKind.SelfTransfer => ["Amount", "Source", "Destination"],
+        _ => ["Amount", "Paid from", "Paid to"],
+    };
+
+    private TransactionKind _kind = TransactionKind.Debit;
+    private Guid _destinationId;
+
+    // A transfer's destination is any container but its source.
+    private IReadOnlyList<Container> DestinationChoices => [.. _containers.Where(c => c.Id != _containerId)];
+
+    private string? NameOf(Guid id) => _containers.FirstOrDefault(c => c.Id == id)?.Name;
 
 
     /// <summary>The app's back handling, cascaded from the router.</summary>
@@ -184,15 +238,50 @@
     {
         0 => HasAmount,
         1 => _containerId != Guid.Empty,
-        _ => !string.IsNullOrWhiteSpace(_partyName),
+        _ => _kind == TransactionKind.SelfTransfer
+            ? _destinationId != Guid.Empty && _destinationId != _containerId
+            : !string.IsNullOrWhiteSpace(_partyName),
     };
 
     protected override async Task OnInitializedAsync()
     {
-        // Picker order, so the default is the first card: the usual way a quick spend is paid.
         _containers = ContainerGrouping.InPickerOrder(await Containers.ListSelectableAsync());
-        _containerId = _containers.FirstOrDefault()?.Id ?? Guid.Empty;
+        PickDefaults();
         await LoadCandidatesAsync();
+    }
+
+    // Sensible first choices for the kind. A spend is usually on the first card (picker order
+    // puts cards first); money in usually lands in a bank, not on a card; a transfer usually
+    // moves from a bank to something else, a card bill most of all.
+    private void PickDefaults()
+    {
+        var first = _containers.FirstOrDefault();
+        var firstAsset = _containers.FirstOrDefault(c => !c.IsLiability) ?? first;
+
+        _containerId = (_kind == TransactionKind.Debit ? first : firstAsset)?.Id ?? Guid.Empty;
+        _destinationId = _kind == TransactionKind.SelfTransfer
+            ? (_containers.FirstOrDefault(c => c.IsLiability && c.Id != _containerId)
+                ?? _containers.FirstOrDefault(c => c.Id != _containerId))?.Id ?? Guid.Empty
+            : Guid.Empty;
+    }
+
+    // Switching kind keeps the amount and steps back to the source, since what the last two
+    // steps mean has changed.
+    private void SetKind(TransactionKind kind)
+    {
+        if (kind == _kind)
+        {
+            return;
+        }
+
+        _kind = kind;
+        PickDefaults();
+        _finishing = false;
+        _furthest = System.Math.Min(_furthest, 1);
+        if (_step > 1)
+        {
+            SetStep(1);
+        }
     }
 
     public void Dispose() => ReleaseStepBack();
@@ -313,9 +402,18 @@
         _stepBackRegistration = null;
     }
 
-    // Home rather than browser-back: this screen is often the first thing on screen after a
-    // widget tap, so there is no history to go back to.
-    private void Cancel() => Nav.NavigateTo("/");
+    // Back to wherever quick capture was opened from, or home after a cold start from the
+    // widget, and never forward into it again.
+    private void Cancel()
+    {
+        if (Back is not null)
+        {
+            Back.Leave("/");
+            return;
+        }
+
+        Nav.NavigateTo("/");
+    }
 
 
     private void Next()
@@ -339,6 +437,13 @@
     private void ChooseContainer(Guid id)
     {
         _containerId = id;
+        Next();
+    }
+
+    // Choosing the destination answers the last step of a transfer.
+    private void ChooseDestination(Guid id)
+    {
+        _destinationId = id;
         Next();
     }
 
@@ -389,7 +494,7 @@
             var shown = MoneyText.ToDisplayString(saved.Value.Amount);
             Undo.Push(
                 UndoHistory.Transactions,
-                $"recording {shown} to {saved.Value.Counterparty}",
+                $"recording {shown} with {saved.Value.Counterparty}",
                 () => Editing.DeleteAsync(id),
                 () => Editing.RestoreAsync(id, flagForReview: true));
             Ele.React(EleMoment.Recorded, shown, saved.Value.Counterparty);
@@ -422,8 +527,15 @@
         var started = StartedAt;
         var query = $"capture?amount={Uri.EscapeDataString(_amountText.Trim())}"
             + $"&container={_containerId}"
-            + $"&party={Uri.EscapeDataString(_partyName.Trim())}"
-            + "&kind=debit"
+            + (_kind == TransactionKind.SelfTransfer
+                ? $"&to={_destinationId}"
+                : $"&party={Uri.EscapeDataString(_partyName.Trim())}")
+            + (_kind switch
+            {
+                TransactionKind.Credit => "&kind=credit",
+                TransactionKind.SelfTransfer => "&kind=transfer",
+                _ => "&kind=debit",
+            })
             + $"&date={started.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}"
             + $"&time={started.Time.ToString("HH\\:mm", System.Globalization.CultureInfo.InvariantCulture)}";
 
@@ -445,11 +557,34 @@
             return null;
         }
 
-        var counterparty = await Parties.GetOrCreateExternalAsync(_partyName);
+        // The kind is never stored: it follows from which two parties are which.
+        Guid sourceId;
+        Guid destinationId;
+        string counterpartyName;
+        if (_kind == TransactionKind.SelfTransfer)
+        {
+            var destination = await Containers.PartyForAsync(_destinationId);
+            if (destination is null)
+            {
+                Ele.Problem("That destination container no longer exists. Pick another one.");
+                return null;
+            }
+
+            (sourceId, destinationId) = (containerParty.Id, destination.Id);
+            counterpartyName = NameOf(_destinationId) ?? "your other container";
+        }
+        else
+        {
+            var counterparty = await Parties.GetOrCreateExternalAsync(_partyName);
+            (sourceId, destinationId) = _kind == TransactionKind.Credit
+                ? (counterparty.Id, containerParty.Id)
+                : (containerParty.Id, counterparty.Id);
+            counterpartyName = counterparty.Name ?? _partyName;
+        }
 
         var result = await Capturing.CaptureAsync(new CaptureRequest(
-            containerParty.Id,
-            counterparty.Id,
+            sourceId,
+            destinationId,
             amount.Minor,
             Currency.Inr.Code,
             amount.Minor,
@@ -471,6 +606,6 @@
             return null;
         }
 
-        return (result.Transaction!.Id, amount, counterparty.Name ?? _partyName);
+        return (result.Transaction!.Id, amount, counterpartyName);
     }
 }

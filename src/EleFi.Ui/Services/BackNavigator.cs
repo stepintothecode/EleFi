@@ -10,28 +10,49 @@ namespace EleFi.Ui.Services;
 /// <remarks>
 /// <para>
 /// In order: close whatever is open on top of the screen (a sheet, a step of a multi-step
-/// form), then return to the previous screen, then return to the dashboard, and only from
-/// the dashboard leave the app. Before this existed, back from any screen closed EleFi
-/// outright, which on a capture form meant losing what had been typed.
+/// form), then return to the screen that was open before, the way a browser does, the
+/// dashboard included. Only when there is nothing left to go back to does back offer to close
+/// the app, and even then the first press only asks: Ele says to press back again, and a
+/// second press soon after closes it. One press never closes EleFi.
 /// </para>
 /// <para>
-/// The history is kept here rather than borrowed from the WebView, because the dashboard is
-/// a root, not a page: reaching it by any route clears what was behind it. Otherwise back
-/// from the dashboard would reopen a quick capture that had just been cancelled.
+/// A screen that ends itself (quick capture cancelled, a transaction deleted, the guide moving
+/// on) leaves through <see cref="Leave"/> or <see cref="ReplaceTo"/>, which replace it in
+/// the history rather than stacking on top of it, so back never returns to something already
+/// closed or gone.
+/// </para>
+/// <para>
+/// The history is kept here rather than borrowed from the WebView, so it means the same thing
+/// whichever way a screen was reached: a tab, a link, a notification, or the widget.
 /// </para>
 /// </remarks>
 /// <param name="navigation">The router's navigation manager.</param>
 /// <param name="system">The platform's back control, used only to leave the app.</param>
-public sealed class BackNavigator(NavigationManager navigation, ISystemBack system) : IDisposable
+/// <param name="ele">Says "press back again" before the app closes. Optional for tests.</param>
+/// <param name="time">The clock for the second press. Optional for tests.</param>
+public sealed class BackNavigator(
+    NavigationManager navigation,
+    ISystemBack system,
+    EleReactions? ele = null,
+    TimeProvider? time = null) : IDisposable
 {
     /// <summary>The most screens remembered. Older ones are forgotten first.</summary>
     public const int MaximumDepth = 30;
 
+    /// <summary>How long after the first press a second one closes the app.</summary>
+    public static TimeSpan ExitWindow { get; } = TimeSpan.FromSeconds(2.5);
+
+    /// <summary>What Ele says on the first back press with nothing left to go back to.</summary>
+    public const string ExitPrompt = "Press back again to close EleFi.";
+
     private const string Root = "";
 
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly List<string> _history = [];
     private readonly List<Func<Task>> _interceptions = [];
     private string? _arrivingBackAt;
+    private string? _replacing;
+    private DateTimeOffset? _exitArmedAt;
     private bool _started;
 
     /// <summary>The remembered screens, oldest first, as base-relative paths.</summary>
@@ -40,7 +61,7 @@ public sealed class BackNavigator(NavigationManager navigation, ISystemBack syst
     /// <summary>True when there is a previous screen to return to.</summary>
     /// <remarks>
     /// For in-page Close buttons, which should return to wherever the user came from but
-    /// must never leave the app the way back from the dashboard does.
+    /// must never leave the app.
     /// </remarks>
     public bool CanStepBack => _history.Count >= 2;
 
@@ -61,7 +82,7 @@ public sealed class BackNavigator(NavigationManager navigation, ISystemBack syst
             _history.Add(Root);
         }
 
-        Remember(current);
+        _history.Add(current);
         navigation.LocationChanged += OnLocationChanged;
     }
 
@@ -84,7 +105,7 @@ public sealed class BackNavigator(NavigationManager navigation, ISystemBack syst
     }
 
     /// <summary>Does whatever back should do right now.</summary>
-    /// <returns>True when the app handled it; false when it left the app.</returns>
+    /// <returns>True when the app handled it; false only when it closed the app.</returns>
     public async Task<bool> GoBackAsync()
     {
         if (_interceptions.Count > 0)
@@ -95,6 +116,65 @@ public sealed class BackNavigator(NavigationManager navigation, ISystemBack syst
             return true;
         }
 
+        if (StepBack())
+        {
+            return true;
+        }
+
+        // Nothing left to go back to. The first press asks; a second one soon after leaves.
+        var now = _time.GetUtcNow();
+        if (_exitArmedAt is { } armed && now - armed <= ExitWindow)
+        {
+            _exitArmedAt = null;
+            system.LeaveApp();
+            return false;
+        }
+
+        _exitArmedAt = now;
+        ele?.Say(ExitPrompt, EleTone.Calm);
+        return true;
+    }
+
+    /// <summary>
+    /// Leaves the current screen for good: back to the screen before it when there is one,
+    /// otherwise replaced by <paramref name="fallback"/>. Never adds a step to the history.
+    /// </summary>
+    /// <remarks>For a screen that has ended itself, such as a cancelled quick capture or a
+    /// deleted transaction, which back must never return to.</remarks>
+    /// <param name="fallback">Where to go when nothing is behind this screen.</param>
+    public void Leave(string fallback)
+    {
+        if (!StepBack())
+        {
+            ReplaceTo(fallback);
+        }
+    }
+
+    /// <summary>
+    /// Shows another screen in place of the current one, without adding a step to the
+    /// history.
+    /// </summary>
+    /// <param name="path">The screen to show.</param>
+    public void ReplaceTo(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+
+        _replacing = Relative(navigation.ToAbsoluteUri(path).ToString());
+        navigation.NavigateTo(path, replace: true);
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_started)
+        {
+            navigation.LocationChanged -= OnLocationChanged;
+        }
+    }
+
+    // Back one screen in the history, if there is one.
+    private bool StepBack()
+    {
         if (_history.Count >= 2)
         {
             _history.RemoveAt(_history.Count - 1);
@@ -109,26 +189,20 @@ public sealed class BackNavigator(NavigationManager navigation, ISystemBack syst
 
         if (_history.Count == 1 && _history[0] != Root)
         {
-            navigation.NavigateTo(Root);
+            ReplaceTo(Root);
             return true;
         }
 
-        system.LeaveApp();
         return false;
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        if (_started)
-        {
-            navigation.LocationChanged -= OnLocationChanged;
-        }
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         var path = Relative(e.Location);
+
+        // Any move means the user is still using the app: the next back is a step, not a
+        // second "close" press.
+        _exitArmedAt = null;
 
         if (_arrivingBackAt is not null && path == _arrivingBackAt)
         {
@@ -137,19 +211,29 @@ public sealed class BackNavigator(NavigationManager navigation, ISystemBack syst
         }
 
         _arrivingBackAt = null;
+
+        if (_replacing is not null && path == _replacing)
+        {
+            _replacing = null;
+            if (_history.Count > 0)
+            {
+                _history[^1] = path;
+            }
+            else
+            {
+                _history.Add(path);
+            }
+
+            Collapse();
+            return;
+        }
+
+        _replacing = null;
         Remember(path);
     }
 
     private void Remember(string path)
     {
-        if (path == Root)
-        {
-            // The dashboard is the root. Arriving there by any route forgets the way in.
-            _history.Clear();
-            _history.Add(Root);
-            return;
-        }
-
         if (_history.Count > 0 && _history[^1] == path)
         {
             return;
@@ -159,8 +243,16 @@ public sealed class BackNavigator(NavigationManager navigation, ISystemBack syst
 
         if (_history.Count > MaximumDepth)
         {
-            // Keep the root; forget the oldest screen after it.
-            _history.RemoveAt(_history[0] == Root ? 1 : 0);
+            _history.RemoveAt(0);
+        }
+    }
+
+    // A replace can leave the same screen twice in a row: one step, not two.
+    private void Collapse()
+    {
+        if (_history.Count >= 2 && _history[^1] == _history[^2])
+        {
+            _history.RemoveAt(_history.Count - 1);
         }
     }
 

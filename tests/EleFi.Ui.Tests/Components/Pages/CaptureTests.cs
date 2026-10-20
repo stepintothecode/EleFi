@@ -46,7 +46,23 @@ public class CaptureTests : Bunit.TestContext
         Assert.Empty(page.FindAll("datalist"));
         Assert.Equal(
             ["Zomato", "Swiggy", "Rahul"],
-            page.FindAll(".typeahead-panel [role=option]").Select(o => o.TextContent.Trim()));
+            page.FindAll(".typeahead-panel[aria-label='People and places you pay'] [role=option]").Select(o => o.TextContent.Trim()));
+    }
+
+    [Fact]
+    public void Bought_through_and_paid_with_offer_the_most_used_apps_before_anything_is_typed()
+    {
+        Register();
+
+        var page = RenderComponent<Capture>();
+
+        page.WaitForAssertion(() =>
+        {
+            var panels = page.FindAll(".typeahead-panel[aria-label='Apps']");
+            Assert.Equal(2, panels.Count);
+            Assert.Equal(["Amazon", "Flipkart"], panels[0].QuerySelectorAll("[role=option]").Select(o => o.TextContent.Trim()));
+            Assert.Equal(["GPay"], panels[1].QuerySelectorAll("[role=option]").Select(o => o.TextContent.Trim()));
+        });
     }
 
     [Fact]
@@ -194,9 +210,16 @@ public class CaptureTests : Bunit.TestContext
         Services.AddEleAndUndo();
         Services.AddSingleton(new EleFi.Application.Planning.PlanService(Substitute.For<IPlanRepository>(), Substitute.For<ITransactionRepository>(), clock, Substitute.For<IAuditRepository>(), Substitute.For<IReminderSchedule>()));
 
-        _ledger.NotesForPartyAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<TypeaheadCandidate>());
-        _ledger.NotesForPartyAsync("Rahul", Arg.Any<CancellationToken>()).Returns(
+        var history = Substitute.For<ISuggestionHistory>();
+        history.NotesAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<TypeaheadCandidate>());
+        history.NotesAsync("Rahul", Arg.Any<CancellationToken>()).Returns(
             [new TypeaheadCandidate("Rent share", 4, now), new TypeaheadCandidate("Dinner", 1, now)]);
+        history.AppsAsync(Arg.Any<AppSlot>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<TypeaheadCandidate>());
+        history.AppsAsync(AppSlot.BoughtThrough, null, Arg.Any<CancellationToken>()).Returns(
+            [new TypeaheadCandidate("Amazon", 7, now), new TypeaheadCandidate("Flipkart", 3, now)]);
+        history.AppsAsync(AppSlot.PaidWith, null, Arg.Any<CancellationToken>()).Returns(
+            [new TypeaheadCandidate("GPay", 9, now)]);
+        Services.AddSingleton(new FormSuggestions(history, apps));
         Services.AddSingleton(_ledger);
 
         var goals = Substitute.For<IGoalRepository>();

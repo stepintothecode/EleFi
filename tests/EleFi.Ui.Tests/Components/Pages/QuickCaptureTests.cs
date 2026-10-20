@@ -21,8 +21,63 @@ public class QuickCaptureTests : Bunit.TestContext
     private readonly Container _card = new() { Name = "Amex", Kind = ContainerKind.CreditCard };
     private readonly Container _bank = new() { Name = "SBI", Kind = ContainerKind.BankAccount };
     private readonly Party _cardParty = new() { Kind = PartyKind.Container };
+    private readonly Party _bankParty = new() { Kind = PartyKind.Container };
     private readonly Party _zomato = new() { Kind = PartyKind.External, Name = "Zomato", UsageCount = 4 };
     private readonly RecordingTransactions _transactions = new();
+
+    [Fact]
+    public void Debit_is_chosen_until_changed_and_the_steps_say_paid_from_and_paid_to()
+    {
+        Register();
+        var page = RenderComponent<QuickCapture>();
+
+        Assert.Equal("Debit", page.Find(".quick-kind [aria-selected=true]").TextContent);
+        Assert.Equal(["Amount", "Paid from", "Paid to"], page.FindAll(".quick-step .cap").Select(c => c.TextContent));
+    }
+
+    [Fact]
+    public void Credit_records_money_received_into_a_container()
+    {
+        Register();
+        var page = RenderComponent<QuickCapture>();
+
+        page.FindAll(".quick-kind button").First(b => b.TextContent == "Credit").Click();
+        Assert.Equal(["Amount", "Received into", "Received from"], page.FindAll(".quick-step .cap").Select(c => c.TextContent));
+
+        page.Find("#q-amount").Input("1200");
+        page.Find(".quick-actions button.primary").Click();
+        page.FindAll(".container-choices button").First(b => b.TextContent.Contains("SBI", StringComparison.Ordinal)).Click();
+        page.Find("#q-to").Input("Zomato");
+        page.Find(".quick-actions button.primary").Click();
+        page.Find(".quick-done-button").Click();
+
+        var saved = Assert.Single(_transactions.Added);
+        Assert.Equal(_zomato.Id, saved.SourcePartyId);
+        Assert.Equal(_bankParty.Id, saved.DestinationPartyId);
+    }
+
+    [Fact]
+    public void Self_transfer_asks_for_a_source_and_a_destination_container()
+    {
+        Register();
+        var page = RenderComponent<QuickCapture>();
+
+        page.FindAll(".quick-kind button").First(b => b.TextContent == "Self Transfer").Click();
+        Assert.Equal(["Amount", "Source", "Destination"], page.FindAll(".quick-step .cap").Select(c => c.TextContent));
+
+        page.Find("#q-amount").Input("5000");
+        page.Find(".quick-actions button.primary").Click();
+        page.FindAll(".container-choices button").First(b => b.TextContent.Contains("SBI", StringComparison.Ordinal)).Click();
+
+        // The destination is any container but the source.
+        Assert.Equal(["Amex"], page.FindAll(".container-choices button > span").Select(s => s.TextContent));
+        page.Find(".container-choices button").Click();
+        page.Find(".quick-done-button").Click();
+
+        var saved = Assert.Single(_transactions.Added);
+        Assert.Equal(_bankParty.Id, saved.SourcePartyId);
+        Assert.Equal(_cardParty.Id, saved.DestinationPartyId);
+    }
 
     [Fact]
     public void From_lists_cards_first_with_no_headings()
@@ -163,11 +218,13 @@ public class QuickCaptureTests : Bunit.TestContext
         var containers = Substitute.For<IContainerRepository>();
         containers.ListSelectableAsync(Arg.Any<CancellationToken>()).Returns([_bank, _card]);
         containers.PartyForAsync(_card.Id, Arg.Any<CancellationToken>()).Returns(_cardParty);
+        containers.PartyForAsync(_bank.Id, Arg.Any<CancellationToken>()).Returns(_bankParty);
 
         var parties = Substitute.For<IPartyRepository>();
         parties.ListExternalAsync(Arg.Any<CancellationToken>()).Returns([_zomato]);
         parties.GetOrCreateExternalAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_zomato);
         parties.FindAsync(_cardParty.Id, Arg.Any<CancellationToken>()).Returns(_cardParty);
+        parties.FindAsync(_bankParty.Id, Arg.Any<CancellationToken>()).Returns(_bankParty);
         parties.FindAsync(_zomato.Id, Arg.Any<CancellationToken>()).Returns(_zomato);
 
         var apps = Substitute.For<IAppRepository>();

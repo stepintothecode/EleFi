@@ -24,9 +24,9 @@
     Settings, and the honest list of what is not built yet. Each card is its buttons and an
     "i"; the explanations live behind the i, so the page reads as a list of things to do.
 
-    A backup section that says "not built" is more useful than no section at all, because it
-    tells you your data is currently on exactly one device. Until the encrypted Drive path
-    exists, the JSON export below is the answer to that.
+    Backup and Restore holds every way the data leaves or comes back: Google Drive (a page
+    that says honestly it is not built yet, so you know your data is on one device), and the
+    JSON export and restore, which are the answer until it is.
 *@
 
 <PageTitle>Settings</PageTitle>
@@ -59,13 +59,25 @@
     <div class="row between" style="margin-top: 14px;">
         <div class="grow">
             <div class="who">Ele's sound</div>
-            <div class="meta">A trumpet and twinkles when something goes right, a soft bell when it is calm, and two low toots when something needs fixing.</div>
+            <div class="meta">A short sound each time Ele pops up.</div>
         </div>
-        <label class="switch">
-            <input type="checkbox" aria-label="Ele's sound" checked="@Ele.SoundEnabled"
-                   @onchange="e => Ele.SetSoundEnabled(e.Value is true)" />
-            <span class="track"></span>
-        </label>
+        @* A speaker that mutes and unmutes, not a third switch: what it does is in the icon. *@
+        <button type="button" class="sound-toggle @(Ele.SoundEnabled ? "on" : null)"
+                aria-pressed="@(Ele.SoundEnabled ? "true" : "false")"
+                aria-label="@(Ele.SoundEnabled ? "Mute Ele" : "Unmute Ele")"
+                @onclick="() => Ele.SetSoundEnabled(!Ele.SoundEnabled)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 9.4h3.3L12 5.5v13l-4.7-3.9H4Z" />
+                @if (Ele.SoundEnabled)
+                {
+                    <path d="M15.6 9.2a4 4 0 0 1 0 5.6M18.2 6.6a7.6 7.6 0 0 1 0 10.8" />
+                }
+                else
+                {
+                    <path d="M16 9.5l5 5M21 9.5l-5 5" />
+                }
+            </svg>
+        </button>
     </div>
 </div>
 
@@ -73,17 +85,6 @@
     <h2 style="margin:0;">Your data</h2>
     <InfoButton Topic="Your data">
         <p><strong>Labels</strong> are the words you tag transactions with. Edit them on their own page.</p>
-        <p class="muted small">
-            <strong>Export</strong> writes one JSON file with everything: containers, labels,
-            transactions (deleted ones too), plans, goals, taught messages, notifications and the
-            history of every change. Keep it somewhere safe and you can put it all back.
-            <strong>The file is not encrypted.</strong> It is your whole financial history in
-            readable text, so where you put it matters.
-        </p>
-        <p class="muted small">
-            <strong>Restore</strong> replaces everything on this device with the contents of a
-            backup. Merging is not offered: it would produce a third state matching neither.
-        </p>
         <p class="muted small">
             <strong>Deleted transactions</strong> are kept, out of every balance and list, until
             you restore them. A restored one comes back flagged for review.
@@ -132,32 +133,6 @@
         </span>
         <span class="chev" aria-hidden="true">&rsaquo;</span>
     </a>
-
-    <button type="button" class="settings-row" disabled="@_busy" @onclick="ExportAsync">
-        <span class="settings-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2" />
-            </svg>
-        </span>
-        <span class="settings-text">
-            <span class="settings-title">Export to a file</span>
-            <span class="settings-sub">Everything, as one JSON file</span>
-        </span>
-        <span class="chev" aria-hidden="true">&rsaquo;</span>
-    </button>
-
-    <button type="button" class="settings-row" disabled="@_busy" @onclick="StartRestore">
-        <span class="settings-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2" />
-            </svg>
-        </span>
-        <span class="settings-text">
-            <span class="settings-title">Restore from a file</span>
-            <span class="settings-sub">Replace this device's data with a backup</span>
-        </span>
-        <span class="chev" aria-hidden="true">&rsaquo;</span>
-    </button>
 </div>
 
 @* NFR-10.7: on a platform that cannot read alerts, no switch is shown at all. Teaching
@@ -239,21 +214,65 @@
 </div>
 
 <div class="field-head section-gap">
-    <h2 style="margin:0;">Google Drive backup</h2>
-    <InfoButton Topic="Google Drive backup">
+    <h2 style="margin:0;">Backup and Restore</h2>
+    <InfoButton Topic="Backup and Restore">
         <p>
-            There is no EleFi account and never will be. It will use <em>your</em> Google account
-            and a private app folder, encrypted on this device before it leaves, so Google holds
-            something it cannot read.
+            <strong>Google Drive backup</strong> will use <em>your</em> Google account and a
+            private app folder, encrypted on this device before it leaves, so Google holds
+            something it cannot read. There is no EleFi account and never will be.
         </p>
-        <p class="muted small">Until it exists, use Export to a file above.</p>
+        <p class="muted small">
+            <strong>Export</strong> writes one JSON file with everything: containers, labels,
+            transactions (deleted ones too), plans, goals, taught messages, notifications and the
+            history of every change. Keep it somewhere safe and you can put it all back.
+            <strong>The file is not encrypted.</strong> It is your whole financial history in
+            readable text, so where you put it matters.
+        </p>
+        <p class="muted small">
+            <strong>Restore</strong> replaces everything on this device with the contents of a
+            backup. Merging is not offered: it would produce a third state matching neither.
+        </p>
     </InfoButton>
 </div>
-<div class="card">
-    <div class="row between">
-        <div class="who grow">Encrypted backup to your own Drive</div>
-        <span class="tag">Not built yet</span>
-    </div>
+<div class="card settings-list">
+    <a class="settings-row drive-backup" href="settings/backup">
+        <span class="settings-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 18.5h10.2a4 4 0 0 0 .6-7.96A5.6 5.6 0 0 0 6.9 9.6 4.5 4.5 0 0 0 7 18.5Z" />
+                <path d="M12 15.5v-5M9.8 12.6 12 10.4l2.2 2.2" />
+            </svg>
+        </span>
+        <span class="settings-text">
+            <span class="settings-title">Google Drive backup</span>
+            <span class="settings-sub">Encrypted, to your own Drive. Coming soon</span>
+        </span>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
+    </a>
+    <button type="button" class="settings-row" disabled="@_busy" @onclick="ExportAsync">
+        <span class="settings-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2" />
+            </svg>
+        </span>
+        <span class="settings-text">
+            <span class="settings-title">Export to a file</span>
+            <span class="settings-sub">Everything, as one JSON file</span>
+        </span>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
+    </button>
+
+    <button type="button" class="settings-row" disabled="@_busy" @onclick="StartRestore">
+        <span class="settings-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2" />
+            </svg>
+        </span>
+        <span class="settings-text">
+            <span class="settings-title">Restore from a file</span>
+            <span class="settings-sub">Replace this device's data with a backup</span>
+        </span>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
+    </button>
 </div>
 
 <h2>Help</h2>

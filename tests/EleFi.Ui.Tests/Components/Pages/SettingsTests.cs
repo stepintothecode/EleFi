@@ -56,10 +56,31 @@ public class SettingsTests : Bunit.TestContext
 
         // Ele is the only messenger now, so only its sound is optional.
         Assert.Empty(component.FindAll("input[aria-label='Ele reacts to changes']"));
-        Assert.True(component.Find("input[aria-label=\"Ele's sound\"]").HasAttribute("checked"));
-        component.Find("input[aria-label=\"Ele's sound\"]").Change(false);
+        var speaker = component.Find("button.sound-toggle");
+        Assert.Equal("true", speaker.GetAttribute("aria-pressed"));
+        Assert.Equal("Mute Ele", speaker.GetAttribute("aria-label"));
+
+        speaker.Click();
 
         Assert.Equal("false", _store.Read(EleReactions.SoundKey, "true"));
+        speaker = component.Find("button.sound-toggle");
+        Assert.Equal("false", speaker.GetAttribute("aria-pressed"));
+        Assert.Equal("Unmute Ele", speaker.GetAttribute("aria-label"));
+
+        speaker.Click();
+
+        Assert.Equal("true", _store.Read(EleReactions.SoundKey, "false"));
+    }
+
+    [Fact]
+    public void Eles_sound_is_a_speaker_not_a_third_switch()
+    {
+        Register();
+        var component = RenderComponent<Settings>();
+
+        Assert.Equal(2, component.FindAll(".switch input").Count(i => i.GetAttribute("aria-label") is "Hide amounts" or "Hide in recent apps"));
+        Assert.Empty(component.FindAll("input[aria-label=\"Ele's sound\"]"));
+        Assert.NotNull(component.Find("button.sound-toggle svg"));
     }
 
     [Fact]
@@ -95,12 +116,28 @@ public class SettingsTests : Bunit.TestContext
         Assert.Empty(component.FindAll("a[href='suggestions']"));
     }
     [Fact]
+    public void Backup_and_restore_holds_drive_export_and_restore_in_that_order()
+    {
+        Register();
+
+        var component = RenderComponent<Settings>();
+
+        Assert.Contains("Backup and Restore", component.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Google Drive backup</h2>", component.Markup, StringComparison.Ordinal);
+        var section = component.Find("a.drive-backup").ParentElement!;
+        Assert.Equal(
+            ["Google Drive backup", "Export to a file", "Restore from a file"],
+            section.QuerySelectorAll(".settings-title").Select(t => t.TextContent));
+        Assert.Equal("settings/backup", component.Find("a.drive-backup").GetAttribute("href"));
+    }
+
+    [Fact]
     public void The_export_card_says_the_file_is_not_encrypted()
     {
         Register();
 
         var component = RenderComponent<Settings>();
-        component.Find(".info-btn[aria-label='What is Your data?']").Click();
+        component.Find(".info-btn[aria-label='What is Backup and Restore?']").Click();
 
         // FR-10.15. A plaintext financial history is fine as long as the user knows that is
         // what they are about to put in their Downloads folder. Behind the i now, one tap away.
@@ -113,7 +150,7 @@ public class SettingsTests : Bunit.TestContext
         Register();
 
         var component = RenderComponent<Settings>();
-        component.Find(".info-btn[aria-label='What is Your data?']").Click();
+        component.Find(".info-btn[aria-label='What is Backup and Restore?']").Click();
 
         Assert.Contains("replaces everything", component.Find("[role=dialog]").TextContent, StringComparison.OrdinalIgnoreCase);
     }

@@ -22,6 +22,7 @@ internal static class EleServices
         services.TryAddSingleton(new EleReactions(new Fakes.MemorySettings(), new ManualTime()));
         services.TryAddSingleton<ISoundCue>(new Fakes.RecordingSound());
         services.TryAddSingleton(new UndoHistory());
+        services.TryAddSingleton<IAppResume>(new Fakes.ManualResume());
 
         var seen = new Fakes.MemorySettings();
         seen.Write(EleGuide.DoneKey, "true");

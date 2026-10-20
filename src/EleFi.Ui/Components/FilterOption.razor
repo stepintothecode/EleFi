@@ -1,0 +1,29 @@
+@*
+    One option in a FilterDropdown: its name, and a tick when it is on.
+*@
+
+<button type="button" role="option" class="filter-option @(On ? "on" : null)"
+        aria-selected="@(On ? "true" : "false")" @onclick="() => OnPick.InvokeAsync()">
+    <span class="filter-option-name">@Text</span>
+    @if (On)
+    {
+        <svg class="filter-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+    }
+</button>
+
+@code {
+    /// <summary>The option's name.</summary>
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>Whether it is chosen.</summary>
+    [Parameter]
+    public bool On { get; set; }
+
+    /// <summary>Raised when it is tapped.</summary>
+    [Parameter]
+    public EventCallback OnPick { get; set; }
+}

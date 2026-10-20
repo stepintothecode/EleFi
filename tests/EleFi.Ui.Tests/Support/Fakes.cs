@@ -92,6 +92,15 @@ internal static class Fakes
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
+    /// <summary>The app coming back to the front, when the test says so.</summary>
+    public sealed class ManualResume : IAppResume
+    {
+        public event Action? Resumed;
+
+        /// <summary>Simulates the app coming back from the background.</summary>
+        public void Resume() => Resumed?.Invoke();
+    }
+
     /// <summary>A phone contacts picker that hands back whatever the test says the user picked.</summary>
     public sealed class FakeContactPicker : IContactPicker
     {

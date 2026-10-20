@@ -1,0 +1,25 @@
+@using EleFi.Application.Abstractions
+@implements IDisposable
+@inject IAppResume Resume
+
+@*
+    Reloads the page it sits on when the app comes back to the front, so a transaction an SMS
+    recorded in the background, or a plan that fell due, shows without switching tabs.
+
+    Only for pages that show data. A page with a form must not use this: reloading it would
+    wipe what was being typed.
+*@
+
+@code {
+    /// <summary>What the page does to show current data.</summary>
+    [Parameter, EditorRequired]
+    public EventCallback OnResumed { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnInitialized() => Resume.Resumed += Refresh;
+
+    /// <inheritdoc />
+    public void Dispose() => Resume.Resumed -= Refresh;
+
+    private void Refresh() => _ = InvokeAsync(() => OnResumed.InvokeAsync());
+}

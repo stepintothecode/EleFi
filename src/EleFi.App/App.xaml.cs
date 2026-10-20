@@ -20,6 +20,12 @@ public partial class App : Microsoft.Maui.Controls.Application
     /// <inheritdoc />
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        return new Window(new MainPage()) { Title = "EleFi" };
+        var window = new Window(new MainPage()) { Title = "EleFi" };
+
+        // Back from the background: screens that show data reload (see IAppResume).
+        window.Resumed += (_, _) =>
+            (IPlatformApplication.Current?.Services.GetService<EleFi.Application.Abstractions.IAppResume>() as Services.MauiAppResume)?.Raise();
+
+        return window;
     }
 }

@@ -266,6 +266,21 @@ public interface IAlertAccess
 }
 
 /// <summary>
+/// Tells the UI the app has come back to the front, from the recent-apps view, the launcher
+/// or a notification.
+/// </summary>
+/// <remarks>
+/// While EleFi is in the background, an SMS or a payment app can record a transaction and a
+/// plan can fall due. Screens that only show data reload when this fires, so what they show
+/// is current. Screens with a form never do: reloading one would wipe what was being typed.
+/// </remarks>
+public interface IAppResume
+{
+    /// <summary>Raised each time the app comes back to the front.</summary>
+    event Action? Resumed;
+}
+
+/// <summary>
 /// The device's own back control: the back gesture, or the back button on older phones.
 /// </summary>
 /// <remarks>

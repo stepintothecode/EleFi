@@ -4,9 +4,8 @@ Everything not yet built, in one place, so nothing is forgotten. The roadmap
 ([roadmap.md](roadmap.md)) says why and in what order; this file is the checklist. Tick an
 item in the same commit that finishes it, and move it to **Done** at the bottom.
 
-Priorities as of 2026-10-12: multi-currency is **low** priority. Last updated 2026-10-17,
-after Ele's new look and Ele's guide; the build with everything below ticked is on the test
-phone.
+Priorities as of 2026-10-12: multi-currency is **low** priority. Last updated 2026-10-20,
+after the six fixes of that day; the build with everything below ticked is on the test phone.
 
 ## Next up, in order
 
@@ -36,7 +35,7 @@ phone.
 - [ ] **Undo leftovers**: undo is per session (it does not survive closing the app); linking
       a phone contact and creating a contact have no undo
 - [ ] **Notifications, the rest**: clear old read notices after a while
-- [ ] Note suggestions in quick capture's finish step
+- [ ] Note suggestions in quick capture's finish step (Capture and Edit have them, FR-2.21)
 - [ ] **Contacts, the rest (S16)**: a contact's own history on its page (the triggers already
       record it); call, message and email buttons on a detail; remove an alias; refresh a
       phone-linked contact's number; "Contact" from the payee field on the capture form
@@ -90,6 +89,14 @@ phone.
 
 ## Done recently
 
+- [x] **2026-10-20, six fixes**: back goes to the page before and takes two presses to close
+      the app (one press closed it from an open transaction, after Android recreated the
+      screen); lists and figures read again on returning from recents, forms untouched; the
+      Quick tab amber; top three suggestions for Note, Bought through and Paid with, this
+      contact's first; Debit / Credit / Self Transfer in quick capture; a compact Filters sheet
+      with dropdown rows and Clear filters on top; then Quick a faded dusty teal, a gliding
+      pill for the open tab, and Settings > Backup and Restore (Drive page greyed, Export,
+      Restore)
 - [x] **2026-10-17, Ele's new look**: one drawing for every Ele (the live mascot, app icon,
       launcher images, splash, start-up screen, brand icon); a cheerful young elephant with big
       eyes and no mouth; lids carry the mood; the pleased trunk raised with its end facing front;

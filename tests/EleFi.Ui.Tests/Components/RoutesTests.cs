@@ -125,14 +125,17 @@ public class RoutesTests : Bunit.TestContext
     }
 
     [Fact]
-    public void The_system_back_gesture_on_the_dashboard_leaves_the_app()
+    public void The_system_back_gesture_on_the_dashboard_closes_the_app_only_on_a_second_press()
     {
         var back = new Fakes.RecordingBack();
         RegisterPageServices(back: back);
         var component = RenderComponent<Routes>();
 
         back.Press();
+        component.WaitForAssertion(() => Assert.Equal(BackNavigator.ExitPrompt, Services.GetRequiredService<EleReactions>().Current?.Line));
+        Assert.Equal(0, back.Left);
 
+        back.Press();
         component.WaitForAssertion(() => Assert.Equal(1, back.Left));
     }
 
@@ -150,7 +153,7 @@ public class RoutesTests : Bunit.TestContext
         Services.AddSingleton<IMascotService>(new Fakes.SilentMascot());
         Services.AddSingleton<ILaunchIntent>(launch ?? new Fakes.PlainLaunch());
         Services.AddSingleton<ISystemBack>(systemBack);
-        Services.AddSingleton(sp => new BackNavigator(sp.GetRequiredService<NavigationManager>(), systemBack));
+        Services.AddSingleton(sp => new BackNavigator(sp.GetRequiredService<NavigationManager>(), systemBack, sp.GetRequiredService<EleReactions>(), new ManualTime()));
         Services.AddSingleton(new EleReactions(new Fakes.MemorySettings(), new ManualTime()));
         Services.AddEleAndUndo();
         Services.AddSingleton<ISettingsStore>(new Fakes.MemorySettings());

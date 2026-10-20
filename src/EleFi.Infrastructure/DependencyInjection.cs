@@ -74,6 +74,8 @@ public static class DependencyInjection
         services.AddScoped<CaptureService>();
         services.AddScoped<EditTransactionService>();
         services.AddScoped<CsvExporter>();
+        services.AddScoped<ISuggestionHistory, SuggestionHistoryRepository>();
+        services.AddScoped<EleFi.Application.Typeahead.FormSuggestions>();
         services.AddScoped<IParseRuleRepository, ParseRuleRepository>();
         services.AddScoped<IPlanRepository, PlanRepository>();
         services.AddScoped<INoticeRepository, NoticeRepository>();

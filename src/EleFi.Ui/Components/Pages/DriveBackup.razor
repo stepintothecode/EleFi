@@ -1,0 +1,73 @@
+@page "/settings/backup"
+
+@*
+    Google Drive backup, laid out the way WhatsApp's chat backup is, because that is the
+    backup screen most people already know: when the last one was, one Back up button, and
+    the few choices under it.
+
+    Not built yet (S12), and the page says so rather than pretending. Everything is shown so
+    the shape is familiar, and everything is greyed out. Until it exists, the JSON export in
+    Settings > Backup and Restore is the way to keep a copy.
+*@
+
+<PageTitle>Google Drive backup</PageTitle>
+
+<h1>Google Drive backup</h1>
+
+<div class="drive-soon" role="status">
+    <strong>Coming soon.</strong> Until then, use Export to a file in Settings.
+</div>
+
+<div class="card drive-hero coming-soon" aria-disabled="true">
+    <span class="drive-cloud" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 18.5h10.2a4 4 0 0 0 .6-7.96A5.6 5.6 0 0 0 6.9 9.6 4.5 4.5 0 0 0 7 18.5Z" />
+            <path d="M12 15.5v-5M9.8 12.6 12 10.4l2.2 2.2" />
+        </svg>
+    </span>
+    <h2 class="drive-heading">Last backup</h2>
+    <dl class="drive-facts">
+        <dt>Google Drive</dt>
+        <dd>Never</dd>
+        <dt>Size</dt>
+        <dd>-</dd>
+    </dl>
+    <p class="muted small">
+        Back up your containers, transactions, labels, contacts, plans and goals to your own
+        Google Drive. Restore them on a new phone or after reinstalling EleFi.
+    </p>
+    <p class="muted small">
+        Encrypted on this phone before it leaves, so Google holds something it cannot read.
+    </p>
+    <button type="button" class="primary drive-back-up" disabled>Back up</button>
+</div>
+
+<div class="card settings-list coming-soon" aria-disabled="true">
+    <div class="settings-row drive-row">
+        <span class="settings-text">
+            <span class="settings-title">Google Account</span>
+            <span class="settings-sub">None chosen</span>
+        </span>
+    </div>
+    <div class="settings-row drive-row">
+        <span class="settings-text">
+            <span class="settings-title">Back up to Google Drive</span>
+            <span class="settings-sub">Never</span>
+        </span>
+    </div>
+    <div class="settings-row drive-row">
+        <span class="settings-text">
+            <span class="settings-title">Back up using mobile data</span>
+        </span>
+        <label class="switch">
+            <input type="checkbox" aria-label="Back up using mobile data" disabled />
+            <span class="track"></span>
+        </label>
+    </div>
+    <div class="settings-row drive-row">
+        <span class="settings-text">
+            <span class="settings-title">Encrypted backup</span>
+            <span class="settings-sub">Always on</span>
+        </span>
+    </div>
+</div>

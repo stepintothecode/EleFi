@@ -18,6 +18,8 @@
 
 <PageTitle>Contacts</PageTitle>
 
+<RefreshOnResume OnResumed="ReloadAsync" />
+
 <div class="section-head">
     <h1>Contacts</h1>
     <span class="row" style="gap:4px;">
@@ -101,9 +103,14 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await ReloadAsync();
+        _loading = false;
+    }
+
+    private async Task ReloadAsync()
+    {
         _all = await Contacts.ListAsync();
         _duplicates = (await Contacts.DuplicatesAsync()).Count;
-        _loading = false;
     }
 
     private static string Initial(string name) => name.Trim() is { Length: > 0 } n ? n[..1].ToUpperInvariant() : "?";

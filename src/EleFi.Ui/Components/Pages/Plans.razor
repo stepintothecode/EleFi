@@ -33,6 +33,8 @@
 
 <PageTitle>Plans</PageTitle>
 
+<RefreshOnResume OnResumed="RefreshAsync" />
+
 <div class="section-head">
     <h1>Plans</h1>
     @if (_tab == "plans")
@@ -54,9 +56,9 @@
 
 <div class="segmented" role="tablist" aria-label="Plans or goals" style="margin-top:0;">
     <button type="button" role="tab" class="@(_tab == "plans" ? "on" : null)" aria-selected="@(_tab == "plans" ? "true" : "false")"
-            @onclick='() => _tab = "plans"'>Plans</button>
+            @onclick='() => ShowTab("plans")'>Plans</button>
     <button type="button" role="tab" class="@(_tab == "goals" ? "on" : null)" aria-selected="@(_tab == "goals" ? "true" : "false")"
-            @onclick='() => _tab = "goals"'>Goals</button>
+            @onclick='() => ShowTab("goals")'>Goals</button>
 </div>
 
 @if (_tab == "goals")
@@ -354,6 +356,18 @@ else
     ];
 
     private string _tab = "plans";
+
+    /// <summary>The app's back handling, cascaded from the router.</summary>
+    [CascadingParameter]
+    public BackNavigator? Back { get; set; }
+
+    // The tab is in the address, in place, so coming back to this page (from recording money
+    // toward a goal, say) lands on the tab that was open, without a history step per switch.
+    private void ShowTab(string tab)
+    {
+        _tab = tab;
+        Back?.ReplaceTo(tab == "goals" ? "plans?tab=goals" : "plans");
+    }
     private GoalsPanel? _goalsPanel;
 
     /// <summary>Which half to open on: "goals" or "plans".</summary>
@@ -419,6 +433,13 @@ else
         {
             await TickAsync(plan);
         }
+    }
+
+    // Back from the background: both halves read again, whichever tab is open.
+    private async Task RefreshAsync()
+    {
+        await ReloadAsync();
+        await ReloadGoalsAsync();
     }
 
     private async Task ReloadGoalsAsync()

@@ -101,9 +101,17 @@
 
         if (_shownIndex != Guide.Index)
         {
+            // In place, not stacked: after the guide, back must not walk through its pages.
             if (Guide.Current.Route is { } route)
             {
-                Nav.NavigateTo(route);
+                if (Back is not null)
+                {
+                    Back.ReplaceTo(route);
+                }
+                else
+                {
+                    Nav.NavigateTo(route);
+                }
             }
 
             _ = ChimeAsync(Guide.Current.Mood);
