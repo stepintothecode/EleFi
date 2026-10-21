@@ -138,6 +138,24 @@ public sealed class ReceiptService(
             : new ReceiptOutcome(null, Discrepancy.None, captured.Error);
     }
 
+    /// <summary>
+    /// The transaction this receipt is already attached to, found by its UPI reference, or
+    /// null. A receipt shared twice is the commonest duplicate there is.
+    /// </summary>
+    /// <param name="reading">What the receipt says.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    public async Task<Transaction?> AttachedAlreadyAsync(ReceiptReading reading, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reading);
+        if (reading.Reference is not { } reference
+            || await receipts.FindByReferenceAsync(reference, cancellationToken).ConfigureAwait(false) is not { } earlier)
+        {
+            return null;
+        }
+
+        return await transactions.FindAsync(earlier.TransactionId, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>A transaction's receipts, each with how it compares and its thumbnail.</summary>
     /// <param name="transactionId">The transaction.</param>
     /// <param name="cancellationToken">Cancellation.</param>

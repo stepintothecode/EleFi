@@ -97,7 +97,9 @@ public class MainLayoutTests : Bunit.TestContext
             p.Add(x => x.Body, (RenderFragment)(_ => throw new InvalidOperationException("boom"))));
 
         // The whole point of the boundary: the tabs survive, so there is a way out.
-        Assert.Contains("This screen did not load", component.Markup, StringComparison.Ordinal);
+        // Ele, comforting, says it and offers the way on.
+        Assert.Contains("this screen did not load", component.Find(".ele-centre").TextContent, StringComparison.Ordinal);
+        Assert.Contains("Try again", component.Find(".ele-centre-actions").TextContent, StringComparison.Ordinal);
         Assert.Contains("Capture", component.Markup, StringComparison.Ordinal);
     }
 }

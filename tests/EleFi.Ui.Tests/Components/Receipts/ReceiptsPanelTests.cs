@@ -20,6 +20,7 @@ public class ReceiptsPanelTests : Bunit.TestContext
     private readonly ITransactionRepository _ledger = Substitute.For<ITransactionRepository>();
     private readonly IPartyRepository _parties = Substitute.For<IPartyRepository>();
     private readonly Fakes.MemoryReceipts _receipts = new();
+    private readonly IFileShare _share = Substitute.For<IFileShare>();
     private readonly Transaction _shop;
 
     public ReceiptsPanelTests()
@@ -49,6 +50,21 @@ public class ReceiptsPanelTests : Bunit.TestContext
         var editing = new EditTransactionService(_ledger, _parties, labels, Substitute.For<IAuditRepository>(), clock, apps);
         Services.AddSingleton(new ReceiptService(_receipts, _ledger, new Fakes.EmptyContainers(), _parties, contacts, new CaptureService(_ledger, _parties, apps, labels, clock), editing, clock));
         Services.AddEleAndUndo();
+        Services.AddSingleton(_share);
+    }
+
+    [Fact]
+    public void A_receipt_photo_can_be_saved_or_shared_as_a_file_named_for_who_and_when()
+    {
+        Attach(500_00);
+        _receipts.Images.Add(new ReceiptImage { ReceiptId = _receipts.Rows[0].Id, Photo = [0xFF, 0xD8], Thumbnail = [0xFF] });
+        _receipts.Rows[0].OccurredOn = new DateOnly(2026, 10, 20);
+        var panel = Render();
+
+        panel.Find(".receipt-row").Click();
+        panel.WaitForAssertion(() => panel.Find(".share-receipt").Click());
+
+        _share.Received().ShareAsync("receipt-gnani-mart-2026-10-20.jpg", Arg.Is<ReadOnlyMemory<byte>>(b => b.Length == 2), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

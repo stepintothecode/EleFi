@@ -42,6 +42,7 @@ public enum EleTone
 /// <param name="Line">What Ele says.</param>
 /// <param name="Amount">The amount involved, shown as money so Hide amounts covers it.</param>
 /// <param name="About">Who or what it was about: "Zomato".</param>
+/// <param name="Actions">What the user can do from Ele's bubble; a held message only.</param>
 public sealed record EleReaction(
     Guid Id,
     EleMoment? Moment,
@@ -49,7 +50,18 @@ public sealed record EleReaction(
     MascotMood Mood,
     string Line,
     string? Amount,
-    string? About);
+    string? About,
+    IReadOnlyList<EleAction>? Actions = null)
+{
+    /// <summary>The actions, or none.</summary>
+    public IReadOnlyList<EleAction> Choices => Actions ?? [];
+}
+
+/// <summary>Something the user can do straight from Ele's bubble.</summary>
+/// <param name="Label">The button's words.</param>
+/// <param name="Run">What it does.</param>
+/// <param name="Primary">True for the one most people want.</param>
+public sealed record EleAction(string Label, Func<Task> Run, bool Primary = false);
 
 /// <summary>
 /// Ele: the one way the app tells the user what just happened.
@@ -116,6 +128,10 @@ public sealed class EleReactions(ISettingsStore store, TimeProvider time) : IDis
     private readonly Dictionary<EleMoment, int> _said = [];
     private ITimer? _timer;
     private ITimer? _leaveTimer;
+
+    // A message that stays until the user acts, or the page that held it lets it go. A passing
+    // message can show in front of it; when that one leaves, this one comes back.
+    private EleReaction? _held;
 
     /// <summary>How long Ele stays before leaving by itself.</summary>
     public static TimeSpan Lifetime { get; } = TimeSpan.FromSeconds(4);
@@ -193,7 +209,34 @@ public sealed class EleReactions(ISettingsStore store, TimeProvider time) : IDis
     /// <param name="line">The problem, in words the user can act on.</param>
     public void Problem(string line) => Show(null, EleTone.Cross, line, null, null);
 
-    /// <summary>Sends Ele away now: its cross.</summary>
+    /// <summary>
+    /// Brings Ele on to stay: a problem or a choice that needs the user, with buttons for what
+    /// they can do. It does not leave by itself; it leaves when the returned handle is disposed
+    /// (the page is done with it), or when the user closes it.
+    /// </summary>
+    /// <param name="line">What Ele says.</param>
+    /// <param name="tone">How it feels about it.</param>
+    /// <param name="mood">How Ele looks, when not the tone's usual face.</param>
+    /// <param name="actions">What the user can do from the bubble.</param>
+    /// <returns>Dispose it to let Ele go.</returns>
+    public IDisposable Hold(string line, EleTone tone, MascotMood? mood = null, params EleAction[] actions)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        var reaction = new EleReaction(Guid.CreateVersion7(), null, tone, mood ?? MoodFor(tone), line.Trim(), null, null, actions);
+
+        lock (_gate)
+        {
+            _timer?.Dispose();
+            _timer = null;
+            Retire(Current);
+            _held = Current = reaction;
+        }
+
+        Changed?.Invoke();
+        return new Release(this, reaction.Id);
+    }
+
+    /// <summary>Sends Ele away now: its cross. A held message closed this way is let go.</summary>
     public void Dismiss()
     {
         lock (_gate)
@@ -206,14 +249,55 @@ public sealed class EleReactions(ISettingsStore store, TimeProvider time) : IDis
                 return;
             }
 
-            // Leaves the same way as when a new one replaces it: down, and fading.
-            Current = null;
-            _leaveTimer?.Dispose();
-            Leaving = going;
-            _leaveTimer = time.CreateTimer(_ => Left(going.Id), null, LeaveDuration, Timeout.InfiniteTimeSpan);
+            if (going.Id == _held?.Id)
+            {
+                _held = null;
+            }
+
+            // Leaves the same way as when a new one replaces it: down, and fading. A held
+            // message waiting behind a passing one comes back in its place.
+            Retire(going);
+            Current = _held;
         }
 
         Changed?.Invoke();
+    }
+
+    // The page that held a message is done with it.
+    private void Let(Guid id)
+    {
+        lock (_gate)
+        {
+            if (_held?.Id != id)
+            {
+                return;
+            }
+
+            _held = null;
+        }
+
+        if (Current?.Id == id)
+        {
+            Dismiss();
+        }
+    }
+
+    // Slides a reaction down and out. Callers hold the gate.
+    private void Retire(EleReaction? going)
+    {
+        if (going is null)
+        {
+            return;
+        }
+
+        _leaveTimer?.Dispose();
+        Leaving = going;
+        _leaveTimer = time.CreateTimer(_ => Left(going.Id), null, LeaveDuration, Timeout.InfiniteTimeSpan);
+    }
+
+    private sealed class Release(EleReactions ele, Guid id) : IDisposable
+    {
+        public void Dispose() => ele.Let(id);
     }
 
     /// <inheritdoc />
@@ -239,12 +323,7 @@ public sealed class EleReactions(ISettingsStore store, TimeProvider time) : IDis
             _timer?.Dispose();
 
             // The one showing slides down and fades while the new one takes its place.
-            if (Current is { } previous)
-            {
-                _leaveTimer?.Dispose();
-                Leaving = previous;
-                _leaveTimer = time.CreateTimer(_ => Left(previous.Id), null, LeaveDuration, Timeout.InfiniteTimeSpan);
-            }
+            Retire(Current);
 
             var reaction = new EleReaction(
                 Guid.CreateVersion7(),

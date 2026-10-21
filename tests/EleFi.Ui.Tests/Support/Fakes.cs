@@ -295,6 +295,9 @@ internal static class Fakes
             return Task.CompletedTask;
         }
 
+        public Task<EleFi.Domain.Receipts.Receipt?> FindByReferenceAsync(string reference, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Rows.FirstOrDefault(r => r.Reference == reference && r.DeletedAt is null));
+
         public Task<EleFi.Domain.Receipts.Receipt?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(Rows.FirstOrDefault(r => r.Id == id && r.DeletedAt is null));
 
@@ -320,6 +323,13 @@ internal static class Fakes
             Rows.Where(r => r.Id == id).ToList().ForEach(r => r.DeletedAt = null);
             return Task.CompletedTask;
         }
+    }
+
+    /// <summary>A share sheet that shares nothing, for pages that only offer to.</summary>
+    public sealed class NoShare : IFileShare
+    {
+        public Task<string> ShareAsync(string fileName, ReadOnlyMemory<byte> contents, string title, CancellationToken cancellationToken = default) =>
+            Task.FromResult(fileName);
     }
 
     /// <summary>A scanner that hands back a prepared receipt, as if it had been shared or photographed.</summary>

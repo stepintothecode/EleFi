@@ -496,6 +496,12 @@ with twinkles, a soft bell, two low toots. A newer message pushes the one showin
 out. Ele can be quieted (its sound) but not switched off. Which action brings which mood is
 listed in [functional.md, Ele's moods](requirements/functional.md#eles-moods).
 
+Ele stays when something needs the user: a **held** message (a receipt that disagrees, items
+over the total) stays docked, with its choices in the bubble, until the user acts or the page
+is done with it. A whole screen's news (it did not load, nothing here yet, a photo could not be
+read) is Ele in the middle of the screen with the way on under her, **Comforting** when
+something went wrong. Nobody is left alone with a blank page or an error box.
+
 ### Ele's guide
 A one-minute walk through the app with Ele, step by step over the real screens: containers
 first, then recording, Quick, the list, plans and goals, automatic capture, and Home. It

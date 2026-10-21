@@ -137,6 +137,21 @@ public class EleOverlayTests : Bunit.TestContext
     }
 
     [Fact]
+    public void A_held_message_offers_its_choices_in_the_bubble_and_they_take_taps()
+    {
+        var ran = false;
+        var overlay = RenderComponent<EleOverlay>();
+        _ele.Hold(
+            "I could not read that.", EleTone.Calm, MascotMood.Comforting,
+            new EleAction("Try again", () => { ran = true; return Task.CompletedTask; }, Primary: true));
+
+        overlay.WaitForAssertion(() => overlay.Find(".ele-actions .ele-action").Click());
+
+        Assert.True(ran);
+        Assert.Contains("pointer-events: auto", overlay.Find(".ele-actions").GetAttribute("style"), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void With_the_sound_switched_off_ele_is_silent()
     {
         _ele.SetSoundEnabled(false);

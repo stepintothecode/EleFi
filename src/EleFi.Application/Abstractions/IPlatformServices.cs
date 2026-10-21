@@ -61,6 +61,9 @@ public enum MascotMood
 
     /// <summary>Ears folded over its eyes: amounts are hidden.</summary>
     Hiding = 5,
+
+    /// <summary>Sorry, but here for the user: soft eyes, a small kind smile. For things that went wrong.</summary>
+    Comforting = 6,
 }
 
 /// <summary>

@@ -129,6 +129,19 @@ public class ReceiptServiceTests
     }
 
     [Fact]
+    public async Task A_receipt_shared_twice_is_found_where_it_is_already_attached()
+    {
+        var paid = await SpendAsync("L V Iyengar Bakery", 55_00);
+        var service = Service();
+        var reading = Reading("L.V.iyengar Bakery", 55_00) with { Reference = "131604324342" };
+        await service.AttachAsync(paid.Id, reading, Photo, []);
+
+        Assert.Equal(paid.Id, (await service.AttachedAlreadyAsync(reading))!.Id);
+        Assert.Null(await service.AttachedAlreadyAsync(reading with { Reference = "999999999999" }));
+        Assert.Null(await service.AttachedAlreadyAsync(reading with { Reference = null }));
+    }
+
+    [Fact]
     public async Task The_matcher_finds_the_payment_a_receipt_belongs_to()
     {
         var paid = await SpendAsync("Zomato", 312_00);

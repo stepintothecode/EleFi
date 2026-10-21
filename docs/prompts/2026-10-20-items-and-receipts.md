@@ -55,6 +55,9 @@ Choices made without asking, against the brief:
 | 5a | Receipt opened from one transaction but plainly another's? | Say so, "This receipt looks like L V Iyengar Bakery", and offer to attach it there |
 | 5b | Which tab is lit on the receipt screen? | All when opened from a transaction, Capture when shared in ⤵ |
 | 5c | Does a matching receipt get a "Matches" tag? | No: agreeing is expected; only a disagreement is flagged ⤵ |
+| 5d | Can a receipt be kept outside the app? | Yes: Save or share on the receipt hands its photo to the share sheet as `receipt-<payee>-<date>.jpg`, a file the user asked for ⤵ |
+| 5e | Ele always present (E3, B3): what does it cover first? | The error screen and an unreadable photo (comforting, in the middle, with the way on); every empty list (Ele at rest); a receipt that disagrees, one opened from the wrong transaction (with "Attach to ..." in Ele's bubble), one shared twice (with "Open it"), and items over the total (held, docked, until acted on) |
+| 5f | A receipt shared twice? | Found by its UPI reference; Ele says where it already is |
 | 6 | Does removing an item need its own soft delete? | No: items are part of the transaction, so removing one is an edit, in the history and undoable. Recorded in ADR-0017 |
 | 7 | A first item that takes the whole amount? | It takes the transaction's labels itself, since there is no Unnamed to hold them |
 | 8 | Can a Self Transfer be itemised? | No (`T6`); changing an itemised transaction into one is refused until the items go |

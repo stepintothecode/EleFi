@@ -1,3 +1,4 @@
+@using EleFi.Application.Abstractions
 @inherits LayoutComponentBase
 @using EleFi.Ui.Services
 @implements IDisposable
@@ -26,15 +27,16 @@
                 @Body
             </ChildContent>
             <ErrorContent Context="error">
-                <h1>This screen did not load</h1>
-                <div class="notice error" role="alert">
-                    @error.Message
-                </div>
-                <p class="muted small">
-                    Nothing was written and nothing was lost. Your ledger is on this device and is
-                    unaffected by a screen failing to draw.
-                </p>
-                <button class="primary btn-block" @onclick="Recover">Try again</button>
+                @* Ele, sorry but here, rather than an error box: nothing was lost, and the way on
+                   is right under what Ele says. The technical reason stays, small, for a report. *@
+                <EleCentre Mood="MascotMood.Comforting" Title="Sorry, this screen did not load.">
+                    <ChildContent>Nothing was lost: your money is safe on this phone. Let's try once more.</ChildContent>
+                    <Actions>
+                        <button class="primary" @onclick="Recover">Try again</button>
+                        <a class="btn btn-ghost" href="">Go home</a>
+                    </Actions>
+                </EleCentre>
+                <p class="muted small error-detail">@error.Message</p>
             </ErrorContent>
         </ErrorBoundary>
     </main>

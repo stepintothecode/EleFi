@@ -537,6 +537,8 @@ transaction already names ([ADR-0016](../adr/0016-contacts-merge-with-aliases.md
 | FR-14.11 | Back always goes to the page that was open before, in the order they were opened, including from an open transaction. With nothing behind, the first press has Ele say "Press back again to close EleFi." and only a second press within 2.5 seconds closes the app. One press never closes it | 1.1 |
 | FR-14.12 | Coming back to the app from the recent apps reads every list and figure again (Home, transactions, containers, contacts, plans, goals, notifications, deleted, duplicates). Forms are never read again, so nothing half typed is lost | 1.1 |
 | FR-14.13 | The open tab is marked by its colour and one soft pill behind its icon, which glides from the tab that was open to the new one as the page changes. Quick has no pill; the pill fades there and glides on from where it was | 1.1 |
+| FR-14.14 | Ele is with the user whenever the app has something to say. A whole screen's news (it did not load, nothing here yet, a photo could not be read) is Ele in the middle with a speech bubble and the way on under it; Comforting when something went wrong. Something to act on in the flow (a receipt that disagrees, items over the total) is Ele docked, holding the message, with choices in the bubble when there are any, and staying until the user acts or the page is done with it; a passing message can show in front and the held one comes back after | 1.1 |
+| FR-14.15 | A receipt can be saved or shared as a JPEG named for who and when, through the share sheet, as a file the user asked for | 1.1 |
 
 ### Ele's moods
 
@@ -556,6 +558,7 @@ from it.
 | Pleased | Lower lids rise into a smile | Trunk raised up the right side of the face to eye level, its lighter ridged underside showing, its end turned to the front with both nostrils; ears spread; a burst of confetti |
 | Cross | Upper lids slant in | Trunk droops a little; ears held back |
 | Sad | Upper lids droop at the outer corners | Trunk hangs straight; ears low |
+| Comforting | Upper lids soft at the outer corners, a small smile | Trunk a little raised, ears lowered; for things that went wrong (chosen 2026-10-21) |
 | Hiding amounts | Covered | Both big ears flop down over the top of the face from its edges, in an eased 0.6 s fold that reverses smoothly if tapped mid-way. A page that opens with amounts already hidden shows her already hiding |
 
 Ele has three moods for messages. Each has its own face, movement and sound, so the mood reads

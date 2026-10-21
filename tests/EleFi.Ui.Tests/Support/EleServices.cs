@@ -23,6 +23,10 @@ internal static class EleServices
         services.TryAddSingleton<ISoundCue>(new Fakes.RecordingSound());
         services.TryAddSingleton(new UndoHistory());
         services.TryAddSingleton<IAppResume>(new Fakes.ManualResume());
+        services.TryAddSingleton<IFileShare>(new Fakes.NoShare());
+
+        // Ele is on every empty and error screen now, so every page may draw the mascot.
+        services.TryAddTransient<IMascotService, Fakes.SilentMascot>();
 
         var seen = new Fakes.MemorySettings();
         seen.Write(EleGuide.DoneKey, "true");

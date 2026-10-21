@@ -159,11 +159,17 @@
 }
 else if (_rows.Count == 0)
 {
-    <div class="card muted">
-        @(_filter.IsEmpty
-            ? "Nothing recorded yet. The Capture tab is where money gets in."
-            : "No transactions match these filters.")
-    </div>
+    @if (_filter.IsEmpty)
+    {
+        <EleCentre Title="Nothing recorded yet.">The Capture tab is where money gets in.</EleCentre>
+    }
+    else
+    {
+        <EleCentre Title="No transactions match these filters.">
+            <ChildContent>Try fewer, or clear them.</ChildContent>
+            <Actions><button class="btn-ghost" @onclick="ClearAsync">Clear filters</button></Actions>
+        </EleCentre>
+    }
 }
 else
 {

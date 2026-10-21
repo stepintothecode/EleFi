@@ -24,6 +24,26 @@ public static class DiscrepancyText
         };
     }
 
+    /// <summary>
+    /// What Ele says, short enough for her bubble: the one difference in full, or which ones
+    /// when there are several.
+    /// </summary>
+    /// <param name="found">What differs.</param>
+    /// <param name="receipt">What the receipt says.</param>
+    /// <param name="transaction">The transaction, with parties loaded.</param>
+    public static string Summary(Discrepancy found, ReceiptFacts receipt, Transaction transaction)
+    {
+        var parts = Parts(found).ToList();
+        if (parts.Count == 1)
+        {
+            return Details(found, receipt, transaction)[0];
+        }
+
+        var lower = parts.Select((p, i) => i == 0 ? p : p.ToLowerInvariant()).ToList();
+        var named = string.Join(", ", lower.Take(lower.Count - 1)) + " and " + lower[^1];
+        return $"{named} differ from this one.";
+    }
+
     /// <summary>One sentence per difference, saying what each side has.</summary>
     /// <param name="found">What differs.</param>
     /// <param name="receipt">What the receipt says.</param>

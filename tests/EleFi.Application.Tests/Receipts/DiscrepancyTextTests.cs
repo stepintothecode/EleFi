@@ -16,6 +16,23 @@ public class DiscrepancyTextTests
     public void The_tag_is_a_few_words(Discrepancy found, string tag) => Assert.Equal(tag, DiscrepancyText.Tag(found));
 
     [Fact]
+    public void Eles_summary_is_the_one_difference_in_full_or_names_several()
+    {
+        var shop = new Transaction
+        {
+            SourceParty = new Party { Kind = PartyKind.Container },
+            DestinationParty = new Party { Kind = PartyKind.External, Name = "Gajanana Store" },
+            SourceAmountMinor = 25_00,
+        };
+        var receipt = new ReceiptFacts("L.V.iyengar Bakery", 55_00, null, "8411");
+
+        Assert.Equal("Amount: ₹55.00 on the receipt, ₹25.00 here.", DiscrepancyText.Summary(Discrepancy.Amount, receipt, shop));
+        Assert.Equal(
+            "Amount, payee and account differ from this one.",
+            DiscrepancyText.Summary(Discrepancy.Amount | Discrepancy.Payee | Discrepancy.Account, receipt, shop));
+    }
+
+    [Fact]
     public void The_details_say_what_each_side_has()
     {
         var shop = new Transaction

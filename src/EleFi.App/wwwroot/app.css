@@ -769,6 +769,45 @@ button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owe
 .read-items-total { display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.82rem; color: var(--ele-text-dim); }
 .read-items-total strong { color: var(--ele-text); }
 
+/*
+  Ele in the middle of the screen, for a whole screen's news (EleCentre), and the choices in a
+  held message's bubble (EleOverlay).
+*/
+.ele-centre { display: flex; flex-direction: column; align-items: center; text-align: center; margin: 28px auto 12px; max-width: 360px; }
+.ele-centre-figure .mascot { width: 150px; height: 150px; }
+.ele-centre-bubble {
+  position: relative;
+  margin-top: 4px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--ele-surface);
+  border: 1px solid var(--ele-line);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.ele-centre-bubble::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  background: var(--ele-surface);
+  border-left: 1px solid var(--ele-line);
+  border-top: 1px solid var(--ele-line);
+  transform: rotate(45deg);
+}
+.ele-centre-title { font-size: 1.02rem; }
+.ele-centre-line { color: var(--ele-text-dim); font-size: 0.9rem; line-height: 1.45; }
+.ele-centre-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.ele-centre-actions > * { flex: 1 1 120px; }
+.ele-actions { display: flex; gap: 8px; margin-top: 8px; }
+.ele-actions .ele-action { flex: 1 1 auto; min-height: 40px; padding: 8px 12px; font-size: 0.9rem; }
+
 /* Ele's sound: a round speaker that mutes and unmutes, unlike the switches above it. */
 .sound-toggle {
   flex: 0 0 auto;

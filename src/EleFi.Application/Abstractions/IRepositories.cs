@@ -799,6 +799,11 @@ public interface IReceiptRepository
     /// <param name="cancellationToken">Cancellation.</param>
     Task<Domain.Receipts.Receipt?> FindAsync(Guid id, CancellationToken cancellationToken = default);
 
+    /// <summary>A live receipt carrying this UPI or bank reference, or null.</summary>
+    /// <param name="reference">The reference, digits only.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<Domain.Receipts.Receipt?> FindByReferenceAsync(string reference, CancellationToken cancellationToken = default);
+
     /// <summary>A transaction's live receipts, oldest first. No photos.</summary>
     /// <param name="transactionId">The transaction.</param>
     /// <param name="cancellationToken">Cancellation.</param>

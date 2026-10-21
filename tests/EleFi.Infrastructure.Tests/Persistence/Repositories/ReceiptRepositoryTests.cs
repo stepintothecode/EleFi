@@ -29,6 +29,22 @@ public class ReceiptRepositoryTests
     }
 
     [Fact]
+    public async Task A_receipt_is_found_by_its_reference_while_it_is_attached()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var receipts = new ReceiptRepository(f.Db, f.Clock);
+        var id = await SpendAsync(f);
+        var receipt = Receipt(id, 450_00);
+        receipt.Reference = "131604324342";
+        await receipts.AddAsync(receipt, null);
+
+        Assert.Equal(receipt.Id, (await receipts.FindByReferenceAsync("131604324342"))!.Id);
+
+        await receipts.SoftDeleteAsync(receipt.Id);
+        Assert.Null(await receipts.FindByReferenceAsync("131604324342"));
+    }
+
+    [Fact]
     public async Task A_removed_receipt_is_kept_but_no_longer_listed()
     {
         await using var f = await TestDatabase.CreateAsync(Today);

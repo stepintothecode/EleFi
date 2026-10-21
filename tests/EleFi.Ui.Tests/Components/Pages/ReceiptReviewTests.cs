@@ -30,7 +30,8 @@ public class ReceiptReviewTests : Bunit.TestContext
     private readonly IPartyRepository _parties = Substitute.For<IPartyRepository>();
     private readonly IContainerRepository _containers = Substitute.For<IContainerRepository>();
     private readonly Fakes.MemoryReceipts _receipts = new();
-    private readonly EleReactions _ele = new(new Fakes.MemorySettings(), new ManualTime());
+    private readonly ManualTime _time = new();
+    private readonly EleReactions _ele;
     private readonly Container _bank = new() { Name = "SBI", Kind = ContainerKind.BankAccount };
     private readonly Party _bankParty;
     private readonly Transaction _shop;
@@ -38,6 +39,8 @@ public class ReceiptReviewTests : Bunit.TestContext
     public ReceiptReviewTests()
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
+        _ele = new EleReactions(new Fakes.MemorySettings(), _time);
+        Services.AddSingleton(_time);
         _bankParty = new Party { Kind = PartyKind.Container, ContainerId = _bank.Id };
         _shop = Paid("Sri Sundha Mobiles", 300_00);
     }
@@ -50,8 +53,13 @@ public class ReceiptReviewTests : Bunit.TestContext
         page.WaitForAssertion(() => Assert.Equal("Sri Sundha Mobiles", page.Find("#receipt-payee").GetAttribute("value")));
         Assert.Equal("450.00", page.Find("#receipt-amount").GetAttribute("value"));
         Assert.Contains("432167890123", page.Markup, StringComparison.Ordinal);
-        Assert.Contains("Amount differs", page.Find(".receipt-warning").TextContent, StringComparison.Ordinal);
-        Assert.Contains("₹450.00 on the receipt, ₹300.00 here", page.Find(".receipt-warning").TextContent, StringComparison.Ordinal);
+        Assert.Equal("Amount differs", page.Find(".receipt-match-tag").TextContent);
+
+        // Ele says the details, and stays: a held message, not one that fades in seconds.
+        var held = _ele.Current!;
+        Assert.Contains("₹450.00 on the receipt, ₹300.00 here", held.Line, StringComparison.Ordinal);
+        Services.GetRequiredService<ManualTime>().Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(held.Id, _ele.Current?.Id);
         Assert.NotNull(page.Find("img.receipt-photo"));
     }
 
@@ -93,13 +101,26 @@ public class ReceiptReviewTests : Bunit.TestContext
         var gajanana = Paid("Gajanana Store", 25_00);
         var page = Render(new Fakes.FixedScanner(GPayScreen), [gajanana, _shop], $"receipt?for={gajanana.Id}&from=gallery");
 
-        page.WaitForAssertion(() => Assert.Contains("Sri Sundha Mobiles", page.Find(".receipt-elsewhere").TextContent, StringComparison.Ordinal));
+        // Ele says which transaction it is for, and holds the way there in her bubble.
+        page.WaitForAssertion(() => Assert.Contains("Sri Sundha Mobiles", _ele.Current?.Line ?? string.Empty, StringComparison.Ordinal));
+        var attachThere = Assert.Single(_ele.Current!.Choices);
+        Assert.Equal("Attach to Sri Sundha Mobiles", attachThere.Label);
 
-        page.Find(".attach-elsewhere").Click();
+        page.InvokeAsync(attachThere.Run);
 
-        Assert.Contains("Sri Sundha Mobiles", page.Find(".receipt-match").TextContent, StringComparison.Ordinal);
-        Assert.Empty(page.FindAll(".receipt-elsewhere"));
+        page.WaitForAssertion(() => Assert.Contains("Sri Sundha Mobiles", page.Find(".receipt-match").TextContent, StringComparison.Ordinal));
         Assert.Empty(page.FindAll(".receipt-no-match"));
+        Assert.DoesNotContain("not this one", _ele.Current?.Line ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_receipt_shared_again_has_ele_say_where_it_already_is()
+    {
+        _receipts.Rows.Add(new EleFi.Domain.Receipts.Receipt { TransactionId = _shop.Id, Reference = "432167890123", Payee = "Sri Sundha Mobiles" });
+        var page = Render(GPayScreen, [_shop]);
+
+        page.WaitForAssertion(() => Assert.Equal("You attached this receipt to Sri Sundha Mobiles already.", _ele.Current?.Line));
+        Assert.Equal("Open it", Assert.Single(_ele.Current!.Choices).Label);
     }
 
     [Fact]
@@ -152,6 +173,10 @@ public class ReceiptReviewTests : Bunit.TestContext
         var page = Render(new ScannedReceipt(["A photo of a cat"], null, null), []);
 
         page.WaitForAssertion(() => Assert.Contains("could not find an amount", page.Markup, StringComparison.Ordinal));
+
+        // Comforting Ele, with the way on right there: another photo, without leaving.
+        Assert.NotNull(page.Find(".ele-centre .retry-gallery"));
+        Assert.NotNull(page.Find(".ele-centre .retry-camera"));
     }
 
     private IRenderedComponent<ReceiptReview> Render(ScannedReceipt scan, IReadOnlyList<Transaction> nearby) =>

@@ -29,6 +29,62 @@ public class EleReactionsTests
     }
 
     [Fact]
+    public void A_held_message_stays_until_the_page_lets_it_go()
+    {
+        var ele = New();
+
+        var held = ele.Hold("Amount differs.", EleTone.Calm, MascotMood.Concerned);
+        _time.Advance(TimeSpan.FromMinutes(5));
+
+        Assert.Equal("Amount differs.", ele.Current!.Line);
+        Assert.Equal(MascotMood.Concerned, ele.Current.Mood);
+
+        held.Dispose();
+
+        Assert.Null(ele.Current);
+    }
+
+    [Fact]
+    public void A_passing_message_shows_in_front_of_a_held_one_which_comes_back_after()
+    {
+        var ele = New();
+        using var held = ele.Hold("I could not read that.", EleTone.Calm);
+
+        ele.Say("Receipt attached.");
+        Assert.Equal("Receipt attached.", ele.Current!.Line);
+
+        _time.Advance(EleReactions.Lifetime + TimeSpan.FromSeconds(1));
+
+        Assert.Equal("I could not read that.", ele.Current!.Line);
+    }
+
+    [Fact]
+    public void Closing_a_held_message_lets_it_go_for_good()
+    {
+        var ele = New();
+        using var held = ele.Hold("Amount differs.", EleTone.Calm);
+
+        ele.Dismiss();
+        ele.Say("Something else.");
+        _time.Advance(EleReactions.Lifetime + TimeSpan.FromSeconds(1));
+
+        Assert.Null(ele.Current);
+    }
+
+    [Fact]
+    public void A_held_message_carries_its_choices()
+    {
+        var ele = New();
+        var ran = false;
+
+        using var held = ele.Hold("Try again?", EleTone.Calm, null, new EleAction("Try again", () => { ran = true; return Task.CompletedTask; }, Primary: true));
+        ele.Current!.Choices[0].Run();
+
+        Assert.True(ran);
+        Assert.True(ele.Current.Choices[0].Primary);
+    }
+
+    [Fact]
     public void A_deletion_is_met_calmly_neither_pleased_nor_cross()
     {
         var ele = New();

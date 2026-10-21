@@ -56,6 +56,9 @@ public sealed class ReceiptConfiguration : IEntityTypeConfiguration<Receipt>
         builder.HasOne<Transaction>().WithMany().HasForeignKey(r => r.TransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasQueryFilter(r => r.DeletedAt == null);
         builder.HasIndex(r => r.TransactionId);
+
+        // A receipt shared twice is found by its reference.
+        builder.HasIndex(r => r.Reference);
     }
 }
 

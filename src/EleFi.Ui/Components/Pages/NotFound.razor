@@ -1,3 +1,4 @@
+@using EleFi.Application.Abstractions
 @page "/not-found"
 
 @*
@@ -13,5 +14,7 @@
 
 <PageTitle>Not found</PageTitle>
 
-<h1>Nothing here</h1>
-<p class="muted">That screen does not exist. Everything EleFi can do is on the tabs below.</p>
+<EleCentre Mood="MascotMood.Comforting" Title="Nothing here.">
+    <ChildContent>That screen does not exist. Everything EleFi can do is on the tabs below.</ChildContent>
+    <Actions><a class="btn primary" href="">Go home</a></Actions>
+</EleCentre>

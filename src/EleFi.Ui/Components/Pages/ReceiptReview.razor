@@ -13,6 +13,7 @@
 @inject EditTransactionService Editing
 @inject EleReactions Ele
 @inject NavigationManager Nav
+@implements IDisposable
 
 @*
     A receipt, read on the device, before it is attached to anything (ADR-0018).
@@ -40,11 +41,13 @@
 }
 else if (_phase == Phase.Unreadable)
 {
-    <div class="card">
-        <p>EleFi could not find an amount on that.</p>
-        <p class="muted small">Try a sharper photo, flat and in good light, with the total in view.</p>
-        <button type="button" class="btn-ghost btn-block" @onclick="Cancel">Back</button>
-    </div>
+    <EleCentre Mood="MascotMood.Comforting" Title="I could not find an amount on that.">
+        <ChildContent>Try one flat, in good light, with the total in view.</ChildContent>
+        <Actions>
+            <button type="button" class="primary retry-gallery" @onclick="() => RetryAsync(camera: false)">Choose another</button>
+            <button type="button" class="btn-ghost retry-camera" @onclick="() => RetryAsync(camera: true)">Take a photo</button>
+        </Actions>
+    </EleCentre>
 }
 else if (_reading is { } reading)
 {
@@ -101,16 +104,7 @@ else if (_reading is { } reading)
             </p>
         }
 
-        @* Opened from one transaction, but the receipt plainly belongs to another: say so,
-           rather than quietly flagging a discrepancy on the wrong one. *@
-        @if (_elsewhere is { } elsewhere)
-        {
-            <div class="receipt-elsewhere" role="status">
-                <span>This receipt looks like <strong>@(ReceiptCheck.Counterparty(elsewhere) ?? "another payment")</strong>,
-                    @MoneyText.ToDisplayString(elsewhere.SourceAmount) on @elsewhere.OccurredOn.ToString("d MMM", CultureInfo.InvariantCulture).</span>
-                <button type="button" class="btn-ghost btn-block attach-elsewhere" @onclick="UseElsewhereAsync">Attach to that one instead</button>
-            </div>
-        }    </section>
+    </section>
 
     <div class="receipt-actions">
         @if (_target is { } chosen)
@@ -162,6 +156,8 @@ else if (_reading is { } reading)
     private ReceiptReading? _reading;
     private Transaction? _target;
     private Transaction? _elsewhere;
+    private Transaction? _already;
+    private IDisposable? _held;
     private bool _picked;
     private Discrepancy _found;
     private IReadOnlyList<ReadItem> _items = [];
@@ -197,13 +193,23 @@ else if (_reading is { } reading)
     private ReceiptFacts Facts => _reading!.Facts;
 
     /// <inheritdoc />
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() =>
+        LoadAsync(() => From is "camera" or "gallery"
+            ? Scanner.PickAsync(camera: From == "camera")
+            : Scanner.TakeSharedAsync());
+
+    // Another photo, from the same screen: Ele asked for one, so the way on is right here.
+    private Task RetryAsync(bool camera)
+    {
+        _phase = Phase.Reading;
+        return LoadAsync(() => Scanner.PickAsync(camera));
+    }
+
+    private async Task LoadAsync(Func<Task<ScannedReceipt?>> scan)
     {
         try
         {
-            _scan = From is "camera" or "gallery"
-                ? await Scanner.PickAsync(camera: From == "camera")
-                : await Scanner.TakeSharedAsync();
+            _scan = await scan();
         }
         catch (Exception)
         {
@@ -232,6 +238,7 @@ else if (_reading is { } reading)
 
         // Every row read starts ticked, so attaching with them is one tap.
         _items = _reading.LineItems;
+        _already = await Receipts.AttachedAlreadyAsync(_reading);
         var best = await Matcher.BestAsync(_reading);
         _target = For is { } id ? await Editing.FindAsync(id) : best;
         await CheckAsync();
@@ -240,7 +247,10 @@ else if (_reading is { } reading)
         {
             _elsewhere = best;
         }
+
         _phase = Phase.Ready;
+        HoldDifferences();
+        StateHasChanged();
     }
 
     // A corrected fact can change which transaction it is, unless the user chose one.
@@ -271,15 +281,69 @@ else if (_reading is { } reading)
         await CheckAsync();
     }
 
-    private async Task CheckAsync() =>
+    private async Task CheckAsync()
+    {
         _found = _target is null ? Discrepancy.None : await Receipts.CheckAsync(_reading!.Facts, _target);
+        HoldDifferences();
+    }
 
+    // While the receipt and its transaction disagree, Ele stays and says on what: in words, in
+    // the flow, until it is attached, corrected or another is picked.
+    private void HoldDifferences()
+    {
+        _held?.Dispose();
+        _held = null;
+        if (_phase != Phase.Ready)
+        {
+            return;
+        }
+
+        // The same receipt shared twice: say where it already is, before anything else.
+        if (_already is { } already)
+        {
+            var on = ReceiptCheck.Counterparty(already) ?? "a transfer";
+            _held = Ele.Hold(
+                $"You attached this receipt to {on} already.",
+                EleTone.Calm,
+                MascotMood.Thinking,
+                new EleAction("Open it", () => { Go($"transactions/{already.Id}"); return Task.CompletedTask; }, Primary: true));
+            return;
+        }
+
+        if (_found == Discrepancy.None || _target is null)
+        {
+            return;
+        }
+
+        // Opened from the wrong transaction: Ele says which one it is for, with the way there.
+        if (_elsewhere is { } elsewhere)
+        {
+            var who = ReceiptCheck.Counterparty(elsewhere) ?? "another payment";
+            _held = Ele.Hold(
+                $"This looks like {who}'s receipt, {MoneyText.ToDisplayString(elsewhere.SourceAmount)} on {elsewhere.OccurredOn.ToString("d MMM", CultureInfo.InvariantCulture)}, not this one.",
+                EleTone.Calm,
+                MascotMood.Thinking,
+                new EleAction($"Attach to {who}", UseElsewhereAsync, Primary: true));
+            return;
+        }
+
+        _held = Ele.Hold(
+            $"{DiscrepancyText.Summary(_found, _reading!.Facts, _target)} Attaching flags it to check.",
+            EleTone.Calm,
+            MascotMood.Concerned);
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => _held?.Dispose();
+
+    // Run from Ele's bubble, which is another component, so this page redraws itself.
     private async Task UseElsewhereAsync()
     {
         _target = _elsewhere;
         _elsewhere = null;
         _picked = true;
         await CheckAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task OpenPickerAsync()

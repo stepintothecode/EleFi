@@ -37,6 +37,9 @@ const MOODS = {
   Concerned: { ear: 0.72, curl: -0.35, lidIn: 9.5, lidOut: 2.5, smile: 0, blink: 0.7, bounce: 0.7 },
   Thinking: { ear: 0.9, curl: 0.1, lidIn: 3, lidOut: 3, smile: 0, blink: 1.6, bounce: 1.1 },
   Sad: { ear: 0.55, curl: -0.7, lidIn: 2.5, lidOut: 9.5, smile: 0, blink: 0.5, bounce: 0.5 },
+  // Something went wrong, and Ele is sorry but here: soft outer lids, a small kind smile, the
+  // trunk a little raised as if to say it is all right (E3, chosen 2026-10-21).
+  Comforting: { ear: 0.8, curl: 0.35, lidIn: 1, lidOut: 6, smile: 0.35, blink: 0.8, bounce: 0.6 },
   // Amounts are hidden: the ears fold forward over the eyes, peekaboo style.
   Hiding: { ear: 1.0, curl: 0.2, lidIn: 0, lidOut: 0, smile: 0, blink: 1.0, bounce: 0.6, cover: 1 },
 };

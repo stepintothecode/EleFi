@@ -49,11 +49,14 @@ else
 
     @if (Shown.Count == 0)
     {
-        <div class="card muted small" style="margin-top:12px;">
-            @(_all.Count == 0
-                ? "No contacts yet. Everyone you pay or are paid by appears here, and you can add someone with New."
-                : "Nobody by that name.")
-        </div>
+        @if (_all.Count == 0)
+        {
+            <EleCentre Title="No contacts yet.">Everyone you pay or are paid by appears here, and you can add someone with New.</EleCentre>
+        }
+        else
+        {
+            <EleCentre Title="Nobody by that name.">Check the spelling, or add them with New.</EleCentre>
+        }
     }
     else
     {

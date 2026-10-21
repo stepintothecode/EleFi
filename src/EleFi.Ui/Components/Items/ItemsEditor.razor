@@ -4,6 +4,7 @@
 @using EleFi.Domain.Transactions
 @using EleFi.Ui.Services
 @inject EleReactions Ele
+@implements IDisposable
 
 @*
     Splitting a transaction into what it bought (ADR-0017).
@@ -61,11 +62,7 @@
         <button type="button" class="items-add" @onclick="StartAdding">+ Add item</button>
     }
 
-    @if (Balanced.OverByMinor > 0)
-    {
-        <p class="items-over" role="alert">@ItemisationText.Problem(Balanced, TotalMinor, Currency)</p>
-    }
-    else if (Shown.Count > 0)
+    @if (Shown.Count > 0 && Balanced.OverByMinor == 0)
     {
         <p class="muted small items-hint">Labels are on each item. Unnamed is what is left of @MoneyText.ToDisplayString(Money.FromMinor(TotalMinor, Currency)).</p>
     }
@@ -74,6 +71,26 @@
 @code {
     private Guid? _open;
     private ItemDraft? _adding;
+    private IDisposable? _over;
+    private long _overBy;
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        // The amount was lowered below the items: Ele stays and says so until they fit again.
+        var overBy = Balanced.OverByMinor;
+        if (overBy == _overBy)
+        {
+            return;
+        }
+
+        _overBy = overBy;
+        _over?.Dispose();
+        _over = overBy > 0 ? Ele.Hold(ItemisationText.Problem(Balanced, TotalMinor, Currency)!, EleTone.Cross) : null;
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => _over?.Dispose();
 
     /// <summary>The transaction's amount, as typed so far.</summary>
     [Parameter]

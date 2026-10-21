@@ -7,6 +7,7 @@
 @inject EleReactions Ele
 @inject UndoHistory Undo
 @inject NavigationManager Nav
+@inject EleFi.Application.Abstractions.IFileShare FileShare
 
 @*
     A transaction's receipts: a thumbnail, what each says, and whether it agrees. A receipt that
@@ -75,6 +76,12 @@
         }
 
         <div class="receipt-sheet-actions">
+            @* A copy for the user to keep or send, handed to the share sheet as they asked: a
+               file they chose to make, like the export, never something that leaves by itself. *@
+            @if (_photo is not null)
+            {
+                <button type="button" class="btn-ghost btn-block share-receipt" @onclick="() => ShareAsync(view)">Save or share</button>
+            }
             @if (view.NeedsChecking && view.Discrepancy.HasFlag(Discrepancy.Amount) && view.Receipt.AmountMinor is { } amount)
             {
                 <button type="button" class="primary btn-block use-amount" @onclick="() => UseAmountAsync(view)">
@@ -139,6 +146,23 @@
     {
         _open = null;
         _photo = null;
+    }
+
+    private async Task ShareAsync(ReceiptView view)
+    {
+        if (_photo is { } photo)
+        {
+            await FileShare.ShareAsync(FileName(view.Receipt), photo, "Save or share the receipt");
+        }
+    }
+
+    // "receipt-l-v-iyengar-bakery-2026-10-20.jpg": who and when, so it can be found later.
+    private static string FileName(Receipt receipt)
+    {
+        var who = new string([.. (receipt.Payee ?? receipt.AppName ?? "receipt").ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) ? c : '-')]);
+        var name = string.Join('-', who.Split('-', StringSplitOptions.RemoveEmptyEntries));
+        var day = receipt.OccurredOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        return $"receipt-{name}{(day is null ? null : "-" + day)}.jpg";
     }
 
     private async Task UseAmountAsync(ReceiptView view)

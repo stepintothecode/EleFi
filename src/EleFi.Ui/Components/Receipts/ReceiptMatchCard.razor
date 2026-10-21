@@ -5,7 +5,7 @@
 @using EleFi.Domain.Transactions
 
 @*
-    The transaction a receipt will be attached to, and in plain words anything they disagree on.
+    The transaction a receipt will be attached to, tagged with anything they disagree on; Ele says the details.
 *@
 
 <div class="receipt-match">
@@ -17,16 +17,10 @@
         <div class="amount">@MoneyText.ToDisplayString(Transaction.SourceAmount)</div>
     </div>
 
+    @* The details are Ele's to say, beside the card; the card only tags it. *@
     @if (Discrepancy != Discrepancy.None)
     {
-        <div class="receipt-warning" role="status">
-            <strong>@DiscrepancyText.Tag(Discrepancy).</strong>
-            @foreach (var line in DiscrepancyText.Details(Discrepancy, Facts, Transaction))
-            {
-                <span class="receipt-warning-line">@line</span>
-            }
-            <span class="receipt-warning-line">It will be attached and flagged to check.</span>
-        </div>
+        <span class="pill warn receipt-match-tag">@DiscrepancyText.Tag(Discrepancy)</span>
     }
 </div>
 

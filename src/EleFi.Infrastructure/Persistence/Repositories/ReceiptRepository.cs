@@ -27,6 +27,10 @@ public sealed class ReceiptRepository(EleFiDbContext db, IClock clock) : IReceip
         db.Receipts.FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
     /// <inheritdoc />
+    public Task<Receipt?> FindByReferenceAsync(string reference, CancellationToken cancellationToken = default) =>
+        db.Receipts.AsNoTracking().FirstOrDefaultAsync(r => r.Reference == reference, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<Receipt>> ForTransactionAsync(Guid transactionId, CancellationToken cancellationToken = default) =>
         await db.Receipts.AsNoTracking()
             .Where(r => r.TransactionId == transactionId)

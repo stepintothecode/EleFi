@@ -1,0 +1,43 @@
+@using EleFi.Application.Abstractions
+
+@*
+    Ele in the middle of the screen, saying something that is the whole screen's news: it did
+    not open, there is nothing here yet, a photo could not be read. Ele and a speech bubble
+    rather than a line of text, so nobody is left alone with a blank page, and the way on is
+    right under what Ele says.
+*@
+
+<div class="ele-centre" role="status">
+    <div class="ele-centre-figure">
+        <MascotViewer Mood="Mood" />
+    </div>
+    <div class="ele-centre-bubble">
+        <strong class="ele-centre-title">@Title</strong>
+        @if (ChildContent is not null)
+        {
+            <span class="ele-centre-line">@ChildContent</span>
+        }
+        @if (Actions is not null)
+        {
+            <div class="ele-centre-actions">@Actions</div>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>How Ele looks: Comforting when something went wrong, Idle for an empty page.</summary>
+    [Parameter]
+    public MascotMood Mood { get; set; } = MascotMood.Idle;
+
+    /// <summary>The first thing Ele says.</summary>
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>The rest of what Ele says.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>The buttons under it: the way on.</summary>
+    [Parameter]
+    public RenderFragment? Actions { get; set; }
+}

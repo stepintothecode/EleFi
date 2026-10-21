@@ -768,6 +768,8 @@ namespace EleFi.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Reference");
+
                     b.HasIndex("TransactionId");
 
                     b.ToTable("Receipts", null, t =>

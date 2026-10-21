@@ -103,6 +103,17 @@
                         }
                     </span>
                 }
+                @* A held message's choices, right where Ele asks. The only taps the stage takes
+                   besides the cross. *@
+                @if (!isLeaving && reaction.Choices.Count > 0)
+                {
+                    <span class="ele-actions" style="pointer-events: auto;">
+                        @foreach (var action in reaction.Choices)
+                        {
+                            <button type="button" class="@(action.Primary ? "primary" : "btn-ghost") ele-action" @onclick="() => action.Run()">@action.Label</button>
+                        }
+                    </span>
+                }
             </div>
             @if (!isLeaving)
             {

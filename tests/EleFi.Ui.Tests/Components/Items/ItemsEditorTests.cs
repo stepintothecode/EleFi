@@ -112,8 +112,14 @@ public class ItemsEditorTests : Bunit.TestContext
         editor.SetParametersAndRender(p => p.Add(e => e.TotalMinor, 600_00));
         Assert.Contains("₹400.00", editor.FindAll(".item-row")[1].TextContent, StringComparison.Ordinal);
 
+        // Lowered below the items: Ele stays and says so, rather than a line in the page.
         editor.SetParametersAndRender(p => p.Add(e => e.TotalMinor, 150_00));
-        Assert.Equal("The items come to ₹50.00 more than the ₹150.00 paid.", editor.Find(".items-over").TextContent);
+        var ele = Services.GetRequiredService<EleReactions>();
+        Assert.Equal("The items come to ₹50.00 more than the ₹150.00 paid.", ele.Current!.Line);
+
+        // Fitting again lets Ele go.
+        editor.SetParametersAndRender(p => p.Add(e => e.TotalMinor, 500_00));
+        Assert.Null(ele.Current);
     }
 
     private IRenderedComponent<ItemsEditor> Render(long total) =>

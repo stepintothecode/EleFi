@@ -21,6 +21,9 @@ internal sealed class InMemoryReceipts : IReceiptRepository
         return Task.CompletedTask;
     }
 
+    public Task<Receipt?> FindByReferenceAsync(string reference, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Rows.FirstOrDefault(r => r.Reference == reference && r.DeletedAt is null));
+
     public Task<Receipt?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Rows.FirstOrDefault(r => r.Id == id && r.DeletedAt is null));
 

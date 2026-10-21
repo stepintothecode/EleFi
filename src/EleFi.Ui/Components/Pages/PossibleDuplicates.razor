@@ -1,3 +1,4 @@
+@using EleFi.Application.Abstractions
 @page "/settings/contacts/duplicates"
 @using EleFi.Application.Contacts
 @using EleFi.Domain.Parties
@@ -37,10 +38,7 @@
 }
 else if (_pairs.Count == 0)
 {
-    <div class="card empty-state">
-        <div class="who">Nothing looks doubled</div>
-        <p class="muted small">When two contacts look like the same person or place, they show up here.</p>
-    </div>
+    <EleCentre Mood="MascotMood.Happy" Title="Nothing looks doubled.">When two contacts look like the same person or place, they show up here.</EleCentre>
 }
 else
 {
