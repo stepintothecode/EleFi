@@ -121,7 +121,15 @@
     /// <returns>The tab's place, or null.</returns>
     public static int? TabFor(string relativePath)
     {
+        ArgumentNullException.ThrowIfNull(relativePath);
         var path = relativePath.Split('?', '#')[0].Trim('/');
+
+        // A receipt belongs where it was opened from: All, when attached from a transaction;
+        // Capture, when something was shared in to be recorded.
+        if (path == "receipt")
+        {
+            return relativePath.Contains("for=", StringComparison.Ordinal) ? 5 : 4;
+        }
         if (path.Length == 0)
         {
             return 0;

@@ -143,6 +143,20 @@ spending, and letting transfers into the charts inflates every report.
 There is no separate **Tag** concept. There was one; it did the same job as a label and
 made the user learn which of the two counted toward totals.
 
+### Item
+One part of an itemised transaction: what it was, what it cost, and its labels. Items are
+optional, added when editing, and always add up to the transaction's amount. They change
+nothing about the money - not the balance, the kind, or the Source and Destination - only how
+it is labelled. Say **item**, not "line", "split" or "sub-transaction". See
+[ADR-0017](adr/0017-itemised-transactions.md).
+
+### Itemised
+A transaction that has items. Its labels are on its items, never on the whole as well.
+
+### Unnamed
+The item that holds whatever the named items leave of the total. EleFi keeps it right by
+itself; it has labels and a note but no name, and it vanishes when the named items add up
+exactly. Not a label and not a category.
 ### App
 A service, portal, or platform involved in a transaction - Zomato, Uber, Blinkit, GPay,
 HDFC Net Banking, Cash, Rapido. One kind of thing, appearing in two roles:
@@ -184,6 +198,16 @@ Needs Review, counted at once ([ADR-0015](adr/0015-record-alerts-as-needs-review
 2026-10-05 it waited for confirmation instead; the user found that a second place to look,
 and chose to fix the occasional wrong one rather than confirm every right one.
 
+### Receipt
+A payment app's transaction screen or a shop's receipt, attached to a transaction. It is
+shared into EleFi or photographed, read on the device, and kept with its photo. Say
+**receipt**, not "attachment" or "bill" (a bill is something to pay). See
+[ADR-0018](adr/0018-receipts-read-on-device.md).
+
+### Discrepancy
+Where a receipt and its transaction disagree: the amount, the payee or the account. Shown in
+words and flagged to check; cleared by correcting the transaction, or **kept** when the
+transaction is right and the receipt is not. Not an error and not a failure.
 ### Capture Source
 Where a transaction came from: the app itself, a widget, a notification, the bubble, the
 share sheet, a confirmed Capture Suggestion (from an SMS, or from a Payment App notification

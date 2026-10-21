@@ -630,6 +630,145 @@ button.primary.danger { background: var(--ele-owed); border-color: var(--ele-owe
 /* An action beside the cross, such as Clear filters: pushed right, next to it. */
 .modal-head h2 { flex: 1 1 auto; }
 
+/*
+  A form split into sections, one card each, with a small heading: the edit screen. The last
+  field in a card needs no gap under it, and the cards stand apart.
+*/
+.form-section + .form-section { margin-top: 12px; }
+.form-section-title {
+  margin: 0 0 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ele-text-dim);
+}
+.form-section > .field:last-child, .form-section > .row:last-child .field, .form-section > .chips:last-child { margin-bottom: 0; }
+.form-save { margin-top: 14px; }
+
+/*
+  Items (ADR-0017): a thin bar of how the total divides, then one compact row per item, the
+  Unnamed rest last and quieter. A row opens in place as a small form.
+*/
+.items { display: flex; flex-direction: column; gap: 2px; }
+.items-bar { display: flex; gap: 2px; height: 6px; border-radius: 3px; overflow: hidden; margin: 2px 0 6px; }
+.items-bar span { display: block; height: 100%; min-width: 4px; }
+.item-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 2px;
+  border: none;
+  border-bottom: 1px solid var(--ele-line);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  justify-items: start;
+}
+.item-row:active { transform: none; background: var(--ele-surface-2); }
+.item-row .item-amount { justify-self: end; font-weight: 600; }
+.item-row .item-labels { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.item-row .chip.small { min-height: auto; padding: 2px 9px; font-size: 0.75rem; }
+.item-name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-row.unnamed .item-name, .item-name.unnamed { font-style: italic; color: var(--ele-text-dim); }
+.item-row.unnamed .item-amount { color: var(--ele-text-dim); }
+.items-add {
+  margin-top: 8px;
+  width: 100%;
+  border: 1px dashed var(--ele-line);
+  background: transparent;
+  color: var(--ele-accent);
+  font-weight: 600;
+}
+.item-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--ele-accent) 35%, var(--ele-line));
+  border-radius: var(--ele-radius-sm);
+  background: var(--ele-surface-2);
+}
+.item-form-head { display: flex; justify-content: space-between; align-items: baseline; padding: 2px 2px 0; }
+.item-form-fields { display: flex; gap: 8px; }
+.item-form-fields .item-name-input { flex: 1 1 auto; min-width: 0; }
+.item-form-fields .item-amount-input { flex: 0 0 112px; text-align: right; font-weight: 600; }
+.item-form-actions { display: flex; gap: 8px; align-items: center; }
+.item-form-actions button { min-height: 40px; padding: 8px 14px; }
+.items-over { margin: 6px 0 0; color: var(--ele-owed); font-size: 0.85rem; }
+.items-hint { margin: 6px 0 0; }
+
+/*
+  Receipts (ADR-0018): a row per receipt with its thumbnail and a pill saying whether it
+  agrees; the review screen shows the photo, what was read, and the match.
+*/
+.receipts-section { margin-top: 12px; }
+.receipts { display: flex; flex-direction: column; gap: 2px; }
+.receipt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 2px;
+  border: none;
+  border-bottom: 1px solid var(--ele-line);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  justify-content: flex-start;
+}
+.receipt-row:active { transform: none; background: var(--ele-surface-2); }
+.receipt-thumb { width: 40px; height: 52px; flex: 0 0 auto; object-fit: cover; border-radius: 6px; background: var(--ele-surface-2); }
+.receipt-thumb-text { display: grid; place-items: center; color: var(--ele-text-dim); font-size: 0.8rem; }
+.receipt-text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; gap: 2px; }
+.receipt-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.receipt-sub { font-size: 0.8rem; color: var(--ele-text-dim); }
+.pill { flex: 0 0 auto; font-size: 0.72rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.pill.kept { background: var(--ele-surface-2); color: var(--ele-text-dim); }
+.pill.warn { background: color-mix(in srgb, var(--ele-out) 18%, var(--ele-surface)); color: var(--ele-out); }
+.receipt-photo { display: block; width: 100%; max-height: 360px; object-fit: contain; border-radius: var(--ele-radius); background: #fff; margin-bottom: 12px; }
+.receipt-fact { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 0.9rem; }
+.receipt-fact span:last-child { text-align: right; font-weight: 500; overflow-wrap: anywhere; }
+.receipt-match-row { display: flex; align-items: center; gap: 10px; }
+.receipt-match-row .amount { font-weight: 600; color: var(--ele-out); }
+.receipt-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--ele-radius-sm);
+  background: color-mix(in srgb, var(--ele-out) 14%, var(--ele-surface));
+  color: var(--ele-out);
+  font-size: 0.85rem;
+}
+.receipt-warning-line { display: block; }
+.receipt-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.receipt-elsewhere {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--ele-radius-sm);
+  background: var(--ele-accent-soft);
+  font-size: 0.88rem;
+}
+.receipt-sheet-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.receipt-reading p { margin: 10px 0 0; }
+.read-items { display: flex; flex-direction: column; }
+.read-item { display: grid; grid-template-columns: 24px 1fr 96px; gap: 8px; align-items: center; padding: 4px 0; }
+.read-item.off { opacity: 0.55; }
+.read-item input[type=checkbox] { width: 20px; height: 20px; min-height: auto; padding: 0; }
+.read-item .read-item-name, .read-item .read-item-amount { min-height: 40px; padding: 6px 8px; }
+.read-item .read-item-amount { text-align: right; font-weight: 600; }
+.read-items-total { display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.82rem; color: var(--ele-text-dim); }
+.read-items-total strong { color: var(--ele-text); }
+
 /* Ele's sound: a round speaker that mutes and unmutes, unlike the switches above it. */
 .sound-toggle {
   flex: 0 0 auto;

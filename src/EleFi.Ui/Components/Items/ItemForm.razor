@@ -1,0 +1,113 @@
+@using EleFi.Domain.Labels
+@using EleFi.Domain.Money
+@using EleFi.Domain.Transactions
+
+@*
+    One item, open for editing: its name, amount, note and labels.
+
+    The Unnamed remainder opens here too, for its labels and note only: its amount is whatever
+    the named items leave, so there is nothing to type. Done hands the item back to the list,
+    which checks it fits and refuses, with Ele saying why, when it does not.
+*@
+
+<div class="item-form @(Draft.IsUnnamed ? "unnamed" : null)" role="group" aria-label="@(IsNew ? "New item" : "Item")">
+    @if (Draft.IsUnnamed)
+    {
+        <div class="item-form-head">
+            <span class="item-name unnamed">Unnamed</span>
+            <span class="item-amount">@MoneyText.ToDisplayString(Money.FromMinor(Draft.AmountMinor, Currency))</span>
+        </div>
+    }
+    else
+    {
+        <div class="item-form-fields">
+            <input class="item-name-input" aria-label="Item name" placeholder="What was it?" maxlength="@TransactionItem.MaxNameLength"
+                   autocapitalize="sentences" @bind="_name" />
+            <input class="item-amount-input" aria-label="Item amount" placeholder="0.00" inputmode="decimal" autocomplete="off"
+                   @bind="_amountText" />
+        </div>
+    }
+
+    <input class="item-note-input" aria-label="Item note" placeholder="Note (optional)" maxlength="@TransactionItem.MaxNoteLength"
+           @bind="_note" />
+
+    <LabelPicker Labels="Labels" Selected="_labelIds" SelectedChanged="ids => _labelIds = ids" />
+
+    <div class="item-form-actions">
+        @if (!IsNew && !Draft.IsUnnamed)
+        {
+            <button type="button" class="btn-ghost danger item-remove" @onclick="() => OnRemove.InvokeAsync(Draft.Id)">Remove</button>
+        }
+        <span class="grow"></span>
+        <button type="button" class="btn-ghost item-cancel" @onclick="() => OnCancel.InvokeAsync()">Cancel</button>
+        <button type="button" class="primary item-done" @onclick="DoneAsync">@(IsNew ? "Add" : "Done")</button>
+    </div>
+</div>
+
+@code {
+    private string _name = string.Empty;
+    private string _amountText = string.Empty;
+    private string? _note;
+    private IReadOnlyList<Guid> _labelIds = [];
+    private Guid _shown;
+
+    /// <summary>The item as it stands.</summary>
+    [Parameter, EditorRequired]
+    public ItemDraft Draft { get; set; } = null!;
+
+    /// <summary>True while adding an item that is not in the list yet.</summary>
+    [Parameter]
+    public bool IsNew { get; set; }
+
+    /// <summary>The transaction's currency.</summary>
+    [Parameter]
+    public Currency Currency { get; set; } = Currency.Inr;
+
+    /// <summary>Every label, most used first.</summary>
+    [Parameter]
+    public IReadOnlyList<Label> Labels { get; set; } = [];
+
+    /// <summary>Takes the edited item; returns false when it was refused and the form stays open.</summary>
+    [Parameter, EditorRequired]
+    public Func<ItemDraft, Task<bool>> OnDone { get; set; } = null!;
+
+    /// <summary>Removes the item.</summary>
+    [Parameter]
+    public EventCallback<Guid> OnRemove { get; set; }
+
+    /// <summary>Closes the form without changing anything.</summary>
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        // Filled once per item, so typing is not overwritten by the list re-rendering.
+        if (_shown == Draft.Id)
+        {
+            return;
+        }
+
+        _shown = Draft.Id;
+        _name = Draft.Name ?? string.Empty;
+        _amountText = Draft.AmountMinor > 0 ? MoneyText.ToBareDecimal(Money.FromMinor(Draft.AmountMinor, Currency)) : string.Empty;
+        _note = Draft.Note;
+        _labelIds = Draft.LabelIds;
+    }
+
+    // An amount that does not read as money is zero, which the list refuses with a reason.
+    private async Task DoneAsync()
+    {
+        var amount = Draft.IsUnnamed
+            ? Draft.AmountMinor
+            : MoneyText.TryParse(_amountText, Currency, out var money) ? money.Minor : 0;
+
+        await OnDone(Draft with
+        {
+            Name = Draft.IsUnnamed ? null : _name.Trim(),
+            AmountMinor = amount,
+            Note = _note,
+            LabelIds = _labelIds,
+        });
+    }
+}

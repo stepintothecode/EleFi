@@ -1,0 +1,180 @@
+@using EleFi.Application.Transactions
+@using EleFi.Domain.Labels
+@using EleFi.Domain.Money
+@using EleFi.Domain.Transactions
+@using EleFi.Ui.Services
+@inject EleReactions Ele
+
+@*
+    Splitting a transaction into what it bought (ADR-0017).
+
+    Each item is one compact row: its name, its amount, its labels. Tapping a row opens it for
+    editing in place; one is open at a time. Whatever the named items leave of the total is the
+    Unnamed row, which the list keeps right by itself, so the items always add up. An item that
+    would take them past the total is refused, with Ele saying by how much, and is never added.
+
+    The first item takes the transaction's labels onto Unnamed, and removing the last one gives
+    them back, so splitting and un-splitting never quietly drops a label.
+*@
+
+<div class="items" role="group" aria-label="Items">
+    @if (Shown.Count > 0)
+    {
+        <div class="items-bar" aria-hidden="true">
+            @foreach (var item in Shown)
+            {
+                <span style="flex:@item.AmountMinor; background:@ColourOf(item)"></span>
+            }
+        </div>
+    }
+
+    @foreach (var item in Shown)
+    {
+        if (_open == item.Id)
+        {
+            <ItemForm Draft="item" Currency="Currency" Labels="Labels" OnDone="CommitAsync" OnRemove="RemoveAsync" OnCancel="Close" />
+        }
+        else
+        {
+            <button type="button" class="item-row @(item.IsUnnamed ? "unnamed" : null)" @onclick="() => Open(item.Id)">
+                <span class="item-name">@(item.Name ?? "Unnamed")</span>
+                <span class="item-amount">@MoneyText.ToDisplayString(Money.FromMinor(item.AmountMinor, Currency))</span>
+                @if (item.LabelIds.Count > 0)
+                {
+                    <span class="item-labels">
+                        @foreach (var label in Labels.Where(l => item.LabelIds.Contains(l.Id)))
+                        {
+                            <span class="chip on small">@label.Name</span>
+                        }
+                    </span>
+                }
+            </button>
+        }
+    }
+
+    @if (_adding is { } adding)
+    {
+        <ItemForm Draft="adding" IsNew="true" Currency="Currency" Labels="Labels" OnDone="CommitAsync" OnCancel="Close" />
+    }
+    else
+    {
+        <button type="button" class="items-add" @onclick="StartAdding">+ Add item</button>
+    }
+
+    @if (Balanced.OverByMinor > 0)
+    {
+        <p class="items-over" role="alert">@ItemisationText.Problem(Balanced, TotalMinor, Currency)</p>
+    }
+    else if (Shown.Count > 0)
+    {
+        <p class="muted small items-hint">Labels are on each item. Unnamed is what is left of @MoneyText.ToDisplayString(Money.FromMinor(TotalMinor, Currency)).</p>
+    }
+</div>
+
+@code {
+    private Guid? _open;
+    private ItemDraft? _adding;
+
+    /// <summary>The transaction's amount, as typed so far.</summary>
+    [Parameter]
+    public long TotalMinor { get; set; }
+
+    /// <summary>The transaction's currency.</summary>
+    [Parameter]
+    public Currency Currency { get; set; } = Currency.Inr;
+
+    /// <summary>Every label, most used first.</summary>
+    [Parameter]
+    public IReadOnlyList<Label> Labels { get; set; } = [];
+
+    /// <summary>The items, the Unnamed rest last; empty when not itemised.</summary>
+    [Parameter]
+    public IReadOnlyList<ItemDraft> Items { get; set; } = [];
+
+    /// <summary>Raised with the new items, already balanced.</summary>
+    [Parameter]
+    public EventCallback<IReadOnlyList<ItemDraft>> ItemsChanged { get; set; }
+
+    /// <summary>The labels on the whole transaction, which itemising moves onto Unnamed.</summary>
+    [Parameter]
+    public IReadOnlyList<Guid> TransactionLabelIds { get; set; } = [];
+
+    /// <summary>Raised when itemising takes the whole transaction's labels, or ending gives them back.</summary>
+    [Parameter]
+    public EventCallback<IReadOnlyList<Guid>> TransactionLabelIdsChanged { get; set; }
+
+    // The items fitted to the amount as it stands, so editing the amount resizes Unnamed at once.
+    private ItemisationOutcome Balanced => Itemisation.Balance(TotalMinor, Items);
+
+    private IReadOnlyList<ItemDraft> Shown => Balanced.Succeeded ? Balanced.Items : Items;
+
+    private void Open(Guid id)
+    {
+        _adding = null;
+        _open = id;
+    }
+
+    private void StartAdding()
+    {
+        _open = null;
+        _adding = new ItemDraft(Guid.CreateVersion7(), string.Empty, 0, []);
+    }
+
+    private void Close()
+    {
+        _open = null;
+        _adding = null;
+    }
+
+    private async Task<bool> CommitAsync(ItemDraft draft)
+    {
+        // A name is optional to type but every named item has one: its place in the list.
+        if (draft is { IsUnnamed: false, Name.Length: 0 })
+        {
+            var place = Items.ToList().FindIndex(i => i.Id == draft.Id);
+            draft = draft with { Name = $"Item {(place >= 0 ? place : Items.Count(i => !i.IsUnnamed)) + 1}" };
+        }
+
+        var first = Items.Count == 0;
+        var outcome = first
+            ? Itemisation.Begin(TotalMinor, TransactionLabelIds, draft)
+            : Itemisation.Balance(TotalMinor, Placed(draft));
+
+        if (ItemisationText.Problem(outcome, TotalMinor, Currency) is { } problem)
+        {
+            Ele.Problem(problem);
+            return false;
+        }
+
+        if (first)
+        {
+            await TransactionLabelIdsChanged.InvokeAsync([]);
+        }
+
+        await ItemsChanged.InvokeAsync(outcome.Items);
+        Close();
+        return true;
+    }
+
+    private async Task RemoveAsync(Guid id)
+    {
+        var outcome = Itemisation.Balance(TotalMinor, [.. Items.Where(i => i.Id != id)]);
+        if (outcome.Items.Count == 0)
+        {
+            await TransactionLabelIdsChanged.InvokeAsync(Itemisation.LabelsWhenEnded(Items));
+        }
+
+        await ItemsChanged.InvokeAsync(outcome.Items);
+        Close();
+    }
+
+    // The item in its place: replacing itself when it is already in the list, or added after
+    // the named ones when new, so Unnamed stays last.
+    private List<ItemDraft> Placed(ItemDraft draft) =>
+        Items.Any(i => i.Id == draft.Id)
+            ? [.. Items.Select(i => i.Id == draft.Id ? draft : i)]
+            : [.. Items.Where(i => !i.IsUnnamed), draft, .. Items.Where(i => i.IsUnnamed)];
+
+    private string ColourOf(ItemDraft item) =>
+        Labels.FirstOrDefault(l => item.LabelIds.Contains(l.Id))?.Colour ?? "var(--ele-line)";
+}

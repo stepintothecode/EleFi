@@ -101,6 +101,9 @@ public static class TransactionHistory
         "NeedsReview" => "Needs review",
         "CaptureSource" => "Recorded via",
         "Labels" => "Label",
+        ItemAuditFields.Item => "Item",
+        ItemAuditFields.ItemLabel => "Item label",
+        ItemAuditFields.Receipt => "Receipt",
 
         // A plan's own fields, for its history.
         "AmountMinor" => "Amount",
@@ -183,6 +186,8 @@ public static class TransactionHistory
                 ((Domain.Planning.RepeatFrequency)frequency) == Domain.Planning.RepeatFrequency.None ? "never" : ((Domain.Planning.RepeatFrequency)frequency).ToString().ToLowerInvariant(),
             "NeedsReview" or "IsSkipped" => string.Equals(raw, "1", StringComparison.Ordinal) ? "yes" : "no",
             "CaptureSource" => SourceText(raw),
+            ItemAuditFields.Item or ItemAuditFields.Receipt when ItemAuditFields.TryRead(raw, out var item, out var itemMinor) =>
+                $"{item} {MoneyText.ToDisplayString(Money.SignedMinor(itemMinor, currency))}",
             _ => raw,
         };
     }

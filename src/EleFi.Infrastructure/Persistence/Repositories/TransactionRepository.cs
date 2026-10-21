@@ -179,24 +179,20 @@ public sealed class TransactionRepository(EleFiDbContext db, IClock clock) : ITr
         // equals the money that actually moved.
         var total = rows.Sum(t => t.SourceAmountMinor);
 
-        // One entry per (transaction, label) pair, so a transaction with two labels
-        // contributes its full amount to both. That overlap is the deliberate consequence of
-        // ADR-0013 and the reason the total above is computed separately.
-        var byLabel = rows
-            .SelectMany(t => t.Labels
-                .Where(l => l.Label is not null)
-                .Select(l => new { l.Label!.Id, l.Label.Name, l.Label.Colour, t.SourceAmountMinor }))
-            .GroupBy(x => new { x.Id, x.Name, x.Colour })
-            .Select(g => new LabelSpend(
-                g.Key.Id,
-                g.Key.Name,
-                g.Key.Colour,
-                g.Sum(x => x.SourceAmountMinor)))
+        // Each transaction's money, divided among its labels or its items' labels. A share
+        // under two labels counts under both, which is ADR-0013's overlap and the reason the
+        // total above is computed separately; items narrow it to what each part cost (ADR-0017).
+        var shares = rows.SelectMany(LabelShares.Of).ToList();
+
+        var byLabel = shares
+            .Where(s => s.Label is not null)
+            .GroupBy(s => s.Label!.Id)
+            .Select(g => new LabelSpend(g.Key, g.First().Label!.Name, g.First().Label!.Colour, g.Sum(s => s.AmountMinor)))
             .ToList();
 
         // Unlabelled is a real and common state now that labels are optional, so it gets a
         // bucket rather than vanishing from the breakdown entirely.
-        var unlabelled = rows.Where(t => t.Labels.Count == 0).Sum(t => t.SourceAmountMinor);
+        var unlabelled = shares.Where(s => s.Label is null).Sum(s => s.AmountMinor);
         if (unlabelled > 0)
         {
             byLabel.Add(new LabelSpend(null, "Unlabelled", null, unlabelled));
@@ -296,8 +292,13 @@ public sealed class TransactionRepository(EleFiDbContext db, IClock clock) : ITr
             .Include(t => t.SourceParty)
             .Include(t => t.DestinationParty)
             .Include(t => t.Labels).ThenInclude(tl => tl.Label)
+            .Include(t => t.Items.OrderBy(i => i.Position)).ThenInclude(i => i.Labels).ThenInclude(l => l.Label)
             .Include(t => t.MarketplaceApp)
-            .Include(t => t.PaymentApp);
+            .Include(t => t.PaymentApp)
+
+            // Two collections in one query would multiply each transaction's labels by its
+            // items; separate queries keep every row read once.
+            .AsSplitQuery();
 
     /// <summary>
     /// Translates a filter into a query. The one place filter semantics live.
@@ -365,12 +366,15 @@ public sealed class TransactionRepository(EleFiDbContext db, IClock clock) : ITr
             // Any of them, not all. The question people ask is "show me anything to do with
             // Food", not "show me things that are simultaneously Food and Household".
             var ids = filter.LabelIds.ToList();
-            query = query.Where(t => t.Labels.Any(tl => ids.Contains(tl.LabelId)));
+            // An itemised transaction matches through any of its items' labels (ADR-0017).
+            query = query.Where(t =>
+                t.Labels.Any(tl => ids.Contains(tl.LabelId))
+                || t.Items.Any(i => i.Labels.Any(l => ids.Contains(l.LabelId))));
         }
 
         if (filter.UnlabelledOnly)
         {
-            query = query.Where(t => t.Labels.Count == 0);
+            query = query.Where(t => t.Labels.Count == 0 && !t.Items.Any(i => i.Labels.Count > 0));
         }
 
         if (filter.PartyIds.Count > 0)
@@ -415,6 +419,10 @@ public sealed class TransactionRepository(EleFiDbContext db, IClock clock) : ITr
                 || (t.SourceParty!.Name != null && EF.Functions.Like(t.SourceParty.Name, $"%{term}%"))
                 || (t.DestinationParty!.Name != null && EF.Functions.Like(t.DestinationParty.Name, $"%{term}%"))
                 || t.Labels.Any(tl => tl.Label != null && EF.Functions.Like(tl.Label.Name, $"%{term}%"))
+                || t.Items.Any(i =>
+                    (i.Name != null && EF.Functions.Like(i.Name, $"%{term}%"))
+                    || (i.Note != null && EF.Functions.Like(i.Note, $"%{term}%"))
+                    || i.Labels.Any(l => l.Label != null && EF.Functions.Like(l.Label.Name, $"%{term}%")))
                 || (t.MarketplaceApp != null && EF.Functions.Like(t.MarketplaceApp.Name, $"%{term}%"))
                 || (t.PaymentApp != null && EF.Functions.Like(t.PaymentApp.Name, $"%{term}%")));
         }

@@ -105,6 +105,11 @@ The core feature. Everything else exists to make this worth doing.
 | FR-2.19 | Attribute a transaction to a goal during capture | 1.1 |
 | FR-2.20 | Voice capture: "four fifty Zomato" parsed into a draft form | 3.0 |
 | FR-2.21 | Note, Bought through and Paid with each offer their top three before anything is typed: first what was used with this contact before, then what is used most across all transactions. A new contact gets the most used straight away | 1.1 |
+| FR-2.22 | Itemise a transaction when editing: add items with a name, an amount, a note and any labels. The items always add up: whatever they leave is an Unnamed item kept by the app, and an item that would go past the total is refused with Ele saying by how much. With items, the labels are on each item and the spend breakdown counts each item under its own labels (ADR-0017) | 1.1 |
+| FR-2.23 | The edit screen is in sections, one card each with a small heading: Amount, Who, Labels and items, When, Details, then Receipts after Save | 1.1 |
+| FR-2.24 | Receipts on a transaction: attach by sharing a payment app's screen or a photo into EleFi, or with Take a photo or Choose a photo from the transaction. Read on the device (ML Kit, bundled, offline): payee, amount, date, time, UPI reference, note and the account's last four digits from a payment app; name, date, total and line items from a shop receipt. What was read is shown for correction, matched to the transaction within three days by amount, payee and time, and attached with its photo. A receipt that matches nothing is recorded as a new transaction flagged Needs Review (ADR-0018) | 1.1 |
+| FR-2.25 | A receipt that disagrees with its transaction on the amount, the payee or the account is flagged as a discrepancy, said in words, and flags the transaction Needs Review. It can be settled by taking the receipt's amount, keeping the transaction as it is, or removing the receipt (undoable) | 1.1 |
+| FR-2.26 | A shop receipt's line items, ticked and corrected, can become the transaction's items; what they leave is Unnamed | 1.1 |
 
 **User stories**
 

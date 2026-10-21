@@ -85,6 +85,67 @@ public class Transaction : Entity
     /// </remarks>
     public List<TransactionLabel> Labels { get; } = [];
 
+    /// <summary>
+    /// What the payment bought, when the user has split it. Empty for most transactions.
+    /// </summary>
+    /// <remarks>
+    /// With items, the labels are on the items and the transaction carries none of its own
+    /// (IT4), and the items add up to <see cref="SourceAmountMinor"/> (IT1). See ADR-0017.
+    /// </remarks>
+    public List<TransactionItem> Items { get; } = [];
+
+    /// <summary>True when the transaction has been split into items.</summary>
+    public bool IsItemised => Items.Count > 0;
+
+    /// <summary>
+    /// Makes the items exactly these, keeping every unchanged item and label as it is.
+    /// </summary>
+    /// <remarks>
+    /// A difference rather than clear-and-re-add: items and their labels have history
+    /// triggers, so re-adding an unchanged item would write "removed Milk" and "added Milk"
+    /// into the timeline on every save.
+    /// </remarks>
+    /// <param name="drafts">The items, already balanced, in order.</param>
+    public void ReplaceItems(IReadOnlyList<ItemDraft> drafts)
+    {
+        ArgumentNullException.ThrowIfNull(drafts);
+
+        var wanted = drafts.ToDictionary(d => d.Id);
+        Items.RemoveAll(i => !wanted.ContainsKey(i.Id));
+
+        for (var position = 0; position < drafts.Count; position++)
+        {
+            var draft = drafts[position];
+            var item = Items.Find(i => i.Id == draft.Id);
+            if (item is null)
+            {
+                item = new TransactionItem { Id = draft.Id, TransactionId = Id };
+                Items.Add(item);
+            }
+
+            item.Name = draft.Name?.Trim();
+            item.AmountMinor = draft.AmountMinor;
+            item.Note = string.IsNullOrWhiteSpace(draft.Note) ? null : draft.Note.Trim();
+            item.Position = position;
+
+            var labels = draft.LabelIds.ToHashSet();
+            item.Labels.RemoveAll(l => !labels.Contains(l.LabelId));
+            foreach (var labelId in labels.Where(id => !item.Labels.Exists(l => l.LabelId == id)))
+            {
+                item.Labels.Add(new TransactionItemLabel { ItemId = item.Id, LabelId = labelId });
+            }
+        }
+    }
+
+    /// <summary>
+    /// The labels that apply to this transaction anywhere: its own, or with items, every
+    /// item's, each once. For showing and searching, never for adding up.
+    /// </summary>
+    public IEnumerable<Labels.Label> AllLabels =>
+        IsItemised
+            ? Items.SelectMany(i => i.Labels).Select(l => l.Label).OfType<Labels.Label>().DistinctBy(l => l.Id)
+            : Labels.Select(l => l.Label).OfType<Labels.Label>();
+
     /// <summary>The platform bought through: Zomato, Uber.</summary>
     public Guid? MarketplaceAppId { get; set; }
 

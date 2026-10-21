@@ -1,0 +1,348 @@
+@page "/receipt"
+@using System.Globalization
+@using EleFi.Application.Abstractions
+@using EleFi.Application.Receipts
+@using EleFi.Application.Transactions
+@using EleFi.Domain.Money
+@using EleFi.Domain.Receipts
+@using EleFi.Domain.Transactions
+@using EleFi.Ui.Services
+@inject IReceiptScanner Scanner
+@inject ReceiptMatcher Matcher
+@inject ReceiptService Receipts
+@inject EditTransactionService Editing
+@inject EleReactions Ele
+@inject NavigationManager Nav
+
+@*
+    A receipt, read on the device, before it is attached to anything (ADR-0018).
+
+    It arrives shared from another app, or picked from a transaction's Attach a receipt. What was
+    read is shown for correction, then the transaction it belongs to: the one it was attached
+    from, or the best match around its date. Anything they disagree on is said in words before
+    attaching, and the attachment is flagged to check. A receipt that matches nothing can be
+    recorded as a new transaction, flagged Needs Review.
+*@
+
+<PageTitle>Receipt</PageTitle>
+
+<div class="section-head">
+    <h1>Receipt</h1>
+    <button type="button" class="btn-ghost" @onclick="Cancel">Cancel</button>
+</div>
+
+@if (_phase == Phase.Reading)
+{
+    <div class="card receipt-reading" role="status">
+        <div class="skeleton" style="width:60%;"></div>
+        <p class="muted small">Reading the receipt on this phone...</p>
+    </div>
+}
+else if (_phase == Phase.Unreadable)
+{
+    <div class="card">
+        <p>EleFi could not find an amount on that.</p>
+        <p class="muted small">Try a sharper photo, flat and in good light, with the total in view.</p>
+        <button type="button" class="btn-ghost btn-block" @onclick="Cancel">Back</button>
+    </div>
+}
+else if (_reading is { } reading)
+{
+    @if (_scan?.Photo is { } photo)
+    {
+        <img class="receipt-photo" src="@ImageUri.Of(photo)" alt="The receipt" />
+    }
+
+    <section class="card form-section" aria-labelledby="sec-read">
+        <h2 class="form-section-title" id="sec-read">Read from it @(reading.AppName is { } app ? $"· {app}" : null)</h2>
+        <div class="field">
+            <label for="receipt-payee">Paid to</label>
+            <input id="receipt-payee" value="@_payee" @onchange="e => FactsChangedAsync(payee: e.Value?.ToString())" />
+        </div>
+        <div class="row">
+            <div class="field grow">
+                <label for="receipt-amount">Amount</label>
+                <input id="receipt-amount" inputmode="decimal" value="@_amountText" @onchange="e => FactsChangedAsync(amount: e.Value?.ToString())" />
+            </div>
+            <div class="field grow">
+                <label for="receipt-date">Date</label>
+                <input id="receipt-date" type="date" value="@_date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)"
+                       @onchange="e => FactsChangedAsync(date: e.Value?.ToString())" />
+            </div>
+        </div>
+        @if (reading.Reference is { } reference)
+        {
+            <div class="receipt-fact"><span class="muted">UPI ref</span><span>@reference</span></div>
+        }
+        @if (reading.Note is { } note)
+        {
+            <div class="receipt-fact"><span class="muted">Note</span><span>@note</span></div>
+        }
+    </section>
+
+    @if (reading.LineItems.Count > 0)
+    {
+        <section class="card form-section" aria-labelledby="sec-items">
+            <h2 class="form-section-title" id="sec-items">Items read <span class="muted small">tap to correct</span></h2>
+            <ReadItemsList Items="reading.LineItems" TotalMinor="AmountMinor" ChosenChanged="items => _items = items" />
+        </section>
+    }
+
+    <section class="card form-section" aria-labelledby="sec-match">
+        <h2 class="form-section-title" id="sec-match">@(For is null ? "Best match" : "Attaching to")</h2>
+        @if (_target is { } target)
+        {
+            <ReceiptMatchCard Transaction="target" Facts="Facts" Discrepancy="_found" />
+        }
+        else
+        {
+            <p class="muted small receipt-no-match">
+                Nothing within three days matches. Record it as a new transaction, flagged to check.
+            </p>
+        }
+
+        @* Opened from one transaction, but the receipt plainly belongs to another: say so,
+           rather than quietly flagging a discrepancy on the wrong one. *@
+        @if (_elsewhere is { } elsewhere)
+        {
+            <div class="receipt-elsewhere" role="status">
+                <span>This receipt looks like <strong>@(ReceiptCheck.Counterparty(elsewhere) ?? "another payment")</strong>,
+                    @MoneyText.ToDisplayString(elsewhere.SourceAmount) on @elsewhere.OccurredOn.ToString("d MMM", CultureInfo.InvariantCulture).</span>
+                <button type="button" class="btn-ghost btn-block attach-elsewhere" @onclick="UseElsewhereAsync">Attach to that one instead</button>
+            </div>
+        }    </section>
+
+    <div class="receipt-actions">
+        @if (_target is { } chosen)
+        {
+            <button type="button" class="primary btn-block" disabled="@_busy" @onclick="() => AttachAsync(chosen.Id, _items)">
+                @(_items.Count > 0 ? "Attach and use these items" : "Attach to this one")
+            </button>
+            @if (_items.Count > 0)
+            {
+                <button type="button" class="btn-ghost btn-block" disabled="@_busy" @onclick="() => AttachAsync(chosen.Id, [])">Attach without items</button>
+            }
+        }
+        else
+        {
+            <button type="button" class="primary btn-block record-new" disabled="@_busy" @onclick="RecordAsync">Record as new</button>
+        }
+
+        <div class="row">
+            <button type="button" class="btn-ghost grow pick-another" @onclick="OpenPickerAsync">Pick @(_target is null ? "one" : "another")</button>
+            @if (For is null && _target is not null)
+            {
+                <button type="button" class="btn-ghost grow record-new" disabled="@_busy" @onclick="RecordAsync">Record as new</button>
+            }
+        </div>
+    </div>
+
+    <Modal Open="_picking" Title="Which transaction?" OnCancel="() => _picking = false">
+        @if (_candidates.Count == 0)
+        {
+            <p class="muted small">Nothing recorded within three days of this receipt.</p>
+        }
+        <div class="picker-list" role="listbox" aria-label="Transactions">
+            @foreach (var candidate in _candidates)
+            {
+                <button type="button" role="option" class="picker-option receipt-candidate" @onclick="() => PickAsync(candidate)">
+                    <span class="picker-text">
+                        <span class="picker-name">@(ReceiptCheck.Counterparty(candidate) ?? "Transfer")</span>
+                        <span class="detail">@candidate.OccurredOn.ToString("d MMM", CultureInfo.InvariantCulture) &middot; @MoneyText.ToDisplayString(candidate.SourceAmount)</span>
+                    </span>
+                </button>
+            }
+        </div>
+    </Modal>
+}
+
+@code {
+    private Phase _phase = Phase.Reading;
+    private ScannedReceipt? _scan;
+    private ReceiptReading? _reading;
+    private Transaction? _target;
+    private Transaction? _elsewhere;
+    private bool _picked;
+    private Discrepancy _found;
+    private IReadOnlyList<ReadItem> _items = [];
+    private IReadOnlyList<Transaction> _candidates = [];
+    private bool _picking;
+    private bool _busy;
+
+    private string _payee = string.Empty;
+    private string _amountText = string.Empty;
+    private DateOnly? _date;
+
+    private enum Phase
+    {
+        Reading,
+        Unreadable,
+        Ready,
+    }
+
+    /// <summary>The transaction to attach to, when opened from one.</summary>
+    [SupplyParameterFromQuery(Name = "for")]
+    public Guid? For { get; set; }
+
+    /// <summary>"camera" or "gallery" to pick a photo first; absent for something shared in.</summary>
+    [SupplyParameterFromQuery(Name = "from")]
+    public string? From { get; set; }
+
+    /// <summary>The app's back handling, cascaded from the router.</summary>
+    [CascadingParameter]
+    public BackNavigator? Back { get; set; }
+
+    private long AmountMinor => _reading?.Facts.AmountMinor ?? 0;
+
+    private ReceiptFacts Facts => _reading!.Facts;
+
+    /// <inheritdoc />
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _scan = From is "camera" or "gallery"
+                ? await Scanner.PickAsync(camera: From == "camera")
+                : await Scanner.TakeSharedAsync();
+        }
+        catch (Exception)
+        {
+            // A camera, picker or text recognition failure is a photo that could not be read,
+            // never a screen that will not load. Nothing has been written at this point.
+            _phase = Phase.Unreadable;
+            return;
+        }
+
+        if (_scan is null)
+        {
+            Cancel();
+            return;
+        }
+
+        _reading = Matcher.Read(_scan);
+        if (_reading is null)
+        {
+            _phase = Phase.Unreadable;
+            return;
+        }
+
+        _payee = _reading.Facts.Payee ?? string.Empty;
+        _amountText = _reading.Facts.AmountMinor is { } amount ? MoneyText.ToBareDecimal(Money.FromMinor(amount, Currency.Inr)) : string.Empty;
+        _date = _reading.Facts.OccurredOn;
+
+        // Every row read starts ticked, so attaching with them is one tap.
+        _items = _reading.LineItems;
+        var best = await Matcher.BestAsync(_reading);
+        _target = For is { } id ? await Editing.FindAsync(id) : best;
+        await CheckAsync();
+
+        if (For is not null && best is not null && best.Id != _target?.Id && _found != Discrepancy.None)
+        {
+            _elsewhere = best;
+        }
+        _phase = Phase.Ready;
+    }
+
+    // A corrected fact can change which transaction it is, unless the user chose one.
+    private async Task FactsChangedAsync(string? payee = null, string? amount = null, string? date = null)
+    {
+        _payee = payee ?? _payee;
+        _amountText = amount ?? _amountText;
+        if (date is not null)
+        {
+            _date = DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day) ? day : null;
+        }
+
+        _reading = _reading! with
+        {
+            Facts = _reading.Facts with
+            {
+                Payee = string.IsNullOrWhiteSpace(_payee) ? null : _payee.Trim(),
+                AmountMinor = MoneyText.TryParse(_amountText, Currency.Inr, out var money) && money.Minor > 0 ? money.Minor : null,
+                OccurredOn = _date,
+            },
+        };
+
+        if (For is null && !_picked)
+        {
+            _target = await Matcher.BestAsync(_reading);
+        }
+
+        await CheckAsync();
+    }
+
+    private async Task CheckAsync() =>
+        _found = _target is null ? Discrepancy.None : await Receipts.CheckAsync(_reading!.Facts, _target);
+
+    private async Task UseElsewhereAsync()
+    {
+        _target = _elsewhere;
+        _elsewhere = null;
+        _picked = true;
+        await CheckAsync();
+    }
+
+    private async Task OpenPickerAsync()
+    {
+        _candidates = await Matcher.CandidatesAsync(_reading!);
+        _picking = true;
+    }
+
+    private async Task PickAsync(Transaction transaction)
+    {
+        _picking = false;
+        _picked = true;
+        _target = transaction;
+        await CheckAsync();
+    }
+
+    private async Task AttachAsync(Guid transactionId, IReadOnlyList<ReadItem> items) =>
+        await FinishAsync(() => Receipts.AttachAsync(transactionId, _reading!, _scan, items));
+
+    private async Task RecordAsync() =>
+        await FinishAsync(() => Receipts.RecordAsync(_reading!, _scan, _items));
+
+    private async Task FinishAsync(Func<Task<ReceiptOutcome>> save)
+    {
+        _busy = true;
+        try
+        {
+            var outcome = await save();
+            if (!outcome.Succeeded)
+            {
+                Ele.Problem(outcome.Error!);
+                return;
+            }
+
+            // Calm, not cross, for a discrepancy: nothing went wrong, there is something to check.
+            if (outcome.Discrepancy != Discrepancy.None)
+            {
+                Ele.Say($"Receipt attached. {DiscrepancyText.Tag(outcome.Discrepancy)}: check it.", EleTone.Calm);
+            }
+            else
+            {
+                Ele.Say("Receipt attached.");
+            }
+
+            Go($"transactions/{outcome.Transaction!.Id}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => Go(For is { } id ? $"transactions/{id}" : string.Empty);
+
+    // In place: back must not return to a receipt that has been dealt with.
+    private void Go(string route)
+    {
+        if (Back is not null)
+        {
+            Back.ReplaceTo(route);
+            return;
+        }
+
+        Nav.NavigateTo(route, replace: true);
+    }
+}

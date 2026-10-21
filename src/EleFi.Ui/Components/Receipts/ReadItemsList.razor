@@ -1,0 +1,84 @@
+@using EleFi.Domain.Money
+@using EleFi.Domain.Receipts
+
+@*
+    The rows read from a shop receipt, each ticked, its name and price open to correction.
+
+    Reading paper is a guess, so nothing is applied unseen: untick a row that is not an item (a
+    carry bag, a deposit) and fix a misread price. The line under the list says what the ticked
+    rows come to and what is left of the total, which becomes Unnamed.
+*@
+
+<div class="read-items" role="group" aria-label="Items read">
+    @foreach (var row in _rows)
+    {
+        <div class="read-item @(row.On ? null : "off")">
+            <input type="checkbox" class="read-item-on" aria-label="Use @row.Name" checked="@row.On"
+                   @onchange="e => SetAsync(row, on: e.Value is true)" />
+            <input class="read-item-name" aria-label="Item name" value="@row.Name"
+                   @onchange="e => SetAsync(row, name: e.Value?.ToString())" />
+            <input class="read-item-amount" aria-label="Item amount" inputmode="decimal" value="@row.AmountText"
+                   @onchange="e => SetAsync(row, amount: e.Value?.ToString())" />
+        </div>
+    }
+    <div class="read-items-total">
+        <span>Chosen @Show(Chosen.Sum(i => i.AmountMinor)) &middot; Unnamed @Show(Math.Max(0, TotalMinor - Chosen.Sum(i => i.AmountMinor)))</span>
+        <strong>@Show(TotalMinor)</strong>
+    </div>
+</div>
+
+@code {
+    private List<Row> _rows = [];
+    private IReadOnlyList<ReadItem>? _from;
+
+    /// <summary>The rows as read.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ReadItem> Items { get; set; } = [];
+
+    /// <summary>The receipt's total.</summary>
+    [Parameter]
+    public long TotalMinor { get; set; }
+
+    /// <summary>The currency.</summary>
+    [Parameter]
+    public Currency Currency { get; set; } = Currency.Inr;
+
+    /// <summary>Raised with the ticked rows, as corrected.</summary>
+    [Parameter]
+    public EventCallback<IReadOnlyList<ReadItem>> ChosenChanged { get; set; }
+
+    private IReadOnlyList<ReadItem> Chosen => [.. _rows.Where(r => r.On && r.AmountMinor > 0).Select(r => new ReadItem(r.Name, r.AmountMinor))];
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_from, Items))
+        {
+            return;
+        }
+
+        _from = Items;
+        _rows = [.. Items.Select(i => new Row(i.Name, i.AmountMinor, true, Text(i.AmountMinor)))];
+    }
+
+    private async Task SetAsync(Row row, bool? on = null, string? name = null, string? amount = null)
+    {
+        var at = _rows.IndexOf(row);
+        var minor = amount is null ? row.AmountMinor : MoneyText.TryParse(amount, Currency, out var money) ? money.Minor : 0;
+        _rows[at] = row with
+        {
+            On = on ?? row.On,
+            Name = string.IsNullOrWhiteSpace(name) ? row.Name : name.Trim(),
+            AmountMinor = minor,
+            AmountText = amount ?? row.AmountText,
+        };
+
+        await ChosenChanged.InvokeAsync(Chosen);
+    }
+
+    private string Text(long minor) => MoneyText.ToBareDecimal(Money.FromMinor(minor, Currency));
+
+    private string Show(long minor) => MoneyText.ToDisplayString(Money.FromMinor(minor, Currency));
+
+    private sealed record Row(string Name, long AmountMinor, bool On, string AmountText);
+}

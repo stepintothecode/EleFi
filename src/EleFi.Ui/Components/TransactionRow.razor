@@ -17,9 +17,10 @@
         <div class="who">@Counterparty</div>
         <div class="meta">
             @Row.Kind.DisplayName()
-            @foreach (var label in Row.Labels.Where(l => l.Label is not null))
+            @* An itemised transaction shows its items' labels, each once. *@
+            @foreach (var label in Row.AllLabels)
             {
-                <span> &middot; @label.Label!.Name</span>
+                <span> &middot; @label.Name</span>
             }
             @if (Row.OccurredAtTime is { } at)
             {

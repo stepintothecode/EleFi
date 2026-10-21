@@ -1,0 +1,190 @@
+@using System.Globalization
+@using EleFi.Application.Receipts
+@using EleFi.Domain.Money
+@using EleFi.Domain.Receipts
+@using EleFi.Ui.Services
+@inject ReceiptService Receipts
+@inject EleReactions Ele
+@inject UndoHistory Undo
+@inject NavigationManager Nav
+
+@*
+    A transaction's receipts: a thumbnail, what each says, and whether it agrees. A receipt that
+    disagrees says on what; opening it shows the photo, the differences in words, and what can
+    be done: take the receipt's amount, keep the transaction as it is, or remove the receipt.
+*@
+
+<div class="receipts">
+    @foreach (var view in _views)
+    {
+        <button type="button" class="receipt-row" @onclick="() => OpenAsync(view)">
+            @if (view.Thumbnail is { } thumb)
+            {
+                <img class="receipt-thumb" src="@ImageUri.Of(thumb)" alt="" />
+            }
+            else
+            {
+                <span class="receipt-thumb receipt-thumb-text" aria-hidden="true">Aa</span>
+            }
+            <span class="receipt-text">
+                <span class="receipt-title">@Title(view.Receipt)</span>
+                <span class="receipt-sub">@Sub(view.Receipt)</span>
+            </span>
+            @* Agreeing is expected, so it says nothing; only a disagreement is flagged. *@
+            @if (view.Discrepancy != Discrepancy.None)
+            {
+                <span class="pill @(view.NeedsChecking ? "warn" : "kept")">@(view.NeedsChecking ? DiscrepancyText.Tag(view.Discrepancy) : "Kept as is")</span>
+            }
+        </button>
+    }
+
+    <button type="button" class="items-add" @onclick="() => _choosing = true">+ Attach a receipt</button>
+</div>
+
+<Modal Open="_choosing" Title="Attach a receipt" OnCancel="() => _choosing = false">
+    <p class="muted small">It is read on this phone. Nothing is sent anywhere.</p>
+    <div class="row">
+        <button type="button" class="btn-ghost grow attach-camera" @onclick='() => Attach("camera")'>Take a photo</button>
+        <button type="button" class="btn-ghost grow attach-gallery" @onclick='() => Attach("gallery")'>Choose a photo</button>
+    </div>
+</Modal>
+
+<Modal Open="_open is not null" Title="Receipt" OnCancel="Close">
+    @if (_open is { } view)
+    {
+        @if (_photo is { } photo)
+        {
+            <img class="receipt-photo" src="@ImageUri.Of(photo)" alt="The receipt" />
+        }
+        <div class="receipt-fact"><span class="muted">From</span><span>@Title(view.Receipt)</span></div>
+        <div class="receipt-fact"><span class="muted">Says</span><span>@Sub(view.Receipt)</span></div>
+
+        @if (view.Discrepancy != Discrepancy.None && Transaction is { } transaction)
+        {
+            <div class="receipt-warning" role="status">
+                <strong>@DiscrepancyText.Tag(view.Discrepancy).</strong>
+                @foreach (var line in DiscrepancyText.Details(view.Discrepancy, view.Receipt.Facts, transaction))
+                {
+                    <span class="receipt-warning-line">@line</span>
+                }
+                @if (view.Receipt.SettledAt is not null)
+                {
+                    <span class="receipt-warning-line">Kept as it is.</span>
+                }
+            </div>
+        }
+
+        <div class="receipt-sheet-actions">
+            @if (view.NeedsChecking && view.Discrepancy.HasFlag(Discrepancy.Amount) && view.Receipt.AmountMinor is { } amount)
+            {
+                <button type="button" class="primary btn-block use-amount" @onclick="() => UseAmountAsync(view)">
+                    Use @MoneyText.ToDisplayString(Money.FromMinor(amount, Currency.Inr)) from the receipt
+                </button>
+            }
+            @if (view.NeedsChecking)
+            {
+                <button type="button" class="btn-ghost btn-block keep-it" @onclick="() => SettleAsync(view)">Keep the transaction as it is</button>
+            }
+            <button type="button" class="btn-ghost btn-block danger remove-receipt" @onclick="() => RemoveAsync(view)">Remove receipt</button>
+        </div>
+    }
+</Modal>
+
+@code {
+    private IReadOnlyList<ReceiptView> _views = [];
+    private ReceiptView? _open;
+    private byte[]? _photo;
+    private bool _choosing;
+    private Guid _loadedFor;
+
+    /// <summary>The transaction whose receipts these are.</summary>
+    [Parameter, EditorRequired]
+    public Guid TransactionId { get; set; }
+
+    /// <summary>The transaction as loaded, with parties, to describe differences against.</summary>
+    [Parameter]
+    public EleFi.Domain.Transactions.Transaction? Transaction { get; set; }
+
+    /// <summary>Raised when the transaction itself changed, so the page reloads it.</summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    /// <summary>The app's back handling, cascaded from the router.</summary>
+    [CascadingParameter]
+    public BackNavigator? Back { get; set; }
+
+    /// <inheritdoc />
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reloaded whenever the page hands down the transaction again: after an edit, the
+        // differences may have gone.
+        _loadedFor = TransactionId;
+        _views = await Receipts.ForTransactionAsync(TransactionId);
+    }
+
+    private void Attach(string from)
+    {
+        _choosing = false;
+        Nav.NavigateTo($"receipt?for={_loadedFor}&from={from}");
+    }
+
+    private async Task OpenAsync(ReceiptView view)
+    {
+        _open = view;
+        _photo = null;
+        _photo = await Receipts.PhotoAsync(view.Receipt.Id);
+    }
+
+    private void Close()
+    {
+        _open = null;
+        _photo = null;
+    }
+
+    private async Task UseAmountAsync(ReceiptView view)
+    {
+        var result = await Receipts.UseAmountAsync(view.Receipt.Id);
+        if (!result.Succeeded)
+        {
+            Ele.Problem(result.Error!);
+            return;
+        }
+
+        Ele.Say("Amount taken from the receipt.");
+        await DoneAsync();
+    }
+
+    private async Task SettleAsync(ReceiptView view)
+    {
+        await Receipts.SettleAsync(view.Receipt.Id);
+        Ele.Say("Kept as it is.", EleTone.Calm);
+        await DoneAsync();
+    }
+
+    private async Task RemoveAsync(ReceiptView view)
+    {
+        var id = view.Receipt.Id;
+        await Receipts.RemoveAsync(id);
+        Undo.Push(UndoHistory.Transactions, "removing a receipt", () => Receipts.RestoreAsync(id), () => Receipts.RemoveAsync(id));
+        Ele.React(EleMoment.Deleted, about: "the receipt");
+        await DoneAsync();
+    }
+
+    private async Task DoneAsync()
+    {
+        Close();
+        _views = await Receipts.ForTransactionAsync(_loadedFor);
+        await OnChanged.InvokeAsync();
+    }
+
+    private static string Title(Receipt receipt) =>
+        $"{receipt.AppName ?? (receipt.Kind == ReceiptKind.Shop ? "Shop receipt" : "Payment")}{(receipt.Payee is { } payee ? $" · {payee}" : null)}";
+
+    private static string Sub(Receipt receipt) => string.Join(" · ", new[]
+    {
+        receipt.AmountMinor is { } amount ? MoneyText.ToDisplayString(Money.FromMinor(amount, Currency.Inr)) : null,
+        receipt.OccurredOn?.ToString("d MMM", CultureInfo.InvariantCulture),
+        receipt.Reference is { Length: > 4 } reference ? $"ref ..{reference[^4..]}" : null,
+    }.OfType<string>());
+
+}

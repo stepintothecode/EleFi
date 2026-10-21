@@ -708,6 +708,94 @@ namespace EleFi.Infrastructure.Persistence.Migrations
                     b.ToTable("PlanLabels", (string)null);
                 });
 
+            modelBuilder.Entity("EleFi.Domain.Receipts.Receipt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AccountLast4")
+                        .HasMaxLength(4)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("AmountMinor")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AppName")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("DeletedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OccurredAtTime")
+                        .HasMaxLength(5)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OccurredOn")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Payee")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("SettledAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("TransactionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("UpdatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TransactionId");
+
+                    b.ToTable("Receipts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Receipts_AccountLast4", "AccountLast4 IS NULL OR length(AccountLast4) = 4");
+
+                            t.HasCheckConstraint("CK_Receipts_PositiveAmount", "AmountMinor IS NULL OR AmountMinor > 0");
+                        });
+                });
+
+            modelBuilder.Entity("EleFi.Domain.Receipts.ReceiptImage", b =>
+                {
+                    b.Property<Guid>("ReceiptId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("Photo")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<byte[]>("Thumbnail")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.HasKey("ReceiptId");
+
+                    b.ToTable("ReceiptImages", (string)null);
+                });
+
             modelBuilder.Entity("EleFi.Domain.Transactions.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -796,6 +884,53 @@ namespace EleFi.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EleFi.Domain.Transactions.TransactionItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("AmountMinor")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("TransactionId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TransactionId", "Position");
+
+                    b.ToTable("TransactionItems", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TransactionItems_PositiveAmount", "AmountMinor > 0");
+                        });
+                });
+
+            modelBuilder.Entity("EleFi.Domain.Transactions.TransactionItemLabel", b =>
+                {
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("LabelId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ItemId", "LabelId");
+
+                    b.HasIndex("LabelId");
+
+                    b.ToTable("TransactionItemLabels", (string)null);
+                });
+
             modelBuilder.Entity("EleFi.Domain.Transactions.TransactionLabel", b =>
                 {
                     b.Property<Guid>("TransactionId")
@@ -865,6 +1000,24 @@ namespace EleFi.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("EleFi.Domain.Receipts.Receipt", b =>
+                {
+                    b.HasOne("EleFi.Domain.Transactions.Transaction", null)
+                        .WithMany()
+                        .HasForeignKey("TransactionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EleFi.Domain.Receipts.ReceiptImage", b =>
+                {
+                    b.HasOne("EleFi.Domain.Receipts.Receipt", null)
+                        .WithOne()
+                        .HasForeignKey("EleFi.Domain.Receipts.ReceiptImage", "ReceiptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("EleFi.Domain.Transactions.Transaction", b =>
                 {
                     b.HasOne("EleFi.Domain.Parties.Party", "DestinationParty")
@@ -898,6 +1051,32 @@ namespace EleFi.Infrastructure.Persistence.Migrations
                     b.Navigation("SourceParty");
                 });
 
+            modelBuilder.Entity("EleFi.Domain.Transactions.TransactionItem", b =>
+                {
+                    b.HasOne("EleFi.Domain.Transactions.Transaction", null)
+                        .WithMany("Items")
+                        .HasForeignKey("TransactionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EleFi.Domain.Transactions.TransactionItemLabel", b =>
+                {
+                    b.HasOne("EleFi.Domain.Transactions.TransactionItem", null)
+                        .WithMany("Labels")
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EleFi.Domain.Labels.Label", "Label")
+                        .WithMany()
+                        .HasForeignKey("LabelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Label");
+                });
+
             modelBuilder.Entity("EleFi.Domain.Transactions.TransactionLabel", b =>
                 {
                     b.HasOne("EleFi.Domain.Labels.Label", "Label")
@@ -926,6 +1105,13 @@ namespace EleFi.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("EleFi.Domain.Transactions.Transaction", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Labels");
+                });
+
+            modelBuilder.Entity("EleFi.Domain.Transactions.TransactionItem", b =>
                 {
                     b.Navigation("Labels");
                 });

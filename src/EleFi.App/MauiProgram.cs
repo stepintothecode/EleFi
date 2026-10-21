@@ -57,6 +57,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IContactPicker, AndroidContactPicker>();
         builder.Services.AddSingleton<IReminderSchedule, AndroidReminderSchedule>();
         builder.Services.AddSingleton<IAppResume, MauiAppResume>();
+        builder.Services.AddSingleton<IReceiptScanner, AndroidReceiptScanner>();
 
         // Scoped, matching the WebView's lifetime, so what Ele says on one page is still on
         // screen after navigating to another, and undo reaches back across pages.

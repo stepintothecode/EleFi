@@ -380,3 +380,30 @@ public interface ISettingsStore
     /// <param name="value">The value.</param>
     void Write(string key, string value);
 }
+
+/// <summary>A receipt as the device read it: its text in printed rows, and its photo.</summary>
+/// <param name="Lines">The recognised rows, top to bottom.</param>
+/// <param name="Photo">The photo as JPEG, at most 1600 px; null for text that was shared as text.</param>
+/// <param name="Thumbnail">A JPEG thumbnail, at most 240 px; null with no photo.</param>
+public sealed record ScannedReceipt(IReadOnlyList<string> Lines, byte[]? Photo, byte[]? Thumbnail);
+
+/// <summary>
+/// Gets a receipt's picture and reads its text, on the device (ADR-0018).
+/// </summary>
+/// <remarks>
+/// The platform's camera, gallery, share sheet and text recognition sit behind this, so
+/// everything that decides what a receipt says stays testable without a phone.
+/// </remarks>
+public interface IReceiptScanner
+{
+    /// <summary>
+    /// Reads whatever was last shared into EleFi, and forgets it. Null when nothing is waiting.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<ScannedReceipt?> TakeSharedAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Asks for a photo, from the camera or the gallery, and reads it. Null when the user backs out.</summary>
+    /// <param name="camera">True to take a photo, false to choose one.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<ScannedReceipt?> PickAsync(bool camera, CancellationToken cancellationToken = default);
+}

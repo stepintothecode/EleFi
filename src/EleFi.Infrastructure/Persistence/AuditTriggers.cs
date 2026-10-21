@@ -33,7 +33,7 @@ namespace EleFi.Infrastructure.Persistence;
 /// surprising number can be explained six months later.
 /// </para>
 /// </remarks>
-public static class AuditTriggers
+public static partial class AuditTriggers
 {
     /// <summary>
     /// The columns whose changes are recorded, per table.
@@ -105,6 +105,7 @@ public static class AuditTriggers
         }),
         "DROP TRIGGER IF EXISTS trg_TransactionLabels_Added;",
         "DROP TRIGGER IF EXISTS trg_TransactionLabels_Removed;",
+        .. ItemTriggerNames.Select(name => $"DROP TRIGGER IF EXISTS {name};"),
     ];
 
     /// <summary>
@@ -209,6 +210,7 @@ public static class AuditTriggers
         }
 
         statements.AddRange(LabelTriggers());
+        statements.AddRange(ItemTriggers());
         return statements;
     }
 

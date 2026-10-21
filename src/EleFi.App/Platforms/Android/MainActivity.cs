@@ -21,6 +21,9 @@ namespace EleFi.App;
     LaunchMode = LaunchMode.SingleTask,
     ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation | ConfigChanges.UiMode
         | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
+// Receipts shared from a payment app's screen or a gallery photo, or shared as text (ADR-0018).
+[IntentFilter([Intent.ActionSend], Categories = [Intent.CategoryDefault], DataMimeType = "image/*")]
+[IntentFilter([Intent.ActionSend], Categories = [Intent.CategoryDefault], DataMimeType = "text/plain")]
 public class MainActivity : MauiAppCompatActivity
 {
     /// <summary>Intent extra set by the widget and the tile to open quick capture.</summary>
@@ -180,11 +183,14 @@ public class MainActivity : MauiAppCompatActivity
             new AndroidX.Activity.Result.Contract.ActivityResultContracts.StartActivityForResult(),
             new ContactPicked());
 
-    private static bool Remember(Intent? intent)
+    private bool Remember(Intent? intent)
     {
-        var route = intent?.GetBooleanExtra(QuickCaptureExtra, false) == true
-            ? "quick"
-            : intent?.GetStringExtra(RouteExtra);
+        // Something shared in is a receipt to read: the screen takes it from the intake.
+        var route = SharedReceiptIntake.Accept(this, intent)
+            ? SharedReceiptIntake.Route
+            : intent?.GetBooleanExtra(QuickCaptureExtra, false) == true
+                ? "quick"
+                : intent?.GetStringExtra(RouteExtra);
 
         if (string.IsNullOrWhiteSpace(route))
         {

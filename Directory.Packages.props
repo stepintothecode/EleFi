@@ -42,6 +42,16 @@
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.20" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.20" />
+    <!-- Receipts are read on the device with the bundled Latin model, offline (ADR-0018). -->
+    <PackageVersion Include="Xamarin.Google.MLKit.TextRecognition" Version="116.0.1.9" />
+    <!--
+      ML Kit's dependencies ask for Ktx packages pinned below the AndroidX versions MAUI 10
+      brings. These are the Ktx releases that match MAUI's, so both agree on one version.
+    -->
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.LiveData" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.LiveData.Core.Ktx" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Fragment.Ktx" Version="1.9.0" />
+    <PackageVersion Include="Xamarin.AndroidX.Collection.Ktx" Version="1.6.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.11" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.11" />
   </ItemGroup>

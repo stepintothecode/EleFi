@@ -10,6 +10,7 @@ using EleFi.Domain.Money;
 using EleFi.Domain.Notices;
 using EleFi.Domain.Parties;
 using EleFi.Domain.Planning;
+using EleFi.Domain.Transactions;
 using EleFi.Infrastructure.Persistence;
 using EleFi.Infrastructure.Persistence.Repositories;
 using EleFi.Infrastructure.Tests.Support;
@@ -179,6 +180,27 @@ public class LocalBackupTests
             bankParty!.Id, shop.Id, 250_00, "INR", 250_00, "INR", Today, new TimeOnly(9, 30), [label.Id], "Groceries"));
         var gone = await f.Capture.CaptureAsync(new CaptureRequest(bankParty.Id, shop.Id, 99_00, "INR", 99_00, "INR", Today));
         await f.Editing.DeleteAsync(gone.Transaction!.Id);
+
+        // Itemised: a named item with a label, and the Unnamed rest (ADR-0017).
+        var milk = ItemDraft.Named("Milk", 100_00) with { LabelIds = [label.Id] };
+        var basket = await f.Capture.CaptureAsync(new CaptureRequest(bankParty.Id, shop.Id, 300_00, "INR", 300_00, "INR", Today));
+        var itemised = await f.Editing.EditAsync(EditRequest.Snapshot(basket.Transaction!) with { Items = [milk] });
+        Assert.True(itemised.Succeeded, itemised.Error);
+
+        // A receipt with its photo, which must come back byte for byte (ADR-0018).
+        var receipt = new EleFi.Domain.Receipts.Receipt
+        {
+            TransactionId = basket.Transaction!.Id,
+            Kind = EleFi.Domain.Receipts.ReceiptKind.Shop,
+            Payee = "Shop",
+            AmountMinor = 300_00,
+            OccurredOn = Today,
+            AccountLast4 = "4417",
+            CreatedAt = f.Clock.UtcNow,
+            UpdatedAt = f.Clock.UtcNow,
+        };
+        await new ReceiptRepository(f.Db, f.Clock).AddAsync(
+            receipt, new EleFi.Domain.Receipts.ReceiptImage { ReceiptId = receipt.Id, Photo = [0xFF, 0xD8, 0x01], Thumbnail = [0xFF, 0xD8] });
 
         // A taught rule, beside the built-in ones.
         f.Db.ParseRules.Add(new ParseRule

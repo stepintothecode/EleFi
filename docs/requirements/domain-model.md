@@ -256,7 +256,9 @@ Transaction
   created_at, updated_at, deleted_at
 ```
 
-Labels hang off a transaction through `TransactionLabel`, not through a column. See §6.
+Labels hang off a transaction through `TransactionLabel`, not through a column. See §6. A
+transaction may also be split into items, which then carry the labels instead: see
+[Items](#items-adr-0017).
 
 ### Derived: Transaction Kind
 
@@ -294,6 +296,74 @@ merely discouraged - it is **unrepresentable**. That is the whole point of ADR-0
 - `T8` - `goal_id` is settable only when the goal's `funding_mode = 'TracksContributions'`.
 - `T9` - Deleting a transaction sets `deleted_at`. It is never removed. It immediately
   leaves every balance, report, and export.
+
+### Items (ADR-0017)
+
+```
+TransactionItem                        TransactionItemLabel
+  id              TEXT PK                item_id   FK -> TransactionItem.id
+  transaction_id  TEXT NOT NULL  FK      label_id  FK -> Label.id
+  name            TEXT          null = Unnamed      PRIMARY KEY (item_id, label_id)
+  amount_minor    INTEGER NOT NULL
+  note            TEXT
+  position        INTEGER NOT NULL
+```
+
+What one payment bought. Optional; most transactions have none. Items never change a balance,
+the kind, the Source or the Destination: they divide a transaction for labelling only. See
+[ADR-0017](../adr/0017-itemised-transactions.md).
+
+- `IT1` - The items of a transaction add up to its `source_amount_minor`, exactly. Kept by
+  `Itemisation.Balance` on every write; a property test tries to break it.
+- `IT2` - Every item's `amount_minor > 0`. A CHECK constraint.
+- `IT3` - At most one item is **Unnamed** (`name` null): whatever the named items leave of the
+  total. It is kept by the app, last in the list, and disappears when the named items add up
+  exactly. A transaction whose only item would be Unnamed is simply not itemised.
+- `IT4` - An itemised transaction carries no labels of its own; its items carry them.
+  Itemising moves the transaction's labels onto Unnamed, and un-itemising moves them back.
+- `IT5` - A Self Transfer is never itemised (`T6`).
+
+Removing an item is an edit to the transaction, recorded in its history and undone like any
+edit; items have no soft delete of their own, and leave with their transaction when it is
+soft-deleted (`T9`).
+
+### Receipts (ADR-0018)
+
+```
+Receipt                                  ReceiptImage
+  id              TEXT PK                  receipt_id  TEXT PK FK -> Receipt.id
+  transaction_id  TEXT NOT NULL  FK        photo       BLOB NOT NULL   JPEG, at most 1600 px
+  kind            PaymentApp | Shop        thumbnail   BLOB NOT NULL   JPEG, at most 240 px
+  app_name, payee, note, reference  TEXT
+  amount_minor    INTEGER
+  currency        TEXT NOT NULL
+  occurred_on     TEXT     YYYY-MM-DD
+  occurred_at_time TEXT    HH:mm
+  account_last4   TEXT     exactly 4 digits, or null
+  settled_at      INTEGER  epoch ms, or null
+  created_at, updated_at, deleted_at
+```
+
+A payment app's screen or a shop's receipt, read on the device and attached to a transaction.
+Any number per transaction.
+
+- `RC1` - A receipt belongs to exactly one transaction, and keeps what was read from it as read.
+  It never rewrites itself to agree.
+- `RC2` - `amount_minor`, when read, is above zero. A CHECK constraint.
+- `RC3` - Only an account's **last four digits** are stored (`C1`), enforced by a CHECK that the
+  value is exactly four characters.
+- `RC4` - A **discrepancy** (amount, payee or account) is derived by `ReceiptCheck` every time
+  it is shown, never stored: correcting the transaction clears it by itself. A payee matches
+  through the contact's aliases too.
+- `RC5` - Keeping the transaction as it is despite a discrepancy sets `settled_at`; the
+  difference is still shown, as kept.
+- `RC6` - Attaching a receipt that disagrees flags the transaction Needs Review. A receipt that
+  matches no transaction is recorded as a new one, flagged Needs Review, `capture_source =
+  'ShareSheet'`.
+
+Photos live in `ReceiptImage`, apart from `Receipt`, so listing receipts never reads one. A
+removed receipt is soft-deleted with its photo kept, and can be undone. Attaching, settling and
+removing are in the transaction's history.
 
 ### CaptureSource
 

@@ -152,8 +152,10 @@ internal sealed class InMemoryLedger
 
     internal sealed class LabelStore : ILabelRepository
     {
+        public List<Label> Rows { get; } = [];
+
         public Task<IReadOnlyList<Label>> ListAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<Label>>([]);
+            Task.FromResult<IReadOnlyList<Label>>([.. Rows]);
 
         public Task AddAsync(Label label, CancellationToken cancellationToken = default) => Task.CompletedTask;
 

@@ -38,6 +38,18 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
     /// <summary>The join between transactions and labels.</summary>
     public DbSet<TransactionLabel> TransactionLabels => Set<TransactionLabel>();
 
+    /// <summary>The items itemised transactions are split into.</summary>
+    public DbSet<TransactionItem> TransactionItems => Set<TransactionItem>();
+
+    /// <summary>The join between items and labels.</summary>
+    public DbSet<TransactionItemLabel> TransactionItemLabels => Set<TransactionItemLabel>();
+
+    /// <summary>Receipts attached to transactions.</summary>
+    public DbSet<Domain.Receipts.Receipt> Receipts => Set<Domain.Receipts.Receipt>();
+
+    /// <summary>Receipt photos, apart from the receipts so lists never read them.</summary>
+    public DbSet<Domain.Receipts.ReceiptImage> ReceiptImages => Set<Domain.Receipts.ReceiptImage>();
+
     /// <summary>Labels.</summary>
     public DbSet<Label> Labels => Set<Label>();
 
@@ -201,6 +213,10 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
             e.Property(t => t.CreatedAt).HasConversion(instant);
             e.Property(t => t.UpdatedAt).HasConversion(instant);
             e.Property(t => t.DeletedAt).HasConversion(nullableInstant);
+
+            // Derived from the labels and items, never stored.
+            e.Ignore(t => t.AllLabels);
+            e.Ignore(t => t.IsItemised);
 
             e.HasOne(t => t.SourceParty).WithMany().HasForeignKey(t => t.SourcePartyId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(t => t.DestinationParty).WithMany().HasForeignKey(t => t.DestinationPartyId).OnDelete(DeleteBehavior.Restrict);
@@ -398,6 +414,9 @@ public class EleFiDbContext(DbContextOptions<EleFiDbContext> options) : DbContex
             e.HasOne<Container>().WithMany().HasForeignKey(c => c.ContainerId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(c => c.ContainerId);
         });
+
+        // Newer tables configure themselves, one class each, rather than growing this method.
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(EleFiDbContext).Assembly);
 
         modelBuilder.Entity<AuditEvent>(e =>
         {

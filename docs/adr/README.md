@@ -21,10 +21,12 @@ ways.
 | [0010](0010-on-device-sms-assisted-capture.md) | SMS parsed on device into suggestions, never booked automatically | accepted, **SM2 superseded by 0015** |
 | [0011](0011-blazor-hybrid-over-native-xaml.md) | Blazor Hybrid rather than native XAML for the UI layer | accepted |
 | [0012](0012-free-forever-voluntary-support.md) | Free forever, MIT licensed, funded only by voluntary support | accepted |
-| [0013](0013-multiple-flat-labels.md) | Any number of flat Labels per transaction; Tags removed, reversing 0007 | accepted |
+| [0013](0013-multiple-flat-labels.md) | Any number of flat Labels per transaction; Tags removed, reversing 0007 | accepted, **splits superseded by 0017** |
 | [0014](0014-payment-app-notification-ingest.md) | Allow-listed Payment App notifications as a second alert channel, merged with SMS | accepted, **SM2 parts superseded by 0015** |
 | [0015](0015-record-alerts-as-needs-review.md) | Parsed alerts are recorded straight away as Needs Review transactions, reversing SM2 | accepted |
 | [0016](0016-contacts-merge-with-aliases.md) | Contacts are external Parties; a merge leaves the old name as an alias | accepted |
+| [0017](0017-itemised-transactions.md) | A transaction can be split into items with their own amounts and labels, superseding part of 0013 | accepted |
+| [0018](0018-receipts-read-on-device.md) | Receipts are shared in, read on the device with ML Kit, and kept in the encrypted database | accepted |
 
 ## The load-bearing ones
 

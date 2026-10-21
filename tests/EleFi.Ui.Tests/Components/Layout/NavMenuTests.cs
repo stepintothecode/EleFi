@@ -17,6 +17,8 @@ public class NavMenuTests : Bunit.TestContext
     [InlineData("transactions", 5)]
     [InlineData("transactions/6f1c7e8a-1b1a-4f43-9a52-0d1d6b1e9a11", 5)]
     [InlineData("settings/backup", 6)]
+    [InlineData("receipt", 4)]
+    [InlineData("receipt?for=6f1c7e8a-1b1a-4f43-9a52-0d1d6b1e9a11&from=gallery", 5)]
     public void Each_page_belongs_to_the_tab_that_lights_up_for_it(string path, int tab) =>
         Assert.Equal(tab, NavMenu.TabFor(path));
 

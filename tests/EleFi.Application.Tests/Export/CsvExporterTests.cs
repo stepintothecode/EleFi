@@ -92,6 +92,24 @@ public class CsvExporterTests
     }
 
     [Fact]
+    public async Task An_itemised_row_lists_its_items_and_their_labels_in_one_field_and_its_labels_from_them()
+    {
+        var row = Row("Gajanana Store", 500_00);
+        var milk = new TransactionItem { Name = "Milk", AmountMinor = 200_00, Position = 0 };
+        milk.Labels.Add(new TransactionItemLabel { Label = new Label { Name = "Food" } });
+        row.Items.Add(milk);
+        row.Items.Add(new TransactionItem { Name = null, AmountMinor = 300_00, Position = 1 });
+
+        var repo = new RecordingRepository { Rows = [row] };
+        var export = await new CsvExporter(repo, new StoppedClock(Today)).ExportAsync(TransactionFilter.Empty, [ExportColumn.Labels, ExportColumn.Items]);
+        var lines = Text(export).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+
+        // Still one row per transaction (X1), the amounts bare so they can be picked out.
+        Assert.Equal(2, lines.Length);
+        Assert.Equal("Food,Milk 200.00 (Food); Unnamed 300.00", lines[1]);
+    }
+
+    [Fact]
     public async Task A_row_with_no_time_leaves_the_column_blank_rather_than_inventing_midnight()
     {
         var repo = new RecordingRepository { Rows = [Row("Zomato", 10000)] };

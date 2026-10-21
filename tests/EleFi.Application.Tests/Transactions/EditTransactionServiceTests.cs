@@ -101,8 +101,112 @@ public class EditTransactionServiceTests
         Assert.Contains(changes, c => c is { Field: "Paid from", From: "SBI" });
     }
 
-    private EditTransactionService Service(IAuditRepository? audit = null) =>
-        new(_ledger.Transactions, _ledger.Parties, _ledger.Labels, audit ?? Substitute.For<IAuditRepository>(), new MovableClock(), _ledger.Apps);
+    [Fact]
+    public async Task Itemising_keeps_the_items_adding_up_and_moves_the_labels_onto_them()
+    {
+        var spent = await SpendAsync();
+        var food = Guid.NewGuid();
+        var editing = Service(labels: [food]);
+
+        var result = await editing.EditAsync(EditRequest.Snapshot(spent) with
+        {
+            LabelIds = [food],
+            Items = [ItemDraft.Named("Tea", 40) with { LabelIds = [food] }],
+        });
+
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal([40, 60], spent.Items.Select(i => i.AmountMinor));
+        Assert.True(spent.Items[1].IsUnnamed);
+
+        // IT4: with items, the labels live on the items, never on the whole as well.
+        Assert.Empty(spent.Labels);
+    }
+
+    [Fact]
+    public async Task Items_that_come_to_more_than_the_amount_are_refused_and_nothing_changes()
+    {
+        var spent = await SpendAsync();
+        var editing = Service();
+
+        var result = await editing.EditAsync(EditRequest.Snapshot(spent) with { Items = [ItemDraft.Named("Tea", 150)] });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("The items come to ₹0.50 more than the ₹1.00 paid.", result.Error);
+        Assert.Empty(spent.Items);
+    }
+
+    [Fact]
+    public async Task Changing_the_amount_resizes_the_unnamed_rest_and_refuses_to_go_below_the_named_items()
+    {
+        var spent = await SpendAsync();
+        var editing = Service();
+        await editing.EditAsync(EditRequest.Snapshot(spent) with { Items = [ItemDraft.Named("Tea", 40)] });
+
+        var bigger = await editing.EditAsync(EditRequest.Snapshot(spent) with { AmountMinor = 250, Items = null });
+        Assert.True(bigger.Succeeded, bigger.Error);
+        Assert.Equal([40, 210], spent.Items.Select(i => i.AmountMinor));
+
+        var smaller = await editing.EditAsync(EditRequest.Snapshot(spent) with { AmountMinor = 30, Items = null });
+        Assert.False(smaller.Succeeded);
+        Assert.Equal(250, spent.SourceAmountMinor);
+    }
+
+    [Fact]
+    public async Task A_self_transfer_cannot_carry_items()
+    {
+        var spent = await SpendAsync();
+        var editing = Service();
+        await editing.EditAsync(EditRequest.Snapshot(spent) with { Items = [ItemDraft.Named("Tea", 40)] });
+        var other = _ledger.PartyOf(_ledger.AddContainer("Wallet", ContainerKind.Wallet));
+
+        var result = await editing.EditAsync(EditRequest.Snapshot(spent) with { DestinationPartyId = other.Id, Items = null });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Self Transfer can't be split", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Undo_puts_the_items_back_as_they_were()
+    {
+        var spent = await SpendAsync();
+        var editing = Service();
+        await editing.EditAsync(EditRequest.Snapshot(spent) with { Items = [ItemDraft.Named("Tea", 40)] });
+        var before = EditRequest.Snapshot(spent);
+
+        await editing.EditAsync(before with { Items = [] });
+        Assert.Empty(spent.Items);
+
+        await editing.EditAsync(before);
+
+        Assert.Equal(["Tea", null], spent.Items.Select(i => i.Name));
+        Assert.Equal(before.Items!.Select(i => i.Id), spent.Items.Select(i => i.Id));
+    }
+
+    [Fact]
+    public async Task A_label_on_an_item_must_still_exist()
+    {
+        var spent = await SpendAsync();
+        var editing = Service();
+
+        var result = await editing.EditAsync(EditRequest.Snapshot(spent) with
+        {
+            Items = [ItemDraft.Named("Tea", 40) with { LabelIds = [Guid.NewGuid()] }],
+        });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("One of those labels no longer exists.", result.Error);
+    }
+
+    private EditTransactionService Service(IAuditRepository? audit = null, IReadOnlyList<Guid>? labels = null)
+    {
+        foreach (var id in labels ?? [])
+        {
+            _ledger.Labels.Rows.Add(new EleFi.Domain.Labels.Label { Id = id, Name = $"Label {_ledger.Labels.Rows.Count}" });
+        }
+
+        return new(_ledger.Transactions, _ledger.Parties, _ledger.Labels, audit ?? Substitute.For<IAuditRepository>(), new MovableClock(), _ledger.Apps);
+    }
+
 
     private async Task<Transaction> SpendAsync()
     {

@@ -409,8 +409,8 @@ public sealed class PlanService(
         reminders.Replace(PlanReminders.Schedule(open, now, TimeZoneInfo.Local.GetUtcOffset(now)));
     }
 
-    // Onto a transaction with no labels of its own: the user's labels always win, and a Self
-    // Transfer carries none (T6).
+    // Onto a transaction with no labels of its own: the user's labels always win, a Self
+    // Transfer carries none (T6), and an itemised one keeps its labels on its items (IT4).
     private async Task CarryLabelsAsync(Plan plan, Guid transactionId, CancellationToken cancellationToken)
     {
         if (plan.Labels.Count == 0)
@@ -419,7 +419,7 @@ public sealed class PlanService(
         }
 
         var transaction = await transactions.FindAsync(transactionId, cancellationToken).ConfigureAwait(false);
-        if (transaction is null || transaction.Labels.Count > 0
+        if (transaction is null || transaction.Labels.Count > 0 || transaction.IsItemised
             || transaction.SourceParty is null || transaction.DestinationParty is null
             || transaction.Kind == TransactionKind.SelfTransfer)
         {

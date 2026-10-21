@@ -79,21 +79,26 @@ else
         </div>
     }
 
-    <div class="card">
+    @* One card per section, each with a small heading, so Who, Labels and items, When and
+       Details read as separate things rather than one long column of fields. *@
+    <section class="card form-section" aria-labelledby="sec-amount">
+        <h2 class="form-section-title" id="sec-amount">Amount</h2>
         <div class="field">
-            <label for="amount">Amount</label>
-            <input id="amount" class="amount-input" type="text" inputmode="decimal"
+            <input id="amount" class="amount-input" type="text" inputmode="decimal" aria-label="Amount"
                    @bind="_amountText" autocomplete="off" />
         </div>
 
-        <div class="chips" style="margin-bottom:14px;" role="group" aria-label="Kind">
+        <div class="chips" role="group" aria-label="Kind">
             @foreach (var kind in new[] { TransactionKind.Debit, TransactionKind.Credit, TransactionKind.SelfTransfer })
             {
                 <button type="button" class="chip @(_kind == kind ? "on" : string.Empty)"
                         @onclick="() => SetKind(kind)">@kind.DisplayName()</button>
             }
         </div>
+    </section>
 
+    <section class="card form-section" aria-labelledby="sec-who">
+        <h2 class="form-section-title" id="sec-who">Who</h2>
         @if (_kind == TransactionKind.SelfTransfer)
         {
             <div class="field">
@@ -122,13 +127,35 @@ else
                 </div>
                 <TypeaheadInput Id="party" Value="@_partyName" ValueChanged="PartyChangedAsync" Candidates="_partyCandidates" />
             </div>
+        }
+    </section>
+
+    @if (_kind != TransactionKind.SelfTransfer)
+    {
+        <section class="card form-section" aria-labelledby="sec-labels">
+            <h2 class="form-section-title" id="sec-labels">Labels and items</h2>
+
+            @* With items, the labels are on each item instead (IT4), so the whole-transaction
+               picker steps aside rather than offering a choice that would be ignored. *@
+            @if (_items.Count == 0)
+            {
+                <div class="field">
+                    <label>Labels <span class="muted small">(optional, pick any)</span></label>
+                    <LabelPicker Labels="_labels" Selected="_labelIds" SelectedChanged="ids => _labelIds = ids" />
+                </div>
+            }
 
             <div class="field">
-                <label>Labels <span class="muted small">(optional, pick any)</span></label>
-                <LabelPicker Labels="_labels" Selected="_labelIds" SelectedChanged="ids => _labelIds = ids" />
+                <label>Items <span class="muted small">(optional)</span></label>
+                <ItemsEditor TotalMinor="TotalMinor" Currency="Currency" Labels="_labels"
+                             Items="_items" ItemsChanged="items => _items = items"
+                             TransactionLabelIds="_labelIds" TransactionLabelIdsChanged="ids => _labelIds = ids" />
             </div>
-        }
+        </section>
+    }
 
+    <section class="card form-section" aria-labelledby="sec-when">
+        <h2 class="form-section-title" id="sec-when">When</h2>
         <div class="row">
             <div class="field grow">
                 <label for="date">Date</label>
@@ -139,7 +166,10 @@ else
                 <input id="time" type="time" @bind="_time" />
             </div>
         </div>
+    </section>
 
+    <section class="card form-section" aria-labelledby="sec-details">
+        <h2 class="form-section-title" id="sec-details">Details</h2>
         <div class="field">
             <div class="field-head">
                 <label for="marketplace">Bought through <span class="muted small">(optional)</span></label>
@@ -178,9 +208,16 @@ else
                 </select>
             </div>
         }
+    </section>
 
-        <button class="primary btn-block" disabled="@_busy" @onclick="SaveAsync">Save changes</button>
-    </div>
+    <button class="primary btn-block form-save" disabled="@_busy" @onclick="SaveAsync">Save changes</button>
+
+    @* After Save, because attaching, settling or removing a receipt takes effect at once and
+       needs no Save of its own. *@
+    <section class="card form-section receipts-section" aria-labelledby="sec-receipts">
+        <h2 class="form-section-title" id="sec-receipts">Receipts</h2>
+        <ReceiptsPanel TransactionId="Id" Transaction="_transaction" OnChanged="LoadAsync" />
+    </section>
 
     <h2>History</h2>
     <div class="card">
@@ -265,6 +302,7 @@ else
     private Guid _containerId;
     private Guid _destinationContainerId;
     private IReadOnlyList<Guid> _labelIds = [];
+    private IReadOnlyList<ItemDraft> _items = [];
     private string _partyName = string.Empty;
     private string _paymentAppName = string.Empty;
     private string _marketplaceAppName = string.Empty;
@@ -278,6 +316,11 @@ else
     private bool _disposed;
 
     private Currency Currency => _transaction?.SourceCurrency ?? Currency.Inr;
+
+    // The amount as typed so far, so the items resize as it changes; the saved one until then.
+    private long TotalMinor => MoneyText.TryParse(_amountText, Currency, out var typed) && typed.Minor > 0
+        ? typed.Minor
+        : _transaction?.SourceAmountMinor ?? 0;
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -318,6 +361,7 @@ else
         _time = t.OccurredAtTime;
         _description = t.Description;
         _labelIds = [.. t.Labels.Select(l => l.LabelId)];
+        _items = [.. t.Items.OrderBy(i => i.Position).Select(ItemDraft.Of)];
         _marketplaceAppName = t.MarketplaceApp?.Name ?? string.Empty;
         _paymentAppName = t.PaymentApp?.Name ?? string.Empty;
 
@@ -434,7 +478,8 @@ else
                 paymentAppId,
                 // Editing a flagged transaction is the review. Leaving the flag set after
                 // someone has been through every field would make it meaningless.
-                NeedsReview: false);
+                NeedsReview: false,
+                Items: _items);
 
             var result = await Editing.EditAsync(after);
             if (!result.Succeeded)

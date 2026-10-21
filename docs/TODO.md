@@ -9,6 +9,9 @@ after the six fixes of that day; the build with everything below ticked is on th
 
 ## Next up, in order
 
+0. [ ] **Ele learns on the device** (the user's vision, 2026-10-20): a plan and an ADR first.
+   Labels predicted from history, duplicate transactions flagged, unusual amounts and
+   mismatches flagged by Ele, all learned locally. Receipt corrections are the first signal
 1. [ ] **Check on the phone, with real use** (needs the user, nothing to build):
    - a plan due in a few minutes: the reminder fires, Mark done opens it, Snooze moves it
    - Ele's new look in every mood, the confetti, the smoother hide, and the guide (Settings >
@@ -89,6 +92,11 @@ after the six fixes of that day; the build with everything below ticked is on th
 
 ## Done recently
 
+- [x] **2026-10-21, items and receipts**: a transaction can be split into items that always
+      add up (an Unnamed rest kept by the app), with labels per item and no double counting in
+      the breakdown (ADR-0017); receipts shared in from a payment app or photographed, read on
+      the device with ML Kit, matched, attached with their photo, and discrepancies flagged to
+      settle (ADR-0018); the edit screen in section cards
 - [x] **2026-10-20, six fixes**: back goes to the page before and takes two presses to close
       the app (one press closed it from an open transaction, after Android recreated the
       screen); lists and figures read again on returning from recents, forms untouched; the

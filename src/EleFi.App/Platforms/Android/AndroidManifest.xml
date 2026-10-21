@@ -1,10 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
   <application android:allowBackup="false"
                android:icon="@mipmap/appicon"
                android:roundIcon="@mipmap/appicon_round"
                android:supportsRtl="true"
-               android:label="EleFi" />
+               android:label="EleFi">
+    <!--
+      ML Kit reads receipts on the device (ADR-0018), but its SDK can also send anonymous
+      usage metrics to Google through this transport. Removing it means nothing leaves the
+      phone: no image, no text, and no metrics either. The one automatic egress stays the
+      encrypted Drive backup.
+    -->
+    <service android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+             tools:node="remove" />
+    <service android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService"
+             tools:node="remove" />
+    <receiver android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver"
+              tools:node="remove" />
+  </application>
 
   <!--
     allowBackup is false on purpose. Android's automatic cloud backup would copy the app's
@@ -35,6 +49,14 @@
   -->
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+  <!--
+    Taking a photo of a receipt (ADR-0018). Asked for only when the user taps Take a photo;
+    choosing one from the gallery needs no permission. Not required, so a phone without a
+    camera can still install EleFi.
+  -->
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-feature android:name="android.hardware.camera" android:required="false" />
+
   <queries>
     <!--
       Without this, Browser.OpenAsync with BrowserLaunchMode.External fails silently on
@@ -43,6 +65,10 @@
     <intent>
       <action android:name="android.intent.action.VIEW" />
       <data android:scheme="https" />
+    </intent>
+    <!-- The camera app, for Take a photo of a receipt. -->
+    <intent>
+      <action android:name="android.media.action.IMAGE_CAPTURE" />
     </intent>
   </queries>
 </manifest>

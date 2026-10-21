@@ -2,6 +2,7 @@ using Bunit;
 using EleFi.Application.Abstractions;
 using EleFi.Application.Goals;
 using EleFi.Application.Labels;
+using EleFi.Application.Receipts;
 using EleFi.Application.Transactions;
 using EleFi.Application.Typeahead;
 using EleFi.Domain.Apps;
@@ -30,6 +31,7 @@ public class EditTransactionTests : Bunit.TestContext
     private readonly Party _swiggy = new() { Kind = PartyKind.External, Name = "Swiggy" };
     private readonly Transaction _lunch;
     private readonly ITransactionRepository _ledger = Substitute.For<ITransactionRepository>();
+    private readonly Fakes.MemoryReceipts _receipts = new();
     private readonly EleReactions _ele = new(new Fakes.MemorySettings(), new ManualTime());
 
     public EditTransactionTests()
@@ -92,7 +94,12 @@ public class EditTransactionTests : Bunit.TestContext
         var labels = new Fakes.SeededLabels();
 
         Services.AddSingleton<IClock>(clock);
-        Services.AddSingleton(new EditTransactionService(_ledger, parties, labels, audit, clock, apps));
+        var editing = new EditTransactionService(_ledger, parties, labels, audit, clock, apps);
+        Services.AddSingleton(editing);
+
+        var contacts = Substitute.For<IContactRepository>();
+        contacts.AliasesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns([]);
+        Services.AddSingleton(new ReceiptService(_receipts, _ledger, containers, parties, contacts, new CaptureService(_ledger, parties, apps, labels, clock), editing, clock));
         Services.AddSingleton(_ledger);
         Services.AddSingleton(new GoalService(goals, _ledger, clock));
         Services.AddSingleton(containers);
@@ -140,6 +147,29 @@ public class EditTransactionTests : Bunit.TestContext
 
         // There is no toast any more: Ele is the only thing that speaks.
         Assert.Empty(page.FindAll(".toast"));
+    }
+
+    [Fact]
+    public void Items_split_on_the_page_are_saved_with_it_and_the_whole_transaction_label_picker_steps_aside()
+    {
+        var page = Render();
+        Assert.Contains("pick any", page.Markup, StringComparison.Ordinal);
+
+        page.Find(".items-add").Click();
+        page.Find(".item-name-input").Change("Fries");
+        page.Find(".item-amount-input").Change("150");
+        page.Find(".item-done").Click();
+
+        // IT4: with items, labels are on each item, so the whole-transaction picker goes.
+        Assert.DoesNotContain("pick any", page.Markup, StringComparison.Ordinal);
+
+        page.FindAll("button").First(b => b.TextContent.Trim() == "Save changes").Click();
+
+        page.WaitForAssertion(() =>
+        {
+            Assert.Equal(["Fries", null], _lunch.Items.Select(i => i.Name));
+            Assert.Equal([150_00, 300_00], _lunch.Items.Select(i => i.AmountMinor));
+        });
     }
 
     [Fact]

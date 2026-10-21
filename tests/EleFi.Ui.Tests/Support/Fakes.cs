@@ -276,4 +276,63 @@ internal static class Fakes
         public Task<IReadOnlyDictionary<Guid, int>> UsageCountsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyDictionary<Guid, int>>(new Dictionary<Guid, int>());
     }
+
+    /// <summary>Receipts and photos in lists, so receipt screens render and attach without a database.</summary>
+    public sealed class MemoryReceipts : IReceiptRepository
+    {
+        public List<EleFi.Domain.Receipts.Receipt> Rows { get; } = [];
+
+        public List<EleFi.Domain.Receipts.ReceiptImage> Images { get; } = [];
+
+        public Task AddAsync(EleFi.Domain.Receipts.Receipt receipt, EleFi.Domain.Receipts.ReceiptImage? image, CancellationToken cancellationToken = default)
+        {
+            Rows.Add(receipt);
+            if (image is not null)
+            {
+                Images.Add(image);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task<EleFi.Domain.Receipts.Receipt?> FindAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Rows.FirstOrDefault(r => r.Id == id && r.DeletedAt is null));
+
+        public Task<IReadOnlyList<EleFi.Domain.Receipts.Receipt>> ForTransactionAsync(Guid transactionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<EleFi.Domain.Receipts.Receipt>>([.. Rows.Where(r => r.TransactionId == transactionId && r.DeletedAt is null)]);
+
+        public Task<IReadOnlyDictionary<Guid, byte[]>> ThumbnailsAsync(IReadOnlyCollection<Guid> receiptIds, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, byte[]>>(Images.Where(i => receiptIds.Contains(i.ReceiptId)).ToDictionary(i => i.ReceiptId, i => i.Thumbnail));
+
+        public Task<byte[]?> PhotoAsync(Guid receiptId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Images.FirstOrDefault(i => i.ReceiptId == receiptId)?.Photo);
+
+        public Task UpdateAsync(EleFi.Domain.Receipts.Receipt receipt, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task SoftDeleteAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            Rows.Where(r => r.Id == id).ToList().ForEach(r => r.DeletedAt = DateTimeOffset.UnixEpoch);
+            return Task.CompletedTask;
+        }
+
+        public Task RestoreAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            Rows.Where(r => r.Id == id).ToList().ForEach(r => r.DeletedAt = null);
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>A scanner that hands back a prepared receipt, as if it had been shared or photographed.</summary>
+    public sealed class FixedScanner(ScannedReceipt? scan) : IReceiptScanner
+    {
+        public bool? AskedForCamera { get; private set; }
+
+        public Task<ScannedReceipt?> TakeSharedAsync(CancellationToken cancellationToken = default) => Task.FromResult(scan);
+
+        public Task<ScannedReceipt?> PickAsync(bool camera, CancellationToken cancellationToken = default)
+        {
+            AskedForCamera = camera;
+            return Task.FromResult(scan);
+        }
+    }
 }

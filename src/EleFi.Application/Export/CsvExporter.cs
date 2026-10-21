@@ -60,6 +60,9 @@ public enum ExportColumn
 
     /// <summary>When the record last changed.</summary>
     UpdatedAt = 16,
+
+    /// <summary>What an itemised transaction was split into, with each item's amount and labels.</summary>
+    Items = 17,
 }
 
 /// <summary>A CSV file, ready to hand to the OS.</summary>
@@ -154,6 +157,7 @@ public sealed class CsvExporter(ITransactionRepository transactions, IClock cloc
         ExportColumn.CaptureSource => "Capture Source",
         ExportColumn.CreatedAt => "Created At",
         ExportColumn.UpdatedAt => "Updated At",
+        ExportColumn.Items => "Items",
         _ => column.ToString(),
     };
 
@@ -174,10 +178,12 @@ public sealed class CsvExporter(ITransactionRepository transactions, IClock cloc
         ExportColumn.DestinationCurrency => row.DestinationCurrencyCode,
 
         // Semicolon separated, because a transaction now carries several and a comma would
-        // need the whole field quoting on almost every row.
-        ExportColumn.Labels => string.Join(
-            ';',
-            row.Labels.Select(l => l.Label?.Name).Where(n => n is not null).Order(StringComparer.Ordinal)),
+        // need the whole field quoting on almost every row. An itemised one lists its items'.
+        ExportColumn.Labels => string.Join(';', row.AllLabels.Select(l => l.Name).Order(StringComparer.Ordinal)),
+
+        // One row per transaction still (X1); its items go in one field, "Milk 200.00 (Food)",
+        // so the amounts stay bare decimals a reader can pick out.
+        ExportColumn.Items => string.Join("; ", row.Items.OrderBy(i => i.Position).Select(i => ItemText(i, row.SourceCurrency))),
 
         // Blank rather than a made-up midnight when no time was recorded. A transaction
         // happened on a date; the time is extra, and inventing one puts a fact in the file
@@ -192,6 +198,15 @@ public sealed class CsvExporter(ITransactionRepository transactions, IClock cloc
         ExportColumn.UpdatedAt => row.UpdatedAt.ToString("O", CultureInfo.InvariantCulture),
         _ => string.Empty,
     };
+
+    // Items are in the source currency: they add up to what left (IT1).
+    private static string ItemText(TransactionItem item, Currency currency)
+    {
+        var labels = item.Labels.Select(l => l.Label?.Name).OfType<string>().Order(StringComparer.Ordinal).ToList();
+        var amount = MoneyText.ToBareDecimal(Money.FromMinor(item.AmountMinor, currency));
+        var text = $"{item.Name ?? "Unnamed"} {amount}";
+        return labels.Count == 0 ? text : $"{text} ({string.Join('|', labels)})";
+    }
 
     private static string NameOf(Domain.Parties.Party? party) =>
         party is null ? string.Empty : party.Name ?? "(container)";

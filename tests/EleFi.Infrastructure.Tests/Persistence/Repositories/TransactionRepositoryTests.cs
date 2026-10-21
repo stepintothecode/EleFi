@@ -507,6 +507,109 @@ public class TransactionRepositoryTests
         Assert.Equal("HDFC Bank ••4417", balances[1].Detail);
     }
 
+    [Fact]
+    public async Task An_itemised_payment_counts_each_item_under_its_own_labels_with_no_double_counting()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var (food, shopping) = await TwoLabelsAsync(f);
+        var shop = await ItemisedShopAsync(f, food, shopping);
+
+        var breakdown = await f.Transactions.SpendByLabelAsync(TransactionFilter.Empty);
+
+        // ₹500 as ₹200 Food and ₹300 Shopping: the buckets add up to the total, not ₹1,000.
+        Assert.Equal(500_00, breakdown.TotalMinor);
+        Assert.Equal(200_00, breakdown.ByLabel.Single(l => l.LabelId == food).AmountMinor);
+        Assert.Equal(300_00, breakdown.ByLabel.Single(l => l.LabelId == shopping).AmountMinor);
+        Assert.Equal(500_00, breakdown.ByLabel.Sum(l => l.AmountMinor));
+        Assert.Equal(shop, (await f.Transactions.FindAsync(shop))!.Id);
+    }
+
+    [Fact]
+    public async Task An_unlabelled_item_counts_as_unlabelled_money()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var (food, _) = await TwoLabelsAsync(f);
+        var (_, bankParty) = await AddContainerAsync(f, "HDFC", ContainerKind.BankAccount, 10_000_00);
+        var shop = await f.Parties.GetOrCreateExternalAsync("Gnani Mart");
+        var paid = await SpendAsync(f, bankParty, shop, 500_00);
+        await ItemiseAsync(f, paid.Transaction!.Id, ItemDraft.Named("Milk", 200_00) with { LabelIds = [food] });
+
+        var breakdown = await f.Transactions.SpendByLabelAsync(TransactionFilter.Empty);
+
+        Assert.Equal(300_00, breakdown.ByLabel.Single(l => l.LabelId is null).AmountMinor);
+    }
+
+    [Fact]
+    public async Task A_label_filter_finds_an_itemised_transaction_through_its_items()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var (food, shopping) = await TwoLabelsAsync(f);
+        var shop = await ItemisedShopAsync(f, food, shopping);
+
+        var byItemLabel = await f.Transactions.QueryAsync(new TransactionFilter { LabelIds = [shopping] });
+        var unlabelled = await f.Transactions.QueryAsync(new TransactionFilter { UnlabelledOnly = true });
+
+        Assert.Equal([shop], byItemLabel.Select(t => t.Id));
+        Assert.DoesNotContain(unlabelled, t => t.Id == shop);
+    }
+
+    [Fact]
+    public async Task Search_finds_a_transaction_by_one_of_its_items()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var (food, shopping) = await TwoLabelsAsync(f);
+        var shop = await ItemisedShopAsync(f, food, shopping);
+
+        var found = await f.Transactions.QueryAsync(new TransactionFilter { Search = "kettle" });
+
+        Assert.Equal([shop], found.Select(t => t.Id));
+    }
+
+    [Fact]
+    public async Task Items_load_in_order_with_their_labels_and_the_unnamed_rest_last()
+    {
+        await using var f = await TestDatabase.CreateAsync(Today);
+        var (food, shopping) = await TwoLabelsAsync(f);
+        var shop = await ItemisedShopAsync(f, food, shopping, total: 600_00);
+
+        var loaded = (await f.Transactions.FindAsync(shop))!;
+
+        Assert.Equal(["Milk", "Kettle", null], loaded.Items.Select(i => i.Name));
+        Assert.Equal([200_00, 300_00, 100_00], loaded.Items.Select(i => i.AmountMinor));
+        Assert.Equal([food], loaded.Items[0].Labels.Select(l => l.LabelId));
+        Assert.Equal(600_00, loaded.Items.Sum(i => i.AmountMinor));
+        Assert.Empty(loaded.Labels);
+    }
+
+    private static async Task<(Guid Food, Guid Shopping)> TwoLabelsAsync(TestDatabase f)
+    {
+        var labels = await f.Labels.ListAsync();
+        return (labels.Single(l => l.Name == "Food").Id, labels.Single(l => l.Name == "Shopping").Id);
+    }
+
+    private static async Task<Guid> ItemisedShopAsync(TestDatabase f, Guid food, Guid shopping, long total = 500_00)
+    {
+        var (_, bankParty) = await AddContainerAsync(f, "HDFC", ContainerKind.BankAccount, 10_000_00);
+        var shop = await f.Parties.GetOrCreateExternalAsync("Gajanana Store");
+        var paid = await SpendAsync(f, bankParty, shop, total);
+        Assert.True(paid.Succeeded, paid.Error);
+
+        await ItemiseAsync(
+            f,
+            paid.Transaction!.Id,
+            ItemDraft.Named("Milk", 200_00) with { LabelIds = [food] },
+            ItemDraft.Named("Kettle", 300_00) with { LabelIds = [shopping] });
+
+        return paid.Transaction.Id;
+    }
+
+    private static async Task ItemiseAsync(TestDatabase f, Guid id, params ItemDraft[] items)
+    {
+        var current = (await f.Transactions.FindAsync(id))!;
+        var result = await f.Editing.EditAsync(EditRequest.Snapshot(current) with { Items = items });
+        Assert.True(result.Succeeded, result.Error);
+    }
+
     private static async Task<(Container Container, Guid PartyId)> AddContainerAsync(
         TestDatabase f, string name, ContainerKind kind, long openingMinor)
     {

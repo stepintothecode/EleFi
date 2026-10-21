@@ -24,6 +24,19 @@ public class TransactionHistoryTests
     };
 
     [Fact]
+    public void An_item_reads_as_its_name_and_money_in_the_transactions_currency()
+    {
+        // As SQLite's json_object writes it: the separator escaped.
+        var change = "[{\"field\":\"Item\",\"from\":\"nothing\",\"to\":\"Milk\\u001f20000\"},"
+            + "{\"field\":\"ItemLabel\",\"from\":\"nothing\",\"to\":\"Milk: Food\"}]";
+        var entry = new AuditEvent { Action = AuditAction.Updated, Changes = change };
+
+        var changes = TransactionHistory.Describe([entry], new Dictionary<Guid, string>(), Currency.Inr).Single().Changes;
+
+        Assert.Equal(new HistoryChange("Item", "nothing", "Milk ₹200.00"), changes[0]);
+        Assert.Equal(new HistoryChange("Item label", "nothing", "Milk: Food"), changes[1]);
+    }
+    [Fact]
     public void A_changed_payee_reads_as_the_two_names()
     {
         var change = Single(Updated(("DestinationPartyId", Zomato.ToString(), Swiggy.ToString())));

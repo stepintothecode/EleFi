@@ -29,6 +29,10 @@ public sealed class DataWipe(EleFiDbContext db, DatabaseInitialiser initialiser)
         // Child rows first: foreign keys are on, so a container cannot go before the
         // transactions naming it.
         await db.TransactionLabels.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await db.ReceiptImages.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await db.Receipts.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await db.TransactionItemLabels.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await db.TransactionItems.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.PlanLabels.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.Plans.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         await db.GoalContainers.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);

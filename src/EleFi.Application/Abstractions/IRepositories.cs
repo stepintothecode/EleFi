@@ -784,3 +784,48 @@ public interface ISuggestionHistory
     /// <param name="cancellationToken">Cancellation.</param>
     Task<IReadOnlyList<Typeahead.TypeaheadCandidate>> AppsAsync(Typeahead.AppSlot slot, string? partyName, CancellationToken cancellationToken = default);
 }
+
+/// <summary>Receipts and their photos (ADR-0018). The only place their SQL is written.</summary>
+public interface IReceiptRepository
+{
+    /// <summary>Stores a receipt, and its photo when it has one.</summary>
+    /// <param name="receipt">The receipt.</param>
+    /// <param name="image">Its photo and thumbnail, or null.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task AddAsync(Domain.Receipts.Receipt receipt, Domain.Receipts.ReceiptImage? image, CancellationToken cancellationToken = default);
+
+    /// <summary>One live receipt.</summary>
+    /// <param name="id">The receipt.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<Domain.Receipts.Receipt?> FindAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>A transaction's live receipts, oldest first. No photos.</summary>
+    /// <param name="transactionId">The transaction.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyList<Domain.Receipts.Receipt>> ForTransactionAsync(Guid transactionId, CancellationToken cancellationToken = default);
+
+    /// <summary>The thumbnails of these receipts, by receipt; a receipt with no photo is left out.</summary>
+    /// <param name="receiptIds">The receipts.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<IReadOnlyDictionary<Guid, byte[]>> ThumbnailsAsync(IReadOnlyCollection<Guid> receiptIds, CancellationToken cancellationToken = default);
+
+    /// <summary>A receipt's full photo, or null when it has none.</summary>
+    /// <param name="receiptId">The receipt.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<byte[]?> PhotoAsync(Guid receiptId, CancellationToken cancellationToken = default);
+
+    /// <summary>Saves a change to a receipt, such as settling it.</summary>
+    /// <param name="receipt">The receipt.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task UpdateAsync(Domain.Receipts.Receipt receipt, CancellationToken cancellationToken = default);
+
+    /// <summary>Soft-deletes a receipt. Its photo stays with it, restorable.</summary>
+    /// <param name="id">The receipt.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task SoftDeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Brings a removed receipt back.</summary>
+    /// <param name="id">The receipt.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task RestoreAsync(Guid id, CancellationToken cancellationToken = default);
+}

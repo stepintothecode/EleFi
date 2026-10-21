@@ -1,0 +1,48 @@
+@using System.Globalization
+@using EleFi.Application.Receipts
+@using EleFi.Domain.Money
+@using EleFi.Domain.Receipts
+@using EleFi.Domain.Transactions
+
+@*
+    The transaction a receipt will be attached to, and in plain words anything they disagree on.
+*@
+
+<div class="receipt-match">
+    <div class="receipt-match-row">
+        <div class="grow">
+            <div class="who">@(ReceiptCheck.Counterparty(Transaction) ?? "Transfer")</div>
+            <div class="meta">@Transaction.Kind.DisplayName() &middot; @When</div>
+        </div>
+        <div class="amount">@MoneyText.ToDisplayString(Transaction.SourceAmount)</div>
+    </div>
+
+    @if (Discrepancy != Discrepancy.None)
+    {
+        <div class="receipt-warning" role="status">
+            <strong>@DiscrepancyText.Tag(Discrepancy).</strong>
+            @foreach (var line in DiscrepancyText.Details(Discrepancy, Facts, Transaction))
+            {
+                <span class="receipt-warning-line">@line</span>
+            }
+            <span class="receipt-warning-line">It will be attached and flagged to check.</span>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>The transaction.</summary>
+    [Parameter, EditorRequired]
+    public Transaction Transaction { get; set; } = null!;
+
+    /// <summary>What the receipt says.</summary>
+    [Parameter, EditorRequired]
+    public ReceiptFacts Facts { get; set; } = null!;
+
+    /// <summary>What they disagree on.</summary>
+    [Parameter]
+    public Discrepancy Discrepancy { get; set; }
+
+    private string When => Transaction.OccurredOn.ToString("d MMM", CultureInfo.InvariantCulture)
+        + (Transaction.OccurredAtTime is { } at ? " " + at.ToString("HH\\:mm", CultureInfo.InvariantCulture) : string.Empty);
+}

@@ -17,6 +17,10 @@ namespace EleFi.Application.Transactions;
 /// <param name="MarketplaceAppId">Optional platform bought through.</param>
 /// <param name="PaymentAppId">Optional rail money moved along.</param>
 /// <param name="NeedsReview">Whether it still needs checking.</param>
+/// <param name="Items">
+/// The items it is split into, or null to keep the ones it has (rebalanced to the amount).
+/// An empty list removes them.
+/// </param>
 public sealed record EditRequest(
     Guid Id,
     Guid SourcePartyId,
@@ -28,7 +32,8 @@ public sealed record EditRequest(
     string? Description = null,
     Guid? MarketplaceAppId = null,
     Guid? PaymentAppId = null,
-    bool NeedsReview = false)
+    bool NeedsReview = false,
+    IReadOnlyList<ItemDraft>? Items = null)
 {
     /// <summary>
     /// The edit that would put a transaction back exactly as it is now.
@@ -53,7 +58,8 @@ public sealed record EditRequest(
             transaction.Description,
             transaction.MarketplaceAppId,
             transaction.PaymentAppId,
-            transaction.NeedsReview);
+            transaction.NeedsReview,
+            [.. transaction.Items.OrderBy(i => i.Position).Select(ItemDraft.Of)]);
     }
 }
 
@@ -182,22 +188,22 @@ public sealed class EditTransactionService(
                 + "At least one side must be one of your containers.");
         }
 
+        var items = Items(request, transaction, kind.Value);
+        if (items.Problem is { } itemProblem)
+        {
+            return CaptureResult.Fail(itemProblem);
+        }
+
         // Labels are optional and unrestricted (ADR-0013). A Self Transfer drops them,
-        // because moving your own money is not a category of spending.
-        var labelIds = kind == TransactionKind.SelfTransfer
+        // because moving your own money is not a category of spending, and an itemised
+        // transaction carries its labels on its items instead (IT4).
+        var labelIds = kind == TransactionKind.SelfTransfer || items.Drafts.Count > 0
             ? []
             : (request.LabelIds ?? []).Distinct().ToList();
 
-        if (labelIds.Count > 0)
+        if (!await LabelsExistAsync([.. labelIds, .. items.Drafts.SelectMany(i => i.LabelIds)], cancellationToken).ConfigureAwait(false))
         {
-            var known = (await labels.ListAsync(cancellationToken).ConfigureAwait(false))
-                .Select(l => l.Id)
-                .ToHashSet();
-
-            if (labelIds.Exists(id => !known.Contains(id)))
-            {
-                return CaptureResult.Fail("One of those labels no longer exists.");
-            }
+            return CaptureResult.Fail("One of those labels no longer exists.");
         }
 
         transaction.SourcePartyId = request.SourcePartyId;
@@ -225,12 +231,49 @@ public sealed class EditTransactionService(
             transaction.Labels.Add(new TransactionLabel { TransactionId = transaction.Id, LabelId = labelId });
         }
 
+        transaction.ReplaceItems(items.Drafts);
+
         await transactions.UpdateAsync(transaction, cancellationToken).ConfigureAwait(false);
 
         await parties.TouchAsync([request.SourcePartyId, request.DestinationPartyId], cancellationToken)
             .ConfigureAwait(false);
 
         return CaptureResult.Ok(transaction);
+    }
+
+    // The items to keep: the ones asked for, or the ones it has, fitted to the amount. A Self
+    // Transfer is not spending, so it cannot be split into what it bought.
+    //
+    // A request that names its items but leaves out the Unnamed rest keeps the stored one, so
+    // its labels and its place in the history survive a caller that only knows the named ones.
+    private static (IReadOnlyList<ItemDraft> Drafts, string? Problem) Items(EditRequest request, Transaction transaction, TransactionKind kind)
+    {
+        var stored = transaction.Items.OrderBy(i => i.Position).Select(ItemDraft.Of).ToList();
+        var asked = request.Items ?? stored;
+        if (!asked.Any(i => i.IsUnnamed) && stored.Find(i => i.IsUnnamed) is { } rest)
+        {
+            asked = [.. asked, rest];
+        }
+        if (kind == TransactionKind.SelfTransfer)
+        {
+            return asked.Any(i => !i.IsUnnamed)
+                ? ([], "A Self Transfer can't be split into items. Remove them first.")
+                : ([], null);
+        }
+
+        var outcome = Itemisation.Balance(request.AmountMinor, asked);
+        return (outcome.Items, ItemisationText.Problem(outcome, request.AmountMinor, transaction.SourceCurrency));
+    }
+
+    private async Task<bool> LabelsExistAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return true;
+        }
+
+        var known = (await labels.ListAsync(cancellationToken).ConfigureAwait(false)).Select(l => l.Id).ToHashSet();
+        return ids.All(known.Contains);
     }
 
     /// <summary>
